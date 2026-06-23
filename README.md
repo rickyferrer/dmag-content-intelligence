@@ -161,3 +161,4 @@ Once the `email_signup` event is instrumented on dmagazine.com:
 - **Loyal users** in GA4 are approximated as returning users (exact 3+ session segmentation requires the Audiences API which requires additional property configuration).
 - All secrets stay in `.env` / Render env vars — never hardcoded.
 # dmag-content-intelligence
+# dmag-content-intelligence
