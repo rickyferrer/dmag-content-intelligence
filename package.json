@@ -1,0 +1,36 @@
+{
+  "name": "d-magazine-content-intelligence",
+  "version": "1.0.0",
+  "description": "D Magazine Content Intelligence Dashboard",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "node --env-file=.env server/index.js",
+    "client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "start": "node --env-file=.env server/index.js",
+    "render-start": "node server/index.js",
+    "db:init": "node --env-file=.env server/db.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.36.0",
+    "@google-analytics/data": "^4.7.0",
+    "better-sqlite3": "^11.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-basic-auth": "^1.2.1",
+    "google-auth-library": "^10.6.2",
+    "googleapis": "^173.0.0",
+    "html-to-text": "^9.0.5",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
