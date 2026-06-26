@@ -42,7 +42,7 @@ async function classifyBatch(articles) {
   for (const article of articles) {
     try {
       const message = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 256,
         messages: [{ role: 'user', content: buildPrompt(article) }],
       });
