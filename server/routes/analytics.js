@@ -344,13 +344,21 @@ router.get('/by-traffic-source', (req, res) => {
   const rows = db.prepare(`
     SELECT
       cs.source,
-      SUM(cs.pageviews)      AS total_pageviews,
-      COUNT(DISTINCT cs.wp_id) AS article_count
+      SUM(cs.pageviews)               AS total_pageviews,
+      COUNT(DISTINCT cs.wp_id)        AS article_count,
+      SUM(a.ga4_users)                AS total_users,
+      SUM(a.ga4_loyal_users)          AS total_loyal_users,
+      SUM(a.ga4_loyal_inmarket_pv)    AS total_inmarket,
+      SUM(a.mf_newsletter_signups)    AS total_newsletter_signups
     FROM content_sources cs
     JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest FROM content_sources GROUP BY wp_id
     ) lx ON cs.wp_id = lx.wp_id
     JOIN content c ON c.wp_id = cs.wp_id
+    LEFT JOIN (
+      SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
+    ) lxa ON cs.wp_id = lxa.wp_id
+    LEFT JOIN analytics_snapshots a ON a.wp_id = lxa.wp_id AND a.snapshot_at = lxa.latest
     WHERE ${where.join(' AND ')}
     GROUP BY cs.source
     ORDER BY total_pageviews DESC

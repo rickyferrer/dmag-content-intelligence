@@ -120,14 +120,45 @@ export default function Sources() {
   // Aggregate rows into channels
   const channelTotals = {};
   const channelSources = {};
+  const channelMeta = {};
   let grandTotal = 0;
 
   for (const row of data) {
     const ch = getChannel(row.source);
-    if (!channelTotals[ch]) { channelTotals[ch] = 0; channelSources[ch] = []; }
-    channelTotals[ch] += row.total_pageviews;
+    if (!channelTotals[ch]) {
+      channelTotals[ch] = 0;
+      channelSources[ch] = [];
+      channelMeta[ch] = { users: 0, loyal_users: 0, inmarket: 0, newsletter: 0 };
+    }
+    channelTotals[ch] += row.total_pageviews || 0;
     channelSources[ch].push(row);
-    grandTotal += row.total_pageviews;
+    channelMeta[ch].users            += row.total_users || 0;
+    channelMeta[ch].loyal_users      += row.total_loyal_users || 0;
+    channelMeta[ch].inmarket         += row.total_inmarket || 0;
+    channelMeta[ch].newsletter       += row.total_newsletter_signups || 0;
+    grandTotal += row.total_pageviews || 0;
+  }
+
+  // Compute derived rates per channel
+  const channelRates = {};
+  for (const [ch, m] of Object.entries(channelMeta)) {
+    const loyal_pct     = m.users > 0 ? (m.loyal_users / m.users) * 100 : 0;
+    const inmarket_pct  = m.users > 0 ? (m.inmarket    / m.users) * 100 : 0;
+    const news_per_1k   = m.users > 0 ? (m.newsletter  / m.users) * 1000 : 0;
+    channelRates[ch] = { loyal_pct, inmarket_pct, news_per_1k, ...m };
+  }
+
+  // Compute score 0-100 — normalize each metric relative to best channel
+  const maxLoyal  = Math.max(...Object.values(channelRates).map(r => r.loyal_pct), 0.01);
+  const maxInmkt  = Math.max(...Object.values(channelRates).map(r => r.inmarket_pct), 0.01);
+  const maxNews   = Math.max(...Object.values(channelRates).map(r => r.news_per_1k), 0.01);
+  for (const ch of Object.keys(channelRates)) {
+    const r = channelRates[ch];
+    r.score = Math.round(
+      (r.loyal_pct   / maxLoyal) * 35 +
+      (r.inmarket_pct/ maxInmkt) * 30 +
+      (r.news_per_1k / maxNews)  * 35
+    );
   }
 
   // Sort channels by total pageviews
@@ -248,6 +279,20 @@ export default function Sources() {
         </div>
       ) : (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+          {/* Column headers */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '180px 1fr 90px 80px 80px 80px 60px 32px',
+            padding: '8px 16px',
+            borderBottom: '2px solid var(--border)',
+            background: 'var(--bg-elevated)',
+          }}>
+            {['Channel', 'Traffic Share', 'Pageviews', 'Articles', 'Loyal %', 'In-Market %', 'Newsletter', 'Score', ''].map((h, i) => (
+              <div key={i} style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: i > 1 ? 'right' : 'left' }}>
+                {h}
+              </div>
+            ))}
+          </div>
           {/* Channel summary rows */}
           {sortedChannels.map(([chKey, total]) => {
             const ch = CHANNELS[chKey];
@@ -262,7 +307,7 @@ export default function Sources() {
                   onClick={() => setExpanded(isOpen ? null : chKey)}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '200px 1fr 100px 80px 32px',
+                    gridTemplateColumns: '180px 1fr 90px 80px 80px 80px 60px 32px',
                     alignItems: 'center',
                     padding: '14px 16px',
                     cursor: 'pointer',
@@ -286,6 +331,31 @@ export default function Sources() {
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>
                     {sources.reduce((s, r) => s + r.article_count, 0)} arts
                   </div>
+                  {/* Loyal % */}
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                    {channelRates[chKey]?.loyal_pct > 0 ? channelRates[chKey].loyal_pct.toFixed(1) + '%' : '—'}
+                  </div>
+                  {/* In-market % */}
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                    {channelRates[chKey]?.inmarket_pct > 0 ? channelRates[chKey].inmarket_pct.toFixed(1) + '%' : '—'}
+                  </div>
+                  {/* Newsletter */}
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                    {fmt(channelRates[chKey]?.newsletter)}
+                  </div>
+                  {/* Score */}
+                  <div style={{ textAlign: 'right' }}>
+                    {channelRates[chKey]?.score > 0 ? (
+                      <span style={{
+                        fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 600,
+                        color: 'var(--accent-gold)',
+                        background: 'var(--accent-gold-bg)',
+                        padding: '2px 6px', borderRadius: 4,
+                      }}>
+                        {channelRates[chKey].score}
+                      </span>
+                    ) : '—'}
+                  </div>
                   <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
                     {isOpen ? '▲' : '▼'}
                   </div>
@@ -299,7 +369,7 @@ export default function Sources() {
                       return (
                         <div key={row.source} style={{
                           display: 'grid',
-                          gridTemplateColumns: '200px 1fr 100px 80px 32px',
+                          gridTemplateColumns: '180px 1fr 90px 80px 80px 80px 60px 32px',
                           alignItems: 'center',
                           padding: '10px 16px 10px 36px',
                           borderBottom: '1px solid var(--border-subtle)',
@@ -315,7 +385,7 @@ export default function Sources() {
                           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>
                             {row.article_count} arts
                           </div>
-                          <div />
+                          <div /><div /><div /><div />
                         </div>
                       );
                     })}
