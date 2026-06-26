@@ -8,7 +8,7 @@
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "node --env-file=.env server/index.js",
     "client": "cd client && npm run dev",
-    "build": "cd client && npm run build",
+    "build": "cd client && npm ci && npm run build",
     "start": "node --env-file=.env server/index.js",
     "render-start": "node server/index.js",
     "db:init": "node --env-file=.env server/db.js"
