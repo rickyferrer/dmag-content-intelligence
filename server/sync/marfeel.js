@@ -163,9 +163,11 @@ function parseGroupedResponse(response, label) {
 }
 
 // Newsletter signup data lives on a different endpoint from the main dashboard queries.
-// Marfeel uses /api/traffic/realtime with metric "goal::newsletter_signup" (note the "::" prefix).
+// Marfeel uses /api/traffic/realtime with a "goal::" metric (note the "::" prefix).
 // The per-article signup count is in item.users, not inside item.metrics.
-async function fetchNewsletterSignups(token) {
+// D Magazine has two newsletter signup goals — the original form and a newer inline
+// variant — so this is called once per goal and the counts are summed per URL.
+async function fetchNewsletterSignupsForGoal(token, goalMetric) {
   const results = new Map(); // normalised url → signup count
   const limit = 500;
   let from = 0;
@@ -190,7 +192,7 @@ async function fetchNewsletterSignups(token) {
           article: null,
           dates: { last: { number: 30, dimension: 'day' } },
           plotBy: 'medium',
-          metrics: ['goal::newsletter_signup'],
+          metrics: [goalMetric],
           model: 'posts',
           tagValue: null,
           version: 2,
@@ -231,6 +233,22 @@ async function fetchNewsletterSignups(token) {
   }
 
   return results;
+}
+
+const NEWSLETTER_GOALS = ['goal::newsletter_signup', 'goal::newsletter_signup_inline'];
+
+async function fetchNewsletterSignups(token) {
+  const combined = new Map(); // normalised url → total signup count across all goals
+
+  for (const goal of NEWSLETTER_GOALS) {
+    const perGoal = await fetchNewsletterSignupsForGoal(token, goal);
+    for (const [url, count] of perGoal) {
+      combined.set(url, (combined.get(url) || 0) + count);
+    }
+    await sleep(RATE_LIMIT_DELAY);
+  }
+
+  return combined;
 }
 
 // Fetch per-article acquisition sources via source+url combined groupBy.
@@ -432,8 +450,9 @@ export async function syncMarfeel() {
     }
 
     // Query 4: Newsletter signups via /api/traffic/realtime
-    // Uses metric "goal::newsletter_signup"; count lives in item.users of the response.
-    console.log('[Marfeel] Fetching newsletter signup conversions...');
+    // Combines "goal::newsletter_signup" and "goal::newsletter_signup_inline";
+    // count lives in item.users of the response.
+    console.log('[Marfeel] Fetching newsletter signup conversions (both goals)...');
     await sleep(RATE_LIMIT_DELAY);
 
     try {
