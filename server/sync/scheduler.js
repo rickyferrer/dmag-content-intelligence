@@ -392,25 +392,17 @@ export async function runClassification() {
 }
 
 export function initScheduler() {
-  // Content sync once a day at 2:05am — articles don't change minute-to-minute
-  cron.schedule('5 2 * * *', () => {
-    console.log('[Scheduler] Triggering daily content sync');
-    runContentSync();
-  });
+  // Full sync once a day at 6:00am Central — content, then analytics
+  // (GA4/Marfeel/GSC), then classification, run sequentially in that order
+  // so each stage has fresh data from the one before it.
+  cron.schedule('0 6 * * *', async () => {
+    console.log('[Scheduler] Triggering daily full sync (content → analytics → classification)');
+    await runContentSync();
+    await runAnalyticsSync();
+    await runClassification();
+  }, { timezone: 'America/Chicago' });
 
-  // Analytics sync every hour at :20
-  cron.schedule('20 * * * *', () => {
-    console.log('[Scheduler] Triggering analytics sync');
-    runAnalyticsSync();
-  });
-
-  // Classification every hour at :40
-  cron.schedule('40 * * * *', () => {
-    console.log('[Scheduler] Triggering classification');
-    runClassification();
-  });
-
-  console.log('[Scheduler] Cron jobs initialized');
+  console.log('[Scheduler] Cron jobs initialized — daily full sync at 6:00am Central');
 }
 
 export function getSyncStatus() {
