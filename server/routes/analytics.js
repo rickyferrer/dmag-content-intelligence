@@ -367,8 +367,92 @@ router.get('/by-traffic-source', (req, res) => {
   res.json(rows);
 });
 
+// ── AI vulnerability heuristics ─────────────────────────────────────────────
+// Not all search traffic is equally at risk from AI Overviews / AI Mode.
+// Generic, easily-summarized queries (explainers, how-tos, "best of" lists)
+// get absorbed into an AI answer box. Queries anchored to a proper noun
+// (a person, a specific business, a hyperlocal place) or driven by original
+// reporting and voice are much harder for an AI summary to substitute for.
+// These heuristics estimate that distinction from title text and user need,
+// since we don't have real search-query data (Search Console) to work from.
+
+const NEED_RISK_MULTIPLIER = {
+  educate_me: 1.3,       // explainers/how-tos — AI's strongest use case
+  update_me: 1.15,       // news recaps — facts are summarizable
+  help_me: 1.2,          // task/recommendation content — close to AI's sweet spot
+  keep_me_engaged: 0.85,
+  divert_me: 0.75,       // entertainment/experience-based
+  give_perspective: 0.6, // opinion/analysis — relies on voice
+  inspire_me: 0.6,       // narrative/profile-driven — human-centric
+  connect_me: 0.55,      // community/relationship content
+};
+
+const LOCAL_MARKERS = [
+  'dallas', 'fort worth', 'plano', 'irving', 'arlington', 'frisco', 'mckinney',
+  'garland', 'denton', 'richardson', 'lewisville', 'carrollton', 'allen',
+  'mesquite', 'grand prairie', 'dfw', 'north texas', 'uptown', 'oak lawn',
+  'oak cliff', 'deep ellum', 'bishop arts', 'preston hollow', 'lakewood',
+  'highland park', 'university park',
+];
+
+const TITLE_STOPWORDS = new Set([
+  'A', 'An', 'And', 'As', 'At', 'But', 'By', 'For', 'From', 'In', 'Into', 'Is',
+  'Of', 'On', 'Or', 'Over', 'So', 'The', 'To', 'With', 'Why', 'What', 'How',
+  'When', 'Where', 'Who', 'Best', 'Top', 'New', 'Most', 'Meet', 'Are', 'Was',
+  'Were', 'Be', 'Been', 'Being', 'This', 'That', 'These', 'Those', 'It', 'Its',
+  'You', 'Your', 'We', 'Our', 'My', 'His', 'Her', 'Their', 'Not', 'No', 'Yes',
+  'Amid', 'After', 'Before', 'During', 'About', 'Than', 'Then', 'Now', 'Here',
+  'There', 'Just', 'Only', 'More', 'Less', 'All', 'Every', 'Each', 'Some',
+  'Any', 'Get', 'Gets', 'Getting', 'Makes', 'Made', 'Make', 'Says', 'Said',
+]);
+
+function stripHtml(str) {
+  return (str || '').replace(/<[^>]+>/g, '').replace(/&#\d+;/g, ' ').replace(/&[a-z]+;/gi, ' ');
+}
+
+// Estimate how "generic" a title is: proper-noun anchored / hyperlocal titles
+// get a lower (more durable) factor, generic listicle/how-to titles get higher.
+function computeGenericFactor(rawTitle) {
+  const title = stripHtml(rawTitle).trim();
+  if (!title) return { generic_factor: 1, proper_noun_count: 0, is_listicle: false, has_local: false };
+
+  const words = title.split(/\s+/);
+  let entityCount = 0;
+  let i = 1; // skip first word — always capitalized regardless of being a proper noun
+  while (i < words.length) {
+    const w = words[i].replace(/[^\w'-]/g, '');
+    if (/^[A-Z]/.test(w) && w.length > 1 && !TITLE_STOPWORDS.has(w)) {
+      entityCount++;
+      let j = i + 1;
+      while (j < words.length) {
+        const w2 = words[j].replace(/[^\w'-]/g, '');
+        if (/^[A-Z]/.test(w2) && w2.length > 1 && !TITLE_STOPWORDS.has(w2)) j++;
+        else break;
+      }
+      i = j;
+    } else {
+      i++;
+    }
+  }
+
+  const lower = title.toLowerCase();
+  const is_listicle = /^(the\s+)?(top\s+\d+|(\d+\s+)?(best|worst)\b|how to|guide to|everything you need to know|what is|why (you|we|is))/i.test(title);
+  const has_local = LOCAL_MARKERS.some(m => lower.includes(m));
+
+  let generic_factor = 1;
+  if (entityCount >= 2) generic_factor *= 0.55;
+  else if (entityCount === 1) generic_factor *= 0.8;
+  if (is_listicle) generic_factor *= 1.25;
+  if (has_local) generic_factor *= 0.9;
+  generic_factor = Math.max(0.3, Math.min(1.4, generic_factor));
+
+  return { generic_factor, proper_noun_count: entityCount, is_listicle, has_local };
+}
+
 // GET /api/analytics/vulnerability
-// Crosses user need with organic search dependency to surface AI-risk content.
+// Crosses user need + title specificity with organic search dependency to
+// estimate AI Overview / AI Mode risk — and surfaces owned-platform strength
+// (newsletter conversion) as the strategic counter-signal.
 router.get('/vulnerability', (req, res) => {
   const db = getDb();
 
@@ -396,7 +480,7 @@ router.get('/vulnerability', (req, res) => {
 
   const articles = db.prepare(`
     SELECT c.wp_id, c.title, c.url, c.user_need, c.section, c.published_at,
-      a.true_value, a.ga4_users, a.ga4_pageviews
+      a.true_value, a.ga4_users, a.ga4_pageviews, a.mf_newsletter_signups
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
@@ -408,39 +492,62 @@ router.get('/vulnerability', (req, res) => {
   const enriched = articles.map(art => {
     const s = srcMap[art.wp_id] || { search_pv: 0, total_pv: 0 };
     const search_pct = s.total_pv > 0 ? (s.search_pv / s.total_pv) * 100 : 0;
-    return { ...art, search_pct, search_pv: s.search_pv, total_source_pv: s.total_pv };
+    const { generic_factor, proper_noun_count, is_listicle, has_local } = computeGenericFactor(art.title);
+    const need_mult = NEED_RISK_MULTIPLIER[art.user_need] ?? 1;
+    const adjusted_risk_pct = Math.min(100, search_pct * need_mult * generic_factor);
+    return {
+      ...art, search_pct, adjusted_risk_pct,
+      search_pv: s.search_pv, total_source_pv: s.total_pv,
+      proper_noun_count, is_listicle, has_local,
+    };
   });
 
   // Aggregate by user need
   const needMap = {};
   for (const art of enriched) {
     const n = art.user_need;
-    if (!needMap[n]) needMap[n] = { user_need: n, article_count: 0, high_risk_count: 0, total_true_value: 0, _pct_sum: 0, _arts: [] };
+    if (!needMap[n]) needMap[n] = {
+      user_need: n, article_count: 0, high_risk_count: 0, total_true_value: 0,
+      total_users: 0, total_newsletter_signups: 0,
+      _search_sum: 0, _adj_sum: 0, _arts: [],
+    };
     needMap[n].article_count++;
     needMap[n].total_true_value += art.true_value || 0;
-    needMap[n]._pct_sum += art.search_pct;
-    if (art.search_pct > 50) needMap[n].high_risk_count++;
+    needMap[n].total_users += art.ga4_users || 0;
+    needMap[n].total_newsletter_signups += art.mf_newsletter_signups || 0;
+    needMap[n]._search_sum += art.search_pct;
+    needMap[n]._adj_sum += art.adjusted_risk_pct;
+    if (art.adjusted_risk_pct > 50) needMap[n].high_risk_count++;
     needMap[n]._arts.push(art);
   }
 
-  const byNeed = Object.values(needMap).map(({ _pct_sum, _arts, ...n }) => {
-    const avg_search_pct = n.article_count > 0 ? _pct_sum / n.article_count : 0;
-    const value_at_risk = n.total_true_value * (avg_search_pct / 100);
+  const byNeed = Object.values(needMap).map(({ _search_sum, _adj_sum, _arts, ...n }) => {
+    const avg_search_pct = n.article_count > 0 ? _search_sum / n.article_count : 0;
+    const avg_adjusted_risk_pct = n.article_count > 0 ? _adj_sum / n.article_count : 0;
+    const value_at_risk = n.total_true_value * (avg_adjusted_risk_pct / 100);
+    const newsletter_per_1k = n.total_users > 0 ? (n.total_newsletter_signups / n.total_users) * 1000 : 0;
     const top_vulnerable = _arts
-      .filter(a => a.search_pct > 30 && a.true_value > 0)
-      .sort((a, b) => b.true_value * (b.search_pct / 100) - a.true_value * (a.search_pct / 100))
+      .filter(a => a.adjusted_risk_pct > 30 && a.true_value > 0)
+      .sort((a, b) => b.true_value * (b.adjusted_risk_pct / 100) - a.true_value * (a.adjusted_risk_pct / 100))
       .slice(0, 3)
       .map(({ _arts, ...a }) => a);
-    return { ...n, avg_search_pct, value_at_risk, top_vulnerable };
+    return { ...n, avg_search_pct, avg_adjusted_risk_pct, value_at_risk, newsletter_per_1k, top_vulnerable };
   }).sort((a, b) => b.value_at_risk - a.value_at_risk);
 
-  // Top 25 most vulnerable articles overall
+  // Strategic strengths — needs ranked by owned-platform conversion (newsletter
+  // signups per 1k users), the counter-signal to search dependency.
+  const strategicStrengths = [...byNeed]
+    .filter(n => n.total_users > 0)
+    .sort((a, b) => b.newsletter_per_1k - a.newsletter_per_1k)
+    .slice(0, 5);
+
+  // Top 25 most vulnerable articles overall, by adjusted risk
   const top_vulnerable = enriched
-    .filter(a => a.search_pct > 40 && (a.true_value || 0) > 0 && a.total_source_pv > 100)
-    .sort((a, b) => (b.true_value * b.search_pct) - (a.true_value * a.search_pct))
+    .filter(a => a.adjusted_risk_pct > 40 && (a.true_value || 0) > 0 && a.total_source_pv > 100)
+    .sort((a, b) => (b.true_value * b.adjusted_risk_pct) - (a.true_value * a.adjusted_risk_pct))
     .slice(0, 25);
 
-  res.json({ by_need: byNeed, top_vulnerable });
+  res.json({ by_need: byNeed, top_vulnerable, strategic_strengths: strategicStrengths });
 });
 
 export default router;
