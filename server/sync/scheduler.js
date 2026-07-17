@@ -6,6 +6,7 @@ import { classifyUnclassified } from '../classify/userNeeds.js';
 import { getDb, setSyncState, getSettings } from '../db.js';
 import { getScoreParams, valueToScore } from '../utils/trueValue.js';
 import { syncGA4Sources } from './ga4.js';
+import { syncGSC } from './gsc.js';
 
 let syncRunning = false;
 let analyticsRunning = false;
@@ -300,6 +301,53 @@ export async function runAnalyticsSync() {
       }
     } catch (err) {
       console.error('[Scheduler] Source performance error:', err.message);
+    }
+
+    // ── Search Console — real per-page, per-query search performance ─────────
+    // Powers the AI vulnerability model's query classification (real queries,
+    // not just a title-text heuristic). Non-fatal if not yet granted access.
+    try {
+      const gscByUrl = await syncGSC();
+      if (gscByUrl.size > 0) {
+        const urlToWpId = new Map();
+        for (const row of content) {
+          if (!row.url) continue;
+          const norm = (() => { try { const u = new URL(row.url); return u.origin + u.pathname; } catch { return row.url; } })();
+          urlToWpId.set(norm, row.wp_id);
+          urlToWpId.set(norm.endsWith('/') ? norm.slice(0, -1) : norm + '/', row.wp_id);
+        }
+
+        const insertGsc = db.prepare(`
+          INSERT INTO gsc_queries (wp_id, snapshot_at, query, clicks, impressions, ctr, position)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        let gscInserted = 0, gscMatched = 0;
+        db.transaction(() => {
+          for (const [url, queries] of gscByUrl) {
+            const wpId = urlToWpId.get(url);
+            if (!wpId) continue;
+            gscMatched++;
+            for (const q of queries) {
+              insertGsc.run(wpId, snapshotAt, q.query, q.clicks, q.impressions, q.ctr, q.position);
+              gscInserted++;
+            }
+          }
+        })();
+        // Keep only the 5 most recent snapshots (each covers a 90-day window, so
+        // this is plenty of history without letting the table grow unbounded).
+        db.prepare(`
+          DELETE FROM gsc_queries
+          WHERE snapshot_at NOT IN (
+            SELECT DISTINCT snapshot_at FROM gsc_queries
+            ORDER BY snapshot_at DESC LIMIT 5
+          )
+        `).run();
+        console.log(`[Scheduler] GSC: ${gscInserted} query rows written for ${gscMatched} articles`);
+      }
+      setSyncState('last_gsc_sync', snapshotAt);
+    } catch (err) {
+      console.error('[Scheduler] GSC sync error:', err.message);
+      setSyncState('last_gsc_sync_error', err.message);
     }
 
     // ── Score all content on 1-100 scale ──────────────────────────────────────

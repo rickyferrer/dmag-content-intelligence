@@ -412,23 +412,28 @@ function stripHtml(str) {
 
 // Estimate how "generic" a title is: proper-noun anchored / hyperlocal titles
 // get a lower (more durable) factor, generic listicle/how-to titles get higher.
+// Also returns the extracted entity tokens, reused to classify real GSC queries.
 function computeGenericFactor(rawTitle) {
   const title = stripHtml(rawTitle).trim();
-  if (!title) return { generic_factor: 1, proper_noun_count: 0, is_listicle: false, has_local: false };
+  if (!title) return { generic_factor: 1, proper_noun_count: 0, is_listicle: false, has_local: false, entities: [] };
 
   const words = title.split(/\s+/);
   let entityCount = 0;
+  const entities = [];
   let i = 1; // skip first word — always capitalized regardless of being a proper noun
   while (i < words.length) {
     const w = words[i].replace(/[^\w'-]/g, '');
     if (/^[A-Z]/.test(w) && w.length > 1 && !TITLE_STOPWORDS.has(w)) {
       entityCount++;
+      const entityWords = [w];
       let j = i + 1;
       while (j < words.length) {
         const w2 = words[j].replace(/[^\w'-]/g, '');
-        if (/^[A-Z]/.test(w2) && w2.length > 1 && !TITLE_STOPWORDS.has(w2)) j++;
+        if (/^[A-Z]/.test(w2) && w2.length > 1 && !TITLE_STOPWORDS.has(w2)) { entityWords.push(w2); j++; }
         else break;
       }
+      if (entityWords.length >= 2) entities.push(entityWords.join(' ').toLowerCase());
+      else if (entityWords[0].length > 3) entities.push(entityWords[0].toLowerCase());
       i = j;
     } else {
       i++;
@@ -446,7 +451,37 @@ function computeGenericFactor(rawTitle) {
   if (has_local) generic_factor *= 0.9;
   generic_factor = Math.max(0.3, Math.min(1.4, generic_factor));
 
-  return { generic_factor, proper_noun_count: entityCount, is_listicle, has_local };
+  return { generic_factor, proper_noun_count: entityCount, is_listicle, has_local, entities };
+}
+
+// Classify a real GSC search query as "branded/durable" (mentions the article's
+// specific subject or a local place — hard for AI to intercept generically) or
+// "generic" (an informational query an AI answer box can absorb).
+function classifyQuery(query, entities) {
+  const q = (query || '').toLowerCase();
+  if (q.includes('dmagazine') || q.includes('d magazine')) return 'branded';
+  if (LOCAL_MARKERS.some(m => q.includes(m))) return 'branded';
+  if (entities.some(e => q.includes(e))) return 'branded';
+  return 'generic';
+}
+
+// Given an article's GSC query rows, compute the share of clicks that came
+// from generic (AI-vulnerable) queries rather than branded/specific ones.
+function computeQueryRisk(queries, entities) {
+  if (!queries || queries.length === 0) return null;
+  let genericClicks = 0, totalClicks = 0;
+  for (const q of queries) {
+    totalClicks += q.clicks;
+    if (classifyQuery(q.query, entities) === 'generic') genericClicks += q.clicks;
+  }
+  if (totalClicks === 0) return null;
+  return {
+    generic_click_share: (genericClicks / totalClicks) * 100,
+    query_count: queries.length,
+    total_clicks: totalClicks,
+    top_queries: [...queries].sort((a, b) => b.clicks - a.clicks).slice(0, 5)
+      .map(q => ({ query: q.query, clicks: q.clicks, type: classifyQuery(q.query, entities) })),
+  };
 }
 
 // GET /api/analytics/vulnerability
@@ -489,16 +524,37 @@ router.get('/vulnerability', (req, res) => {
     WHERE c.user_need IS NOT NULL
   `).all();
 
+  // Real search queries from the latest GSC snapshot, grouped by article.
+  const gscRows = db.prepare(`
+    SELECT wp_id, query, clicks, impressions, ctr, position
+    FROM gsc_queries
+    WHERE snapshot_at = (SELECT MAX(snapshot_at) FROM gsc_queries)
+  `).all();
+  const gscByWpId = {};
+  for (const row of gscRows) {
+    if (!gscByWpId[row.wp_id]) gscByWpId[row.wp_id] = [];
+    gscByWpId[row.wp_id].push(row);
+  }
+
   const enriched = articles.map(art => {
     const s = srcMap[art.wp_id] || { search_pv: 0, total_pv: 0 };
     const search_pct = s.total_pv > 0 ? (s.search_pv / s.total_pv) * 100 : 0;
-    const { generic_factor, proper_noun_count, is_listicle, has_local } = computeGenericFactor(art.title);
+    const { generic_factor, proper_noun_count, is_listicle, has_local, entities } = computeGenericFactor(art.title);
     const need_mult = NEED_RISK_MULTIPLIER[art.user_need] ?? 1;
-    const adjusted_risk_pct = Math.min(100, search_pct * need_mult * generic_factor);
+
+    // Prefer real GSC query classification when we have it — it directly
+    // measures what people searched, not a title-text guess.
+    const queryRisk = computeQueryRisk(gscByWpId[art.wp_id], entities);
+    const risk_source = queryRisk ? 'gsc' : 'estimated';
+    const adjusted_risk_pct = queryRisk
+      ? Math.min(100, queryRisk.generic_click_share * need_mult)
+      : Math.min(100, search_pct * need_mult * generic_factor);
+
     return {
-      ...art, search_pct, adjusted_risk_pct,
+      ...art, search_pct, adjusted_risk_pct, risk_source,
       search_pv: s.search_pv, total_source_pv: s.total_pv,
       proper_noun_count, is_listicle, has_local,
+      top_queries: queryRisk?.top_queries || null,
     };
   });
 
@@ -547,7 +603,12 @@ router.get('/vulnerability', (req, res) => {
     .sort((a, b) => (b.true_value * b.adjusted_risk_pct) - (a.true_value * a.adjusted_risk_pct))
     .slice(0, 25);
 
-  res.json({ by_need: byNeed, top_vulnerable, strategic_strengths: strategicStrengths });
+  const gsc_coverage = {
+    articles_with_real_data: enriched.filter(a => a.risk_source === 'gsc').length,
+    articles_total: enriched.length,
+  };
+
+  res.json({ by_need: byNeed, top_vulnerable, strategic_strengths: strategicStrengths, gsc_coverage });
 });
 
 export default router;

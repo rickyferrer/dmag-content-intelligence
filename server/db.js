@@ -109,6 +109,20 @@ function initSchema() {
       ad_revenue          REAL    DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_srcperf_snap ON source_performance(snapshot_at);
+
+    CREATE TABLE IF NOT EXISTS gsc_queries (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      wp_id       INTEGER,
+      snapshot_at TEXT,
+      query       TEXT,
+      clicks      INTEGER DEFAULT 0,
+      impressions INTEGER DEFAULT 0,
+      ctr         REAL    DEFAULT 0,
+      position    REAL    DEFAULT 0,
+      FOREIGN KEY (wp_id) REFERENCES content(wp_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_gsc_wp_snap ON gsc_queries(wp_id, snapshot_at);
+    CREATE INDEX IF NOT EXISTS idx_gsc_snap     ON gsc_queries(snapshot_at);
   `);
 
   // Schema migrations — safe to run on every startup

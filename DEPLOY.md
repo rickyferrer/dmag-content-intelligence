@@ -74,6 +74,10 @@ DASHBOARD_PASS=choose-a-strong-password
 GA4_PROPERTY_ID=320675632
 GA4_KEY_FILE=./credentials/ga4-service-account.json
 
+# Search Console (reuses the GA4 service account — must also be granted
+# access to the property in Search Console → Settings → Users and permissions)
+GSC_SITE_URL=sc-domain:dmagazine.com
+
 # Marfeel
 MARFEEL_EMAIL=...
 MARFEEL_PASSWORD=...
