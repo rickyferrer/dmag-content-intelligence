@@ -149,7 +149,7 @@ router.get('/trend', (req, res) => {
   const rows = db.prepare(`
     SELECT
       DATE(snapshot_at) as date,
-      AVG(true_value) as avg_true_value,
+      AVG(CASE WHEN true_value > 0 THEN true_value END) as avg_true_value,
       SUM(ga4_pageviews) as total_pageviews,
       SUM(ga4_subscribe_clicks) as total_subscribe_clicks,
       COUNT(DISTINCT wp_id) as content_count

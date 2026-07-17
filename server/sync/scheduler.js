@@ -67,21 +67,32 @@ export async function runContentSync() {
   }
 }
 
-// Keep only the most recent `keepCount` snapshots per content item.
-// Runs as a SQLite window-function DELETE — efficient with the wp_id index.
-export function pruneSnapshots(db, keepCount = 30) {
-  const result = db.prepare(`
+// Collapse to at most one snapshot per article per calendar day (the latest
+// that day), then drop anything older than `keepDays`. Analytics sync runs
+// hourly, so capping by row count alone (the old approach) only retained
+// ~30 hours of history — nowhere near enough for a 30-day trend chart. This
+// keeps roughly the same row volume but spreads it across real calendar days.
+export function pruneSnapshots(db, keepDays = 30) {
+  const dedupe = db.prepare(`
     DELETE FROM analytics_snapshots
     WHERE id NOT IN (
       SELECT id FROM (
-        SELECT id, ROW_NUMBER() OVER (PARTITION BY wp_id ORDER BY snapshot_at DESC) AS rn
+        SELECT id, ROW_NUMBER() OVER (
+          PARTITION BY wp_id, DATE(snapshot_at) ORDER BY snapshot_at DESC
+        ) AS rn
         FROM analytics_snapshots
       )
-      WHERE rn <= ?
+      WHERE rn = 1
     )
-  `).run(keepCount);
-  if (result.changes > 0) {
-    console.log(`[Scheduler] Pruned ${result.changes} old snapshots (kept last ${keepCount} per item)`);
+  `).run();
+
+  const old = db.prepare(`
+    DELETE FROM analytics_snapshots WHERE snapshot_at < datetime('now', '-' || ? || ' days')
+  `).run(keepDays);
+
+  const total = dedupe.changes + old.changes;
+  if (total > 0) {
+    console.log(`[Scheduler] Pruned ${total} snapshots (deduped to 1/day, kept last ${keepDays} days)`);
   }
 }
 
