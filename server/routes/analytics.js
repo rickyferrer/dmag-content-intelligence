@@ -367,4 +367,80 @@ router.get('/by-traffic-source', (req, res) => {
   res.json(rows);
 });
 
+// GET /api/analytics/vulnerability
+// Crosses user need with organic search dependency to surface AI-risk content.
+router.get('/vulnerability', (req, res) => {
+  const db = getDb();
+
+  const SEARCH_SOURCES = new Set([
+    'Google', 'Bing', 'DuckDuckGo', 'Yahoo!', 'Ecosia',
+    'Google News', 'Google Discover', 'Yandex', 'Brave', 'Baidu',
+  ]);
+
+  // Per-article source pageviews from latest Marfeel snapshot
+  const sourceRows = db.prepare(`
+    SELECT cs.wp_id, cs.source, SUM(cs.pageviews) AS pv
+    FROM content_sources cs
+    JOIN (
+      SELECT wp_id, MAX(snapshot_at) AS latest FROM content_sources GROUP BY wp_id
+    ) lx ON cs.wp_id = lx.wp_id AND cs.snapshot_at = lx.latest
+    GROUP BY cs.wp_id, cs.source
+  `).all();
+
+  const srcMap = {};
+  for (const row of sourceRows) {
+    if (!srcMap[row.wp_id]) srcMap[row.wp_id] = { search_pv: 0, total_pv: 0 };
+    srcMap[row.wp_id].total_pv += row.pv;
+    if (SEARCH_SOURCES.has(row.source)) srcMap[row.wp_id].search_pv += row.pv;
+  }
+
+  const articles = db.prepare(`
+    SELECT c.wp_id, c.title, c.url, c.user_need, c.section, c.published_at,
+      a.true_value, a.ga4_users, a.ga4_pageviews
+    FROM content c
+    LEFT JOIN (
+      SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
+    ) lx ON c.wp_id = lx.wp_id
+    LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
+    WHERE c.user_need IS NOT NULL
+  `).all();
+
+  const enriched = articles.map(art => {
+    const s = srcMap[art.wp_id] || { search_pv: 0, total_pv: 0 };
+    const search_pct = s.total_pv > 0 ? (s.search_pv / s.total_pv) * 100 : 0;
+    return { ...art, search_pct, search_pv: s.search_pv, total_source_pv: s.total_pv };
+  });
+
+  // Aggregate by user need
+  const needMap = {};
+  for (const art of enriched) {
+    const n = art.user_need;
+    if (!needMap[n]) needMap[n] = { user_need: n, article_count: 0, high_risk_count: 0, total_true_value: 0, _pct_sum: 0, _arts: [] };
+    needMap[n].article_count++;
+    needMap[n].total_true_value += art.true_value || 0;
+    needMap[n]._pct_sum += art.search_pct;
+    if (art.search_pct > 50) needMap[n].high_risk_count++;
+    needMap[n]._arts.push(art);
+  }
+
+  const byNeed = Object.values(needMap).map(({ _pct_sum, _arts, ...n }) => {
+    const avg_search_pct = n.article_count > 0 ? _pct_sum / n.article_count : 0;
+    const value_at_risk = n.total_true_value * (avg_search_pct / 100);
+    const top_vulnerable = _arts
+      .filter(a => a.search_pct > 30 && a.true_value > 0)
+      .sort((a, b) => b.true_value * (b.search_pct / 100) - a.true_value * (a.search_pct / 100))
+      .slice(0, 3)
+      .map(({ _arts, ...a }) => a);
+    return { ...n, avg_search_pct, value_at_risk, top_vulnerable };
+  }).sort((a, b) => b.value_at_risk - a.value_at_risk);
+
+  // Top 25 most vulnerable articles overall
+  const top_vulnerable = enriched
+    .filter(a => a.search_pct > 40 && (a.true_value || 0) > 0 && a.total_source_pv > 100)
+    .sort((a, b) => (b.true_value * b.search_pct) - (a.true_value * a.search_pct))
+    .slice(0, 25);
+
+  res.json({ by_need: byNeed, top_vulnerable });
+});
+
 export default router;

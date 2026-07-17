@@ -6,6 +6,7 @@ import UserNeedsAnalysis from './views/UserNeedsAnalysis.jsx';
 import Sections from './views/Sections.jsx';
 import Sources from './views/Sources.jsx';
 import Publications from './views/Publications.jsx';
+import Vulnerability from './views/Vulnerability.jsx';
 import Settings from './views/Settings.jsx';
 
 const NAV = [
@@ -14,8 +15,9 @@ const NAV = [
   { id: 'sections',      label: 'Sections' },
   { id: 'publications',  label: 'Publications' },
   { id: 'sources',       label: 'Sources' },
-  { id: 'needs',         label: 'User Needs' },
-  { id: 'settings',      label: 'Settings' },
+  { id: 'needs',          label: 'User Needs' },
+  { id: 'vulnerability',  label: 'AI Vulnerability' },
+  { id: 'settings',       label: 'Settings' },
 ];
 
 export default function App() {
@@ -110,7 +112,8 @@ export default function App() {
         {view === 'sections'  && <Sections />}
         {view === 'sources'       && <Sources />}
         {view === 'publications'  && <Publications />}
-        {view === 'needs'         && <UserNeedsAnalysis />}
+        {view === 'needs'          && <UserNeedsAnalysis />}
+        {view === 'vulnerability'  && <Vulnerability />}
         {view === 'settings'  && <Settings />}
       </main>
 
