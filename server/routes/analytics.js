@@ -3,11 +3,10 @@ import { getDb } from '../db.js';
 
 const router = Router();
 
-// GET /api/analytics/summary
-router.get('/summary', (req, res) => {
-  const db = getDb();
-  const { dateFrom, dateTo, section, type } = req.query;
-
+// Computes the summary aggregate for a given date range (used for both the
+// current period and, to derive % change, the immediately-preceding period
+// of equal length).
+function computeSummary(db, dateFrom, dateTo, section, type) {
   const dateWhere = [];
   const dateParams = [];
   if (dateFrom)  { dateWhere.push('c.published_at >= ?'); dateParams.push(dateFrom); }
@@ -26,6 +25,7 @@ router.get('/summary', (req, res) => {
       SUM(a.ga4_users) as total_users,
       SUM(a.ga4_subscribe_clicks) as total_subscribe_clicks,
       SUM(a.ga4_ad_revenue) as total_ad_revenue,
+      SUM(a.mf_newsletter_signups) as total_newsletter_signups,
       AVG(a.ga4_avg_engagement_time) as avg_engagement_time
     FROM content c
     JOIN (
@@ -39,15 +39,55 @@ router.get('/summary', (req, res) => {
     ? Math.min(100, (latest.total_loyal_inmarket / latest.total_users) * 100)
     : 0;
 
-  res.json({
+  return {
     total_content: total.count,
     avg_true_value: latest.avg_true_value || 0,
     total_pageviews: latest.total_pageviews || 0,
     loyal_inmarket_pct: loyalInMarketPct,
     total_subscribe_clicks: latest.total_subscribe_clicks || 0,
     total_ad_revenue: latest.total_ad_revenue || 0,
+    total_newsletter_signups: latest.total_newsletter_signups || 0,
     avg_engagement_time: latest.avg_engagement_time || 0,
-  });
+  };
+}
+
+function pctChange(curr, prev) {
+  if (prev == null || prev === 0) return null;
+  return ((curr - prev) / prev) * 100;
+}
+
+// GET /api/analytics/summary
+router.get('/summary', (req, res) => {
+  const db = getDb();
+  const { dateFrom, dateTo, section, type } = req.query;
+
+  const current = computeSummary(db, dateFrom, dateTo, section, type);
+
+  // Only compute a comparison when there's an explicit range to shift back —
+  // "all time" has no meaningful "previous period".
+  let changes = {};
+  if (dateFrom && dateTo) {
+    const from = new Date(dateFrom + 'T00:00:00Z');
+    const to = new Date(dateTo + 'T00:00:00Z');
+    const durationMs = to.getTime() - from.getTime();
+    const priorTo = new Date(from.getTime() - 24 * 60 * 60 * 1000);
+    const priorFrom = new Date(priorTo.getTime() - durationMs);
+    const fmt = (d) => d.toISOString().slice(0, 10);
+
+    const previous = computeSummary(db, fmt(priorFrom), fmt(priorTo), section, type);
+
+    changes = {
+      total_content: pctChange(current.total_content, previous.total_content),
+      avg_true_value: pctChange(current.avg_true_value, previous.avg_true_value),
+      total_pageviews: pctChange(current.total_pageviews, previous.total_pageviews),
+      loyal_inmarket_pct: pctChange(current.loyal_inmarket_pct, previous.loyal_inmarket_pct),
+      total_subscribe_clicks: pctChange(current.total_subscribe_clicks, previous.total_subscribe_clicks),
+      total_ad_revenue: pctChange(current.total_ad_revenue, previous.total_ad_revenue),
+      total_newsletter_signups: pctChange(current.total_newsletter_signups, previous.total_newsletter_signups),
+    };
+  }
+
+  res.json({ ...current, changes });
 });
 
 // GET /api/analytics/by-need

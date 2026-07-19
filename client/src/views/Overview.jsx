@@ -23,8 +23,8 @@ const NeedTooltip = ({ active, payload }) => {
   return (
     <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
       <div style={{ color: meta.color, fontWeight: 600 }}>{meta.label}</div>
+      <div style={{ color: 'var(--text-secondary)' }}>Total True Value: <b style={{ color: 'var(--accent-gold)' }}>{Math.round(d.total_true_value)}</b></div>
       <div style={{ color: 'var(--text-secondary)' }}>Articles: <b style={{ color: 'var(--text-primary)' }}>{d.article_count}</b></div>
-      <div style={{ color: 'var(--text-secondary)' }}>Avg True Value: <b style={{ color: 'var(--accent-gold)' }}>{d.avg_true_value?.toFixed(1)}</b></div>
     </div>
   );
 };
@@ -109,12 +109,13 @@ export default function Overview() {
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
-        <KPICard label="Total Content Items" value={fmt(summary?.total_content)} />
-        <KPICard label="Avg True Value" value={summary?.avg_true_value != null ? Math.round(summary.avg_true_value).toString() : '—'} gold />
-        <KPICard label="Total Pageviews (30d)" value={fmt(summary?.total_pageviews)} />
-        <KPICard label="Loyal In-Market %" value={summary?.loyal_inmarket_pct != null ? Math.min(100, summary.loyal_inmarket_pct).toFixed(1) + '%' : '—'} sub="of total users" />
-        <KPICard label="Subscribe Clicks" value={fmt(summary?.total_subscribe_clicks)} />
-        <KPICard label="Ad Revenue (30d)" value={summary?.total_ad_revenue != null ? '$' + summary.total_ad_revenue.toFixed(0) : '—'} />
+        <KPICard label="Total Content Items" value={fmt(summary?.total_content)} change={summary?.changes?.total_content} />
+        <KPICard label="Avg True Value" value={summary?.avg_true_value != null ? Math.round(summary.avg_true_value).toString() : '—'} gold change={summary?.changes?.avg_true_value} />
+        <KPICard label="Total Pageviews (30d)" value={fmt(summary?.total_pageviews)} change={summary?.changes?.total_pageviews} />
+        <KPICard label="Loyal In-Market %" value={summary?.loyal_inmarket_pct != null ? Math.min(100, summary.loyal_inmarket_pct).toFixed(1) + '%' : '—'} sub="of total users" change={summary?.changes?.loyal_inmarket_pct} />
+        <KPICard label="Subscribe Clicks" value={fmt(summary?.total_subscribe_clicks)} change={summary?.changes?.total_subscribe_clicks} />
+        <KPICard label="Newsletter Signups" value={fmt(summary?.total_newsletter_signups)} change={summary?.changes?.total_newsletter_signups} />
+        <KPICard label="Ad Revenue (30d)" value={summary?.total_ad_revenue != null ? '$' + summary.total_ad_revenue.toFixed(0) : '—'} change={summary?.changes?.total_ad_revenue} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
@@ -129,7 +130,7 @@ export default function Overview() {
               <XAxis type="number" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} stroke="var(--border)" />
               <YAxis dataKey="name" type="category" width={90} tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} stroke="var(--border)" />
               <Tooltip content={<NeedTooltip />} />
-              <Bar dataKey="article_count" radius={[0, 3, 3, 0]} isAnimationActive={false}>
+              <Bar dataKey="total_true_value" radius={[0, 3, 3, 0]} isAnimationActive={false}>
                 {barData.map((d, i) => (
                   <React.Fragment key={i}>
                     <rect fill={d.fill} fillOpacity={0.8} />
