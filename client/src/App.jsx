@@ -46,15 +46,8 @@ export default function App() {
         zIndex: 50,
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          <span style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 17,
-            color: 'var(--text-primary)',
-            letterSpacing: '-0.01em',
-          }}>
-            D Magazine
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <img src="/logo/d-logo.png" alt="D Magazine" style={{ height: 32, width: 32, borderRadius: 4 }} />
           <span style={{
             fontSize: 11,
             color: 'var(--accent-gold)',
