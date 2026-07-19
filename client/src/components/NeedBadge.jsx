@@ -1,20 +1,20 @@
 import React from 'react';
 
-// Deep, muted ink tones instead of bright pastels — same hue per need as
-// before (preserved for continuity), but all normalized to HSL(hue, 45%, 32%)
-// instead of a light/bright register. That reads as editorial and confident
-// rather than playful, and is already dark enough to double as both text
-// color and a rich (near-opaque) chart/bar fill — no separate pastel "fill"
-// needed.
+// Moderately saturated jewel tones — each hand-balanced rather than forced
+// to one lightness/saturation formula, since the same L/S reads differently
+// per hue (yellow needs to run darker than blue to avoid looking neon, etc).
+// This is the original palette the app used before a detour through bright
+// pastels (too playful) and then overly dark ink tones (too muddy) — it was
+// already the right middle ground.
 const NEED_META = {
-  update_me:       { label: 'Update Me',       color: '#762d2d' }, // deep brick / oxblood
-  educate_me:      { label: 'Educate Me',      color: '#2d5576' }, // navy
-  give_perspective:{ label: 'Perspective',     color: '#4d2d76' }, // plum / violet-ink
-  divert_me:       { label: 'Divert Me',       color: '#76662d' }, // olive / muted ochre
-  inspire_me:      { label: 'Inspire Me',      color: '#2d765a' }, // forest teal
-  help_me:         { label: 'Help Me',         color: '#76432d' }, // rust / sienna
-  connect_me:      { label: 'Connect Me',      color: '#762d55' }, // wine / burgundy
-  keep_me_engaged: { label: 'Keep Engaged',    color: '#2d2e76' }, // indigo
+  update_me:       { label: 'Update Me',       color: '#c0392b' }, // red
+  educate_me:      { label: 'Educate Me',      color: '#2474bb' }, // blue
+  give_perspective:{ label: 'Perspective',     color: '#8e44ad' }, // purple
+  divert_me:       { label: 'Divert Me',       color: '#9a6f00' }, // gold
+  inspire_me:      { label: 'Inspire Me',      color: '#0e7c8a' }, // teal
+  help_me:         { label: 'Help Me',         color: '#1e7a3c' }, // green
+  connect_me:      { label: 'Connect Me',      color: '#b5520a' }, // burnt orange
+  keep_me_engaged: { label: 'Keep Engaged',    color: '#a93226' }, // brick red
 };
 
 export default function NeedBadge({ need, size = 'sm' }) {
