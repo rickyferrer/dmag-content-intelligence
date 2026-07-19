@@ -78,7 +78,7 @@ export default function Overview() {
   const barData = byNeed.map(d => ({
     ...d,
     name: NEED_META[d.user_need]?.label || d.user_need,
-    fill: NEED_META[d.user_need]?.color || '#888',
+    fill: NEED_META[d.user_need]?.fill || '#ccc',
   }));
 
   return (

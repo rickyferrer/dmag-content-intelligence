@@ -58,8 +58,8 @@ export default function ScatterPlot({ data }) {
         <Tooltip content={<CustomTooltip />} />
         <Scatter data={data} isAnimationActive={false}>
           {data.map((entry, i) => {
-            const meta = NEED_META[entry.user_need] || { color: '#888' };
-            return <Cell key={i} fill={meta.color} fillOpacity={0.8} />;
+            const meta = NEED_META[entry.user_need] || { fill: '#ccc' };
+            return <Cell key={i} fill={meta.fill} fillOpacity={0.9} />;
           })}
         </Scatter>
       </ScatterChart>

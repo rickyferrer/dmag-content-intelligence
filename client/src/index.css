@@ -45,19 +45,20 @@
   --text-secondary: #58585a;
   --text-muted: #949494;
 
-  --accent-gold: #b3261e;
-  --accent-gold-dim: #d3574a;
-  --accent-gold-bg: #fbecea;
+  --accent-gold: #ff291c;
+  --accent-gold-dim: #ff746b;
+  --accent-gold-bg: #fff2f1;
 
-  /* User need colors — saturated hues that read on light backgrounds */
-  --need-update: #c0392b;
+  /* User need colors — dark text tint; see NeedBadge.jsx NEED_META for the
+     matching pastel fill used in badges/charts */
+  --need-update: #a53030;
   --need-educate: #2474bb;
   --need-perspective: #8e44ad;
   --need-divert: #9a6f00;
-  --need-inspire: #0e7c8a;
-  --need-help: #1e7a3c;
-  --need-connect: #b5520a;
-  --need-engage: #a93226;
+  --need-inspire: #256e5c;
+  --need-help: #9c3a19;
+  --need-connect: #a6307c;
+  --need-engage: #4040a6;
 
   --font-display: 'Founders Grotesk', 'IBM Plex Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
