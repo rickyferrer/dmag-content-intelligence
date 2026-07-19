@@ -37,8 +37,8 @@ function computeSummary(db, dateFrom, dateTo, section, type, asOf = null) {
     SELECT
       AVG(CASE WHEN a.true_value > 0 THEN a.true_value END) as avg_true_value,
       SUM(a.ga4_pageviews) as total_pageviews,
-      SUM(a.ga4_loyal_inmarket_pv) as total_loyal_inmarket,
       SUM(a.ga4_users) as total_users,
+      SUM(a.ga4_loyal_users) as total_loyal_users,
       SUM(a.ga4_subscribe_clicks) as total_subscribe_clicks,
       SUM(a.ga4_ad_revenue) as total_ad_revenue,
       SUM(a.mf_newsletter_signups) as total_newsletter_signups,
@@ -50,15 +50,12 @@ function computeSummary(db, dateFrom, dateTo, section, type, asOf = null) {
     ${dateFilter}
   `).get(...snapshotParams, ...dateParams);
 
-  const loyalInMarketPct = latest.total_users > 0
-    ? Math.min(100, (latest.total_loyal_inmarket / latest.total_users) * 100)
-    : 0;
-
   return {
     total_content: total.count,
     avg_true_value: latest.avg_true_value || 0,
     total_pageviews: latest.total_pageviews || 0,
-    loyal_inmarket_pct: loyalInMarketPct,
+    total_users: latest.total_users || 0,
+    total_loyal_users: latest.total_loyal_users || 0,
     total_subscribe_clicks: latest.total_subscribe_clicks || 0,
     total_ad_revenue: latest.total_ad_revenue || 0,
     total_newsletter_signups: latest.total_newsletter_signups || 0,
@@ -100,8 +97,8 @@ router.get('/summary', (req, res) => {
     if (coverage >= 0.5) {
       changes = {
         avg_true_value: pctChange(current.avg_true_value, previous.avg_true_value),
-        total_pageviews: pctChange(current.total_pageviews, previous.total_pageviews),
-        loyal_inmarket_pct: pctChange(current.loyal_inmarket_pct, previous.loyal_inmarket_pct),
+        total_users: pctChange(current.total_users, previous.total_users),
+        total_loyal_users: pctChange(current.total_loyal_users, previous.total_loyal_users),
         total_subscribe_clicks: pctChange(current.total_subscribe_clicks, previous.total_subscribe_clicks),
         total_ad_revenue: pctChange(current.total_ad_revenue, previous.total_ad_revenue),
         total_newsletter_signups: pctChange(current.total_newsletter_signups, previous.total_newsletter_signups),

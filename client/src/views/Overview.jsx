@@ -116,8 +116,8 @@ export default function Overview() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
         <KPICard label="Total Content Items" value={fmt(summary?.total_content)} />
         <KPICard label="Avg True Value" value={summary?.avg_true_value != null ? Math.round(summary.avg_true_value).toString() : '—'} gold change={summary?.changes?.avg_true_value} />
-        <KPICard label="Total Pageviews (30d)" value={fmt(summary?.total_pageviews)} change={summary?.changes?.total_pageviews} />
-        <KPICard label="Loyal In-Market %" value={summary?.loyal_inmarket_pct != null ? Math.min(100, summary.loyal_inmarket_pct).toFixed(1) + '%' : '—'} sub="of total users" change={summary?.changes?.loyal_inmarket_pct} />
+        <KPICard label="Total Users" value={fmt(summary?.total_users)} change={summary?.changes?.total_users} />
+        <KPICard label="Loyal Users" value={fmt(summary?.total_loyal_users)} change={summary?.changes?.total_loyal_users} />
         <KPICard label="Subscribe Clicks" value={fmt(summary?.total_subscribe_clicks)} change={summary?.changes?.total_subscribe_clicks} />
         <KPICard label="Newsletter Signups" value={fmt(summary?.total_newsletter_signups)} change={summary?.changes?.total_newsletter_signups} />
         <KPICard label="Ad Revenue (30d)" value={summary?.total_ad_revenue != null ? '$' + summary.total_ad_revenue.toFixed(0) : '—'} change={summary?.changes?.total_ad_revenue} />
