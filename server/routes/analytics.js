@@ -3,10 +3,19 @@ import { getDb } from '../db.js';
 
 const router = Router();
 
-// Computes the summary aggregate for a given date range (used for both the
-// current period and, to derive % change, the immediately-preceding period
-// of equal length).
-function computeSummary(db, dateFrom, dateTo, section, type) {
+// Computes the summary aggregate for a fixed set of content (filtered by
+// published_at/section/type) as of a given point in time.
+//
+// `asOf`, when set, pulls each article's most recent snapshot AT OR BEFORE
+// that timestamp instead of its latest snapshot overall. This is what makes
+// period-over-period comparison meaningful: GA4 metrics here are already a
+// rolling trailing-30-day window as of sync time (see sync/ga4.js), so
+// comparing "today's snapshot" to "the snapshot from ~30 days ago" for the
+// SAME set of articles gives a real trend — whereas comparing two DIFFERENT
+// article cohorts (e.g. this month's posts vs last month's posts), which is
+// what filtering published_at differently for current vs previous would do,
+// doesn't measure change over time at all.
+function computeSummary(db, dateFrom, dateTo, section, type, asOf = null) {
   const dateWhere = [];
   const dateParams = [];
   if (dateFrom)  { dateWhere.push('c.published_at >= ?'); dateParams.push(dateFrom); }
@@ -17,6 +26,13 @@ function computeSummary(db, dateFrom, dateTo, section, type) {
 
   const total = db.prepare(`SELECT COUNT(*) as count FROM content c ${dateFilter}`).get(...dateParams);
 
+  const snapshotCutoff = asOf ? 'WHERE snapshot_at <= ?' : '';
+  const snapshotParams = asOf ? [asOf] : [];
+
+  const latestSubquery = `
+    SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots ${snapshotCutoff} GROUP BY wp_id
+  `;
+
   const latest = db.prepare(`
     SELECT
       AVG(CASE WHEN a.true_value > 0 THEN a.true_value END) as avg_true_value,
@@ -26,14 +42,13 @@ function computeSummary(db, dateFrom, dateTo, section, type) {
       SUM(a.ga4_subscribe_clicks) as total_subscribe_clicks,
       SUM(a.ga4_ad_revenue) as total_ad_revenue,
       SUM(a.mf_newsletter_signups) as total_newsletter_signups,
-      AVG(a.ga4_avg_engagement_time) as avg_engagement_time
+      AVG(a.ga4_avg_engagement_time) as avg_engagement_time,
+      COUNT(DISTINCT c.wp_id) as matched_count
     FROM content c
-    JOIN (
-      SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots GROUP BY wp_id
-    ) lx ON c.wp_id = lx.wp_id
+    JOIN (${latestSubquery}) lx ON c.wp_id = lx.wp_id
     JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
     ${dateFilter}
-  `).get(...dateParams);
+  `).get(...snapshotParams, ...dateParams);
 
   const loyalInMarketPct = latest.total_users > 0
     ? Math.min(100, (latest.total_loyal_inmarket / latest.total_users) * 100)
@@ -48,6 +63,7 @@ function computeSummary(db, dateFrom, dateTo, section, type) {
     total_ad_revenue: latest.total_ad_revenue || 0,
     total_newsletter_signups: latest.total_newsletter_signups || 0,
     avg_engagement_time: latest.avg_engagement_time || 0,
+    matched_count: latest.matched_count || 0,
   };
 }
 
@@ -63,28 +79,34 @@ router.get('/summary', (req, res) => {
 
   const current = computeSummary(db, dateFrom, dateTo, section, type);
 
-  // Only compute a comparison when there's an explicit range to shift back —
-  // "all time" has no meaningful "previous period".
+  // Only compute a comparison when there's an explicit range to derive a
+  // duration from — "all time" has no meaningful "N days ago".
   let changes = {};
   if (dateFrom && dateTo) {
     const from = new Date(dateFrom + 'T00:00:00Z');
     const to = new Date(dateTo + 'T00:00:00Z');
-    const durationMs = to.getTime() - from.getTime();
-    const priorTo = new Date(from.getTime() - 24 * 60 * 60 * 1000);
-    const priorFrom = new Date(priorTo.getTime() - durationMs);
-    const fmt = (d) => d.toISOString().slice(0, 10);
+    const durationDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)));
+    const asOf = new Date(Date.now() - durationDays * 24 * 60 * 60 * 1000).toISOString();
 
-    const previous = computeSummary(db, fmt(priorFrom), fmt(priorTo), section, type);
+    const previous = computeSummary(db, dateFrom, dateTo, section, type, asOf);
 
-    changes = {
-      total_content: pctChange(current.total_content, previous.total_content),
-      avg_true_value: pctChange(current.avg_true_value, previous.avg_true_value),
-      total_pageviews: pctChange(current.total_pageviews, previous.total_pageviews),
-      loyal_inmarket_pct: pctChange(current.loyal_inmarket_pct, previous.loyal_inmarket_pct),
-      total_subscribe_clicks: pctChange(current.total_subscribe_clicks, previous.total_subscribe_clicks),
-      total_ad_revenue: pctChange(current.total_ad_revenue, previous.total_ad_revenue),
-      total_newsletter_signups: pctChange(current.total_newsletter_signups, previous.total_newsletter_signups),
-    };
+    // Guard against showing a wild percentage when we simply don't have
+    // enough retained history yet to cover this comparison — e.g. asking
+    // for a 30-day-ago snapshot when daily retention only started a few
+    // days ago. Require most of the current cohort to have a real prior
+    // snapshot before trusting the comparison at all.
+    const coverage = current.total_content > 0 ? previous.matched_count / current.total_content : 0;
+
+    if (coverage >= 0.5) {
+      changes = {
+        avg_true_value: pctChange(current.avg_true_value, previous.avg_true_value),
+        total_pageviews: pctChange(current.total_pageviews, previous.total_pageviews),
+        loyal_inmarket_pct: pctChange(current.loyal_inmarket_pct, previous.loyal_inmarket_pct),
+        total_subscribe_clicks: pctChange(current.total_subscribe_clicks, previous.total_subscribe_clicks),
+        total_ad_revenue: pctChange(current.total_ad_revenue, previous.total_ad_revenue),
+        total_newsletter_signups: pctChange(current.total_newsletter_signups, previous.total_newsletter_signups),
+      };
+    }
   }
 
   res.json({ ...current, changes });
