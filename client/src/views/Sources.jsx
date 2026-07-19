@@ -90,7 +90,7 @@ export default function Sources() {
   const [perfSort, setPerfSort] = useState({ key: 'users', dir: 'desc' });
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
-  const [filters, setFilters] = useState({ from: initFrom, to: initTo, type: '' });
+  const [filters, setFilters] = useState({ from: initFrom, to: initTo, type: '', preset: DEFAULT_PRESET });
   const [expanded, setExpanded] = useState(null);
 
   const load = ({ from, to, type }) => {
@@ -182,11 +182,16 @@ export default function Sources() {
       {/* Filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Published:</span>
-        <DatePresets onChange={(from, to) => {
-          const next = { ...filters, from, to };
-          setFilters(next);
-          load(next);
-        }} />
+        <DatePresets
+          value={filters.preset}
+          from={filters.from}
+          to={filters.to}
+          onChange={(preset, from, to) => {
+            const next = { ...filters, preset, from, to };
+            setFilters(next);
+            load(next);
+          }}
+        />
         <select value={filters.type} onChange={e => setFilter('type', e.target.value)}>
           <option value="">All Types</option>
           {types.map(t => <option key={t.content_type} value={t.content_type}>{t.content_type} ({t.count})</option>)}

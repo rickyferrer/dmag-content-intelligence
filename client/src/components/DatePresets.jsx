@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 export const DEFAULT_PRESET = '30d';
 
@@ -11,6 +11,7 @@ const PRESETS = [
   { label: 'Last 30 days',  value: '30d' },
   { label: 'Last 90 days',  value: '90d' },
   { label: 'This year',     value: 'year' },
+  { label: 'Custom range',  value: 'custom' },
 ];
 
 function fmt(d) { return d.toISOString().slice(0, 10); }
@@ -28,28 +29,48 @@ export function resolveDates(value) {
     case '30d':       return { from: fmt(ago(29)), to: fmt(today) };
     case '90d':       return { from: fmt(ago(89)), to: fmt(today) };
     case 'year':      return { from: `${today.getFullYear()}-01-01`, to: fmt(today) };
+    case 'custom':    return { from: fmt(ago(29)), to: fmt(today) }; // sensible starting point
     default:          return { from: '', to: '' };
   }
 }
 
-export default function DatePresets({ onChange, defaultValue = DEFAULT_PRESET }) {
-  const [selected, setSelected] = useState(defaultValue);
-
-  const handleChange = (value) => {
-    setSelected(value);
-    const { from, to } = resolveDates(value);
-    onChange(from, to);
+// Fully controlled: the parent owns `value` (the preset key) plus the actual
+// `from`/`to` date strings. This matters because a parent that conditionally
+// unmounts its tree while loading (e.g. `if (loading) return <Spinner/>`)
+// would otherwise wipe out any internal selection state on every reload,
+// visually resetting the dropdown back to its default even though the real
+// filter values were fine. Keeping the parent as the single source of truth
+// means the selection survives that.
+export default function DatePresets({ value, from, to, onChange }) {
+  const handlePresetChange = (newValue) => {
+    const dates = resolveDates(newValue);
+    onChange(newValue, dates.from, dates.to);
   };
 
   return (
-    <select
-      value={selected}
-      onChange={e => handleChange(e.target.value)}
-      style={{ minWidth: 130 }}
-    >
-      {PRESETS.map(p => (
-        <option key={p.value} value={p.value}>{p.label}</option>
-      ))}
-    </select>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <select value={value} onChange={e => handlePresetChange(e.target.value)} style={{ minWidth: 130 }}>
+        {PRESETS.map(p => (
+          <option key={p.value} value={p.value}>{p.label}</option>
+        ))}
+      </select>
+      {value === 'custom' && (
+        <>
+          <input
+            type="date"
+            value={from || ''}
+            max={to || undefined}
+            onChange={e => onChange('custom', e.target.value, to)}
+          />
+          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>to</span>
+          <input
+            type="date"
+            value={to || ''}
+            min={from || undefined}
+            onChange={e => onChange('custom', from, e.target.value)}
+          />
+        </>
+      )}
+    </div>
   );
 }

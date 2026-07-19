@@ -32,7 +32,7 @@ export default function Sections() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
-  const [filters, setFilters] = useState({ from: initFrom, to: initTo, type: '' });
+  const [filters, setFilters] = useState({ from: initFrom, to: initTo, type: '', preset: DEFAULT_PRESET });
 
   const load = ({ from, to, type }) => {
     setLoading(true);
@@ -64,11 +64,16 @@ export default function Sections() {
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Published:</span>
-        <DatePresets onChange={(from, to) => {
-          const next = { ...filters, from, to };
-          setFilters(next);
-          load(next);
-        }} />
+        <DatePresets
+          value={filters.preset}
+          from={filters.from}
+          to={filters.to}
+          onChange={(preset, from, to) => {
+            const next = { ...filters, preset, from, to };
+            setFilters(next);
+            load(next);
+          }}
+        />
         <select value={filters.type} onChange={e => setFilter('type', e.target.value)}>
           <option value="">All Types</option>
           {types.map(t => (

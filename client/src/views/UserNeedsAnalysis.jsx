@@ -18,7 +18,7 @@ function fmt(n) {
 export default function UserNeedsAnalysis() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ from: '', to: '' });
+  const [filters, setFilters] = useState({ from: '', to: '', preset: 'all' });
 
   const load = ({ from, to }) => {
     setLoading(true);
@@ -52,11 +52,16 @@ export default function UserNeedsAnalysis() {
       {/* Date filter */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Published:</span>
-        <DatePresets defaultValue="all" onChange={(from, to) => {
-          const next = { from, to };
-          setFilters(next);
-          load(next);
-        }} />
+        <DatePresets
+          value={filters.preset}
+          from={filters.from}
+          to={filters.to}
+          onChange={(preset, from, to) => {
+            const next = { preset, from, to };
+            setFilters(next);
+            load(next);
+          }}
+        />
       </div>
 
       {/* Gap analysis */}

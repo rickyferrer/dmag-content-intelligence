@@ -39,7 +39,7 @@ export default function Overview() {
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
   const [sections, setSections] = useState([]);
-  const [filters, setFilters] = useState({ from: initFrom, to: initTo, section: '', type: '' });
+  const [filters, setFilters] = useState({ from: initFrom, to: initTo, section: '', type: '', preset: DEFAULT_PRESET });
 
   const load = ({ from, to, section, type }) => {
     setLoading(true);
@@ -73,8 +73,6 @@ export default function Overview() {
     load(next);
   };
 
-  if (loading) return <div style={{ padding: 40, color: 'var(--text-muted)' }}>Loading...</div>;
-
   const barData = byNeed.map(d => ({
     ...d,
     name: NEED_META[d.user_need]?.label || d.user_need,
@@ -86,11 +84,16 @@ export default function Overview() {
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Published:</span>
-        <DatePresets onChange={(from, to) => {
-          const next = { ...filters, from, to };
-          setFilters(next);
-          load(next);
-        }} />
+        <DatePresets
+          value={filters.preset}
+          from={filters.from}
+          to={filters.to}
+          onChange={(preset, from, to) => {
+            const next = { ...filters, preset, from, to };
+            setFilters(next);
+            load(next);
+          }}
+        />
 
         <select value={filters.section} onChange={e => setFilter('section', e.target.value)}>
           <option value="">All Sections</option>
@@ -105,6 +108,8 @@ export default function Overview() {
             <option key={t.content_type} value={t.content_type}>{t.content_type} ({t.count})</option>
           ))}
         </select>
+
+        {loading && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</span>}
       </div>
 
       {/* KPI Cards */}

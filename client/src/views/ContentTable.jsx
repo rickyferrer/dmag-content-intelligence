@@ -54,7 +54,7 @@ export default function ContentTable({ onSelect }) {
   const [issues, setIssues] = useState([]);
   const [filters, setFilters] = useState({
     type: '', section: '', category: '', need: '', writer: '', issue: '',
-    dateFrom: initFrom, dateTo: initTo,
+    datePreset: DEFAULT_PRESET, dateFrom: initFrom, dateTo: initTo,
     sortBy: 'published_at', order: 'desc', page: 1, limit: 50,
   });
 
@@ -170,11 +170,16 @@ export default function ContentTable({ onSelect }) {
           </select>
         )}
 
-        <DatePresets onChange={(from, to) => {
-          const next = { ...filterRef.current, dateFrom: from, dateTo: to, page: 1 };
-          setFilters(next);
-          load(next);
-        }} />
+        <DatePresets
+          value={filters.datePreset}
+          from={filters.dateFrom}
+          to={filters.dateTo}
+          onChange={(datePreset, dateFrom, dateTo) => {
+            const next = { ...filterRef.current, datePreset, dateFrom, dateTo, page: 1 };
+            setFilters(next);
+            load(next);
+          }}
+        />
 
         <div style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 12, display: 'flex', alignItems: 'center' }}>
           {loading ? 'Loading…' : `${pagination.total.toLocaleString()} items`}
