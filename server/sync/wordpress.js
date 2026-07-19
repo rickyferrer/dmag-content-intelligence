@@ -269,16 +269,20 @@ export async function syncWordPress() {
 
         db.transaction(() => {
           for (const post of posts) {
+            const contentType = type === 'posts' ? 'post' : type.replace('tribe_', '');
+            // Microposts don't carry their own Section taxonomy in WordPress —
+            // they all belong to FrontBurner editorially.
+            const section = contentType === 'micropost' ? 'FrontBurner' : parseSection(post, sectionCache);
             upsertMeta.run({
               wp_id: post.id,
               slug: post.slug || '',
               url: post.link || '',
               title: post.title?.rendered || '',
-              content_type: type === 'posts' ? 'post' : type.replace('tribe_', ''),
+              content_type: contentType,
               author: parseAuthor(post, userCache),
               published_at: post.date || '',
               modified_at: post.modified || '',
-              section: parseSection(post, sectionCache),
+              section,
               categories: parseCategories(post, catCache),
               tags: parseTags(post, tagCache),
               subscription_required: parseSubscriptionRequired(post),
