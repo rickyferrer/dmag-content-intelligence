@@ -91,13 +91,16 @@ export async function classifyUnclassified() {
 
   const db = getDb();
 
-  // Find articles needing classification: no classified_at OR modified since last classification
+  // Find articles needing classification: no classified_at OR modified since last classification.
+  // Microposts are often title-only quips with no body — Claude can still classify from the
+  // title alone, so they're exempted from the non-empty content_text requirement (which exists
+  // to skip regular articles whose content sync failed/hasn't run yet).
   const unclassified = db.prepare(`
     SELECT wp_id, title, content_text, section
     FROM content
     WHERE (classified_at IS NULL OR modified_at > classified_at)
-      AND content_text IS NOT NULL
-      AND content_text != ''
+      AND title IS NOT NULL AND title != ''
+      AND (content_type = 'micropost' OR (content_text IS NOT NULL AND content_text != ''))
     ORDER BY published_at DESC
     LIMIT 100
   `).all();
