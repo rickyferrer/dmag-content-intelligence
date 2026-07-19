@@ -121,7 +121,7 @@ export default function UserNeedsAnalysis() {
                 {/* Total value bar */}
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ height: 4, background: 'var(--bg-elevated)', borderRadius: 2 }}>
-                    <div style={{ height: '100%', width: `${totalPct}%`, background: meta.fill, borderRadius: 2, opacity: 0.9 }} />
+                    <div style={{ height: '100%', width: `${totalPct}%`, background: meta.color, borderRadius: 2, opacity: 0.9 }} />
                   </div>
                 </div>
 

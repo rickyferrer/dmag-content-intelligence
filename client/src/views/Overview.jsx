@@ -76,7 +76,7 @@ export default function Overview() {
   const barData = byNeed.map(d => ({
     ...d,
     name: NEED_META[d.user_need]?.label || d.user_need,
-    fill: NEED_META[d.user_need]?.fill || '#ccc',
+    fill: NEED_META[d.user_need]?.color || '#888',
   }));
 
   return (
@@ -138,7 +138,7 @@ export default function Overview() {
               <Bar dataKey="total_true_value" radius={[0, 3, 3, 0]} isAnimationActive={false}>
                 {barData.map((d, i) => (
                   <React.Fragment key={i}>
-                    <rect fill={d.fill} fillOpacity={0.8} />
+                    <rect fill={d.fill} fillOpacity={0.9} />
                   </React.Fragment>
                 ))}
               </Bar>
