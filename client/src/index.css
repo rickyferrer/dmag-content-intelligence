@@ -34,20 +34,20 @@
 }
 
 :root {
-  --bg-base: #f5f3ef;
+  --bg-base: #f2f2f1;
   --bg-surface: #ffffff;
-  --bg-elevated: #eeebe5;
-  --bg-hover: #e8e4dd;
-  --border: #dedad2;
-  --border-subtle: #eae7e0;
+  --bg-elevated: #eaeaea;
+  --bg-hover: #e2e2e2;
+  --border: #d6d6d6;
+  --border-subtle: #e6e6e6;
 
-  --text-primary: #1c1a17;
-  --text-secondary: #5c5850;
-  --text-muted: #9b9690;
+  --text-primary: #1a1a1a;
+  --text-secondary: #58585a;
+  --text-muted: #949494;
 
-  --accent-gold: #9a6f00;
-  --accent-gold-dim: #c49a2a;
-  --accent-gold-bg: #fef9ec;
+  --accent-gold: #b3261e;
+  --accent-gold-dim: #d3574a;
+  --accent-gold-bg: #fbecea;
 
   /* User need colors — saturated hues that read on light backgrounds */
   --need-update: #c0392b;
