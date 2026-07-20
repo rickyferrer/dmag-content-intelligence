@@ -14,7 +14,17 @@ const PRESETS = [
   { label: 'Custom range',  value: 'custom' },
 ];
 
-function fmt(d) { return d.toISOString().slice(0, 10); }
+// Format the LOCAL calendar date as YYYY-MM-DD. Deliberately not
+// `d.toISOString().slice(0, 10)` — that converts to UTC first, which shifts
+// the date by one for any timezone west of UTC once local time passes into
+// evening (e.g. after ~7pm Central), silently turning "Today"/"Yesterday"
+// into the wrong day and filtering out all of that day's real content.
+function fmt(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 export function resolveDates(value) {
   const today = new Date();
