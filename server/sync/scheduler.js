@@ -120,10 +120,12 @@ export async function runAnalyticsSync() {
       setSyncState('last_ga4_sync_error', err.message);
     }
 
+    let siteWideNewsletterSignupsToday = null;
     try {
       const mfResult = await syncMarfeel();
       marfeelMetrics = mfResult.metrics || mfResult; // backward-compat if shape changes
       marfeelSources = mfResult.sourcesByUrl || new Map();
+      siteWideNewsletterSignupsToday = mfResult.siteWideNewsletterSignupsToday;
       setSyncState('last_marfeel_sync', snapshotAt);
     } catch (err) {
       console.error('[Scheduler] Marfeel sync error:', err.message);
@@ -341,6 +343,25 @@ export async function runAnalyticsSync() {
       }
     } catch (err) {
       console.error('[Scheduler] Site daily metrics error:', err.message);
+    }
+
+    // ── Marfeel site-wide newsletter signups — today only ─────────────────────
+    // Unlike GA4, Marfeel's API has no absolute date range (confirmed: an
+    // `offset` param is silently ignored), so there's no way to backfill past
+    // days here — this can only ever capture "today," accumulating one day at
+    // a time from here forward. Uses UPDATE-only semantics (via the ON CONFLICT
+    // clause below only touching this one column) so it never clobbers the
+    // GA4-sourced fields on today's row, regardless of which sync ran first.
+    if (siteWideNewsletterSignupsToday != null) {
+      const today = new Date().toISOString().slice(0, 10);
+      db.prepare(`
+        INSERT INTO site_daily_metrics (date, newsletter_signups, updated_at)
+        VALUES (?, ?, datetime('now'))
+        ON CONFLICT(date) DO UPDATE SET
+          newsletter_signups = excluded.newsletter_signups,
+          updated_at = datetime('now')
+      `).run(today, siteWideNewsletterSignupsToday);
+      console.log(`[Scheduler] Site-wide newsletter signups for ${today}: ${siteWideNewsletterSignupsToday}`);
     }
 
     // ── Search Console — real per-page, per-query search performance ─────────

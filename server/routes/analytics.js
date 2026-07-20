@@ -83,6 +83,7 @@ function computeTrafficSummary(db, dateFrom, dateTo) {
       SUM(pageviews) as total_pageviews,
       SUM(subscribe_clicks) as total_subscribe_clicks,
       SUM(ad_revenue) as total_ad_revenue,
+      SUM(newsletter_signups) as total_newsletter_signups,
       AVG(avg_engagement_time) as avg_engagement_time,
       COUNT(*) as day_count
     FROM site_daily_metrics
@@ -95,6 +96,7 @@ function computeTrafficSummary(db, dateFrom, dateTo) {
     total_pageviews: row.total_pageviews || 0,
     total_subscribe_clicks: row.total_subscribe_clicks || 0,
     total_ad_revenue: row.total_ad_revenue || 0,
+    total_newsletter_signups: row.total_newsletter_signups || 0,
     avg_engagement_time: row.avg_engagement_time || 0,
     day_count: row.day_count || 0,
   };
@@ -117,12 +119,12 @@ router.get('/summary', (req, res) => {
   const current = {
     total_content: contentCurrent.total_content,
     avg_true_value: contentCurrent.avg_true_value,
-    total_newsletter_signups: contentCurrent.total_newsletter_signups,
     total_pageviews: useSiteWide ? trafficCurrent.total_pageviews : contentCurrent.total_pageviews,
     total_users: useSiteWide ? trafficCurrent.total_users : contentCurrent.total_users,
     total_loyal_users: useSiteWide ? trafficCurrent.total_loyal_users : contentCurrent.total_loyal_users,
     total_subscribe_clicks: useSiteWide ? trafficCurrent.total_subscribe_clicks : contentCurrent.total_subscribe_clicks,
     total_ad_revenue: useSiteWide ? trafficCurrent.total_ad_revenue : contentCurrent.total_ad_revenue,
+    total_newsletter_signups: useSiteWide ? trafficCurrent.total_newsletter_signups : contentCurrent.total_newsletter_signups,
     avg_engagement_time: useSiteWide ? trafficCurrent.avg_engagement_time : contentCurrent.avg_engagement_time,
   };
 
@@ -144,7 +146,6 @@ router.get('/summary', (req, res) => {
 
     if (contentCoverage >= 0.5) {
       changes.avg_true_value = pctChange(contentCurrent.avg_true_value, contentPrevious.avg_true_value);
-      changes.total_newsletter_signups = pctChange(contentCurrent.total_newsletter_signups, contentPrevious.total_newsletter_signups);
     }
 
     if (useSiteWide) {
@@ -163,11 +164,13 @@ router.get('/summary', (req, res) => {
         changes.total_loyal_users = pctChange(current.total_loyal_users, trafficPrevious.total_loyal_users);
         changes.total_subscribe_clicks = pctChange(current.total_subscribe_clicks, trafficPrevious.total_subscribe_clicks);
         changes.total_ad_revenue = pctChange(current.total_ad_revenue, trafficPrevious.total_ad_revenue);
+        changes.total_newsletter_signups = pctChange(current.total_newsletter_signups, trafficPrevious.total_newsletter_signups);
       }
     } else if (contentCoverage >= 0.5) {
       // Section/type-scoped view — no site-wide breakdown available, so
       // fall back to the per-article comparison for these too.
       changes.total_users = pctChange(current.total_users, contentPrevious.total_users);
+      changes.total_newsletter_signups = pctChange(current.total_newsletter_signups, contentPrevious.total_newsletter_signups);
       changes.total_loyal_users = pctChange(current.total_loyal_users, contentPrevious.total_loyal_users);
       changes.total_subscribe_clicks = pctChange(current.total_subscribe_clicks, contentPrevious.total_subscribe_clicks);
       changes.total_ad_revenue = pctChange(current.total_ad_revenue, contentPrevious.total_ad_revenue);

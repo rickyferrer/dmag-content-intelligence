@@ -138,6 +138,7 @@ function initSchema() {
       sessions            INTEGER DEFAULT 0,
       subscribe_clicks    INTEGER DEFAULT 0,
       ad_revenue          REAL    DEFAULT 0,
+      newsletter_signups  INTEGER DEFAULT 0,
       avg_engagement_time REAL    DEFAULT 0,
       updated_at          TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -147,6 +148,7 @@ function initSchema() {
   try { db.exec('ALTER TABLE analytics_snapshots ADD COLUMN mf_newsletter_signups INTEGER DEFAULT 0'); } catch {}
   try { db.exec("ALTER TABLE content ADD COLUMN writer TEXT DEFAULT ''"); } catch {}
   try { db.exec('ALTER TABLE content ADD COLUMN excluded_from_scoring INTEGER DEFAULT 0'); } catch {}
+  try { db.exec('ALTER TABLE site_daily_metrics ADD COLUMN newsletter_signups INTEGER DEFAULT 0'); } catch {}
 
   // Seed default scoring weights if not present.
   // The True Value score blends per-reader conversion/quality rates, weighted by
