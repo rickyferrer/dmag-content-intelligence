@@ -5,7 +5,7 @@ import { syncMarfeel } from './marfeel.js';
 import { classifyUnclassified } from '../classify/userNeeds.js';
 import { getDb, setSyncState, getSettings } from '../db.js';
 import { getScoreParams, valueToScore } from '../utils/trueValue.js';
-import { syncGA4Sources } from './ga4.js';
+import { syncGA4Sources, syncGA4DailyTotals } from './ga4.js';
 import { syncGSC } from './gsc.js';
 
 let syncRunning = false;
@@ -312,6 +312,35 @@ export async function runAnalyticsSync() {
       }
     } catch (err) {
       console.error('[Scheduler] Source performance error:', err.message);
+    }
+
+    // ── GA4 site-wide daily totals — independent of article publish dates ────
+    // Powers Overview's traffic cards so a date-range filter reflects actual
+    // site traffic for that window, not just articles published in it.
+    try {
+      const dailyRows = await syncGA4DailyTotals();
+      if (dailyRows.length > 0) {
+        const upsertDaily = db.prepare(`
+          INSERT INTO site_daily_metrics
+            (date, users, loyal_users, pageviews, sessions, subscribe_clicks, ad_revenue, avg_engagement_time, updated_at)
+          VALUES (@date, @users, @loyal_users, @pageviews, @sessions, @subscribe_clicks, @ad_revenue, @avg_engagement_time, datetime('now'))
+          ON CONFLICT(date) DO UPDATE SET
+            users = excluded.users,
+            loyal_users = excluded.loyal_users,
+            pageviews = excluded.pageviews,
+            sessions = excluded.sessions,
+            subscribe_clicks = excluded.subscribe_clicks,
+            ad_revenue = excluded.ad_revenue,
+            avg_engagement_time = excluded.avg_engagement_time,
+            updated_at = datetime('now')
+        `);
+        db.transaction(() => {
+          for (const r of dailyRows) upsertDaily.run(r);
+        })();
+        console.log(`[Scheduler] Site daily metrics: ${dailyRows.length} days upserted`);
+      }
+    } catch (err) {
+      console.error('[Scheduler] Site daily metrics error:', err.message);
     }
 
     // ── Search Console — real per-page, per-query search performance ─────────

@@ -123,6 +123,24 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_gsc_wp_snap ON gsc_queries(wp_id, snapshot_at);
     CREATE INDEX IF NOT EXISTS idx_gsc_snap     ON gsc_queries(snapshot_at);
+
+    -- Site-wide GA4 traffic by calendar date, independent of which articles
+    -- were published that day. Lets date-range filters answer "how much
+    -- traffic did the site get in this window" rather than only "how did
+    -- articles published in this window perform" (the per-article/
+    -- analytics_snapshots approach, which returns 0 for any range with no
+    -- new publishes — e.g. a weekend — even though the site still had readers).
+    CREATE TABLE IF NOT EXISTS site_daily_metrics (
+      date                TEXT PRIMARY KEY,
+      users               INTEGER DEFAULT 0,
+      loyal_users         INTEGER DEFAULT 0,
+      pageviews           INTEGER DEFAULT 0,
+      sessions            INTEGER DEFAULT 0,
+      subscribe_clicks    INTEGER DEFAULT 0,
+      ad_revenue          REAL    DEFAULT 0,
+      avg_engagement_time REAL    DEFAULT 0,
+      updated_at          TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Schema migrations — safe to run on every startup

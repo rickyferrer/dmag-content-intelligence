@@ -3,19 +3,18 @@ import { getDb } from '../db.js';
 
 const router = Router();
 
-// Computes the summary aggregate for a fixed set of content (filtered by
-// published_at/section/type) as of a given point in time.
+// Content-strategy metrics: total_content and avg_true_value are inherently
+// about articles PUBLISHED in the range (filtered by c.published_at).
+// total_newsletter_signups also stays on this per-article approach for now —
+// Marfeel's API doesn't yet give us a clean site-wide daily breakdown for it.
 //
 // `asOf`, when set, pulls each article's most recent snapshot AT OR BEFORE
-// that timestamp instead of its latest snapshot overall. This is what makes
-// period-over-period comparison meaningful: GA4 metrics here are already a
+// that timestamp instead of its latest snapshot overall, which is what makes
+// comparing avg_true_value across periods meaningful: GA4 metrics here are a
 // rolling trailing-30-day window as of sync time (see sync/ga4.js), so
 // comparing "today's snapshot" to "the snapshot from ~30 days ago" for the
-// SAME set of articles gives a real trend — whereas comparing two DIFFERENT
-// article cohorts (e.g. this month's posts vs last month's posts), which is
-// what filtering published_at differently for current vs previous would do,
-// doesn't measure change over time at all.
-function computeSummary(db, dateFrom, dateTo, section, type, asOf = null) {
+// SAME set of articles gives a real trend.
+function computeContentSummary(db, dateFrom, dateTo, section, type, asOf = null) {
   const dateWhere = [];
   const dateParams = [];
   if (dateFrom)  { dateWhere.push('c.published_at >= ?'); dateParams.push(dateFrom); }
@@ -64,6 +63,43 @@ function computeSummary(db, dateFrom, dateTo, section, type, asOf = null) {
   };
 }
 
+// Site-wide traffic by calendar date — independent of which articles were
+// published in the range. This is what makes "Users"/"Loyal Users" correct
+// for a date range with no new posts (e.g. a weekend): the site still had
+// real readers that day even though nothing new went out. Only valid when
+// there's no section/type filter, since site_daily_metrics has no such
+// breakdown — those views fall back to the per-article numbers instead.
+function computeTrafficSummary(db, dateFrom, dateTo) {
+  const where = [];
+  const params = [];
+  if (dateFrom) { where.push('date >= ?'); params.push(dateFrom); }
+  if (dateTo)   { where.push('date <= ?'); params.push(dateTo); }
+  const filter = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+  const row = db.prepare(`
+    SELECT
+      SUM(users) as total_users,
+      SUM(loyal_users) as total_loyal_users,
+      SUM(pageviews) as total_pageviews,
+      SUM(subscribe_clicks) as total_subscribe_clicks,
+      SUM(ad_revenue) as total_ad_revenue,
+      AVG(avg_engagement_time) as avg_engagement_time,
+      COUNT(*) as day_count
+    FROM site_daily_metrics
+    ${filter}
+  `).get(...params);
+
+  return {
+    total_users: row.total_users || 0,
+    total_loyal_users: row.total_loyal_users || 0,
+    total_pageviews: row.total_pageviews || 0,
+    total_subscribe_clicks: row.total_subscribe_clicks || 0,
+    total_ad_revenue: row.total_ad_revenue || 0,
+    avg_engagement_time: row.avg_engagement_time || 0,
+    day_count: row.day_count || 0,
+  };
+}
+
 function pctChange(curr, prev) {
   if (prev == null || prev === 0) return null;
   return ((curr - prev) / prev) * 100;
@@ -74,7 +110,21 @@ router.get('/summary', (req, res) => {
   const db = getDb();
   const { dateFrom, dateTo, section, type } = req.query;
 
-  const current = computeSummary(db, dateFrom, dateTo, section, type);
+  const contentCurrent = computeContentSummary(db, dateFrom, dateTo, section, type);
+  const useSiteWide = !section && !type;
+  const trafficCurrent = useSiteWide ? computeTrafficSummary(db, dateFrom, dateTo) : null;
+
+  const current = {
+    total_content: contentCurrent.total_content,
+    avg_true_value: contentCurrent.avg_true_value,
+    total_newsletter_signups: contentCurrent.total_newsletter_signups,
+    total_pageviews: useSiteWide ? trafficCurrent.total_pageviews : contentCurrent.total_pageviews,
+    total_users: useSiteWide ? trafficCurrent.total_users : contentCurrent.total_users,
+    total_loyal_users: useSiteWide ? trafficCurrent.total_loyal_users : contentCurrent.total_loyal_users,
+    total_subscribe_clicks: useSiteWide ? trafficCurrent.total_subscribe_clicks : contentCurrent.total_subscribe_clicks,
+    total_ad_revenue: useSiteWide ? trafficCurrent.total_ad_revenue : contentCurrent.total_ad_revenue,
+    avg_engagement_time: useSiteWide ? trafficCurrent.avg_engagement_time : contentCurrent.avg_engagement_time,
+  };
 
   // Only compute a comparison when there's an explicit range to derive a
   // duration from — "all time" has no meaningful "N days ago".
@@ -83,26 +133,44 @@ router.get('/summary', (req, res) => {
     const from = new Date(dateFrom + 'T00:00:00Z');
     const to = new Date(dateTo + 'T00:00:00Z');
     const durationDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)));
+
+    // Content-side previous period (avg_true_value, newsletter signups):
+    // same cohort of articles, snapshot from ~N days ago.
     const asOf = new Date(Date.now() - durationDays * 24 * 60 * 60 * 1000).toISOString();
+    const contentPrevious = computeContentSummary(db, dateFrom, dateTo, section, type, asOf);
+    const contentCoverage = contentCurrent.total_content > 0
+      ? contentPrevious.matched_count / contentCurrent.total_content
+      : 0;
 
-    const previous = computeSummary(db, dateFrom, dateTo, section, type, asOf);
+    if (contentCoverage >= 0.5) {
+      changes.avg_true_value = pctChange(contentCurrent.avg_true_value, contentPrevious.avg_true_value);
+      changes.total_newsletter_signups = pctChange(contentCurrent.total_newsletter_signups, contentPrevious.total_newsletter_signups);
+    }
 
-    // Guard against showing a wild percentage when we simply don't have
-    // enough retained history yet to cover this comparison — e.g. asking
-    // for a 30-day-ago snapshot when daily retention only started a few
-    // days ago. Require most of the current cohort to have a real prior
-    // snapshot before trusting the comparison at all.
-    const coverage = current.total_content > 0 ? previous.matched_count / current.total_content : 0;
+    if (useSiteWide) {
+      // Traffic-side previous period: a real shifted calendar window read
+      // straight from the daily table — no cohort-matching tricks needed.
+      const priorTo = new Date(from.getTime() - 24 * 60 * 60 * 1000);
+      const priorFrom = new Date(priorTo.getTime() - durationDays * 24 * 60 * 60 * 1000);
+      const fmtDate = (d) => d.toISOString().slice(0, 10);
+      const trafficPrevious = computeTrafficSummary(db, fmtDate(priorFrom), fmtDate(priorTo));
 
-    if (coverage >= 0.5) {
-      changes = {
-        avg_true_value: pctChange(current.avg_true_value, previous.avg_true_value),
-        total_users: pctChange(current.total_users, previous.total_users),
-        total_loyal_users: pctChange(current.total_loyal_users, previous.total_loyal_users),
-        total_subscribe_clicks: pctChange(current.total_subscribe_clicks, previous.total_subscribe_clicks),
-        total_ad_revenue: pctChange(current.total_ad_revenue, previous.total_ad_revenue),
-        total_newsletter_signups: pctChange(current.total_newsletter_signups, previous.total_newsletter_signups),
-      };
+      const expectedDays = durationDays + 1;
+      const trafficCoverage = trafficPrevious.day_count / expectedDays;
+
+      if (trafficCoverage >= 0.5) {
+        changes.total_users = pctChange(current.total_users, trafficPrevious.total_users);
+        changes.total_loyal_users = pctChange(current.total_loyal_users, trafficPrevious.total_loyal_users);
+        changes.total_subscribe_clicks = pctChange(current.total_subscribe_clicks, trafficPrevious.total_subscribe_clicks);
+        changes.total_ad_revenue = pctChange(current.total_ad_revenue, trafficPrevious.total_ad_revenue);
+      }
+    } else if (contentCoverage >= 0.5) {
+      // Section/type-scoped view — no site-wide breakdown available, so
+      // fall back to the per-article comparison for these too.
+      changes.total_users = pctChange(current.total_users, contentPrevious.total_users);
+      changes.total_loyal_users = pctChange(current.total_loyal_users, contentPrevious.total_loyal_users);
+      changes.total_subscribe_clicks = pctChange(current.total_subscribe_clicks, contentPrevious.total_subscribe_clicks);
+      changes.total_ad_revenue = pctChange(current.total_ad_revenue, contentPrevious.total_ad_revenue);
     }
   }
 

@@ -279,6 +279,89 @@ export async function syncGA4() {
   return allMetrics;
 }
 
+// GA4's `date` dimension returns values as YYYYMMDD — convert to YYYY-MM-DD.
+function formatGA4Date(raw) {
+  if (!raw || raw.length !== 8) return raw;
+  return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+}
+
+// Site-wide traffic by calendar date, independent of any specific article —
+// this is what lets a date-range filter answer "how much traffic did the site
+// get in this window" rather than "how did articles published in this window
+// perform" (the per-article approach, which returns 0 for e.g. a weekend with
+// no new posts even though the site still had real readers that day).
+export async function syncGA4DailyTotals(lookbackDays = 400) {
+  const results = new Map(); // date → metrics
+
+  // Query 1: users, pageviews, sessions, engagement, revenue by date
+  const mainData = await ga4Request(':runReport', {
+    dateRanges: [{ startDate: `${lookbackDays}daysAgo`, endDate: 'today' }],
+    dimensions: [{ name: 'date' }],
+    metrics: [
+      { name: 'activeUsers' },
+      { name: 'screenPageViews' },
+      { name: 'sessions' },
+      { name: 'averageSessionDuration' },
+      { name: 'totalRevenue' },
+    ],
+    limit: 1000,
+  });
+
+  for (const row of parseRows(mainData)) {
+    const date = formatGA4Date(row.date);
+    results.set(date, {
+      date,
+      users: Math.round(row.activeUsers || 0),
+      pageviews: Math.round(row.screenPageViews || 0),
+      sessions: Math.round(row.sessions || 0),
+      avg_engagement_time: row.averageSessionDuration || 0,
+      ad_revenue: row.totalRevenue || 0,
+      loyal_users: 0,
+      subscribe_clicks: 0,
+    });
+  }
+
+  // Query 2: loyal users by date — same audience definition as the per-article sync
+  const loyalData = await ga4Request(':runReport', {
+    dateRanges: [{ startDate: `${lookbackDays}daysAgo`, endDate: 'today' }],
+    dimensions: [{ name: 'date' }, { name: 'audienceName' }],
+    metrics: [{ name: 'activeUsers' }],
+    dimensionFilter: {
+      filter: {
+        fieldName: 'audienceName',
+        stringFilter: { matchType: 'EXACT', value: '3 or more sessions, last 30 days' },
+      },
+    },
+    limit: 1000,
+  });
+
+  for (const row of parseRows(loyalData)) {
+    const date = formatGA4Date(row.date);
+    if (results.has(date)) results.get(date).loyal_users = Math.round(row.activeUsers || 0);
+  }
+  // Cap loyal <= total users per day, same rationale as the per-article sync.
+  for (const [, m] of results) m.loyal_users = Math.min(m.loyal_users, m.users);
+
+  // Query 3: subscribe_click events by date
+  const subData = await ga4Request(':runReport', {
+    dateRanges: [{ startDate: `${lookbackDays}daysAgo`, endDate: 'today' }],
+    dimensions: [{ name: 'date' }, { name: 'eventName' }],
+    metrics: [{ name: 'eventCount' }],
+    dimensionFilter: {
+      filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'subscribe_click' } },
+    },
+    limit: 1000,
+  });
+
+  for (const row of parseRows(subData)) {
+    const date = formatGA4Date(row.date);
+    if (results.has(date)) results.get(date).subscribe_clicks = Math.round(row.eventCount || 0);
+  }
+
+  console.log(`[GA4] Fetched ${results.size} days of site-wide daily totals`);
+  return [...results.values()];
+}
+
 // Fetch site-wide conversion metrics broken down by GA4 channel group.
 // Returns Array<{channel, users, subscribe_clicks, avg_engagement_time, ad_revenue}>
 // These are DIRECT measurements — no attribution math.
