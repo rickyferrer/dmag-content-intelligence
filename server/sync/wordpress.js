@@ -277,7 +277,7 @@ export async function syncWordPress() {
               wp_id: post.id,
               slug: post.slug || '',
               url: post.link || '',
-              title: post.title?.rendered || '',
+              title: stripHtml(post.title?.rendered || ''),
               content_type: contentType,
               author: parseAuthor(post, userCache),
               published_at: post.date || '',
