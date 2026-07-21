@@ -285,6 +285,51 @@ function formatGA4Date(raw) {
   return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
 }
 
+// Users and loyal users are DISTINCT-COUNT metrics, not additive event counts
+// like pageviews or clicks — summing per-day snapshots across a range
+// over-counts every repeat visitor once per day they showed up (a reader who
+// visits 15 of 30 days would be counted 15 times, not once). This is
+// especially severe for loyal users, since "loyal" is by definition a repeat
+// visitor — nearly all of them appear on many days in the window. So unlike
+// pageviews/subscribe_clicks/ad_revenue (safe to pre-aggregate daily and
+// sum), users/loyal_users must be queried live with a SINGLE consolidated
+// date range to get a true period-unique count.
+export async function fetchUsersForRange(dateFrom, dateTo) {
+  const dateRanges = dateFrom && dateTo
+    ? [{ startDate: dateFrom, endDate: dateTo }]
+    : [{ startDate: '2015-01-01', endDate: 'today' }]; // "all time" fallback
+
+  const data = await ga4Request(':runReport', {
+    dateRanges,
+    metrics: [{ name: 'activeUsers' }],
+  });
+  const row = parseRows(data)[0];
+  return Math.round(row?.activeUsers || 0);
+}
+
+// Returns the raw loyal-user count for the range — cap against total users
+// at the call site (callers already need the total anyway, so this avoids
+// firing a redundant fetchUsersForRange call internally).
+export async function fetchLoyalUsersForRange(dateFrom, dateTo) {
+  const dateRanges = dateFrom && dateTo
+    ? [{ startDate: dateFrom, endDate: dateTo }]
+    : [{ startDate: '2015-01-01', endDate: 'today' }];
+
+  const data = await ga4Request(':runReport', {
+    dateRanges,
+    dimensions: [{ name: 'audienceName' }],
+    metrics: [{ name: 'activeUsers' }],
+    dimensionFilter: {
+      filter: {
+        fieldName: 'audienceName',
+        stringFilter: { matchType: 'EXACT', value: '3 or more sessions, last 30 days' },
+      },
+    },
+  });
+  const row = parseRows(data)[0];
+  return Math.round(row?.activeUsers || 0);
+}
+
 // Site-wide traffic by calendar date, independent of any specific article —
 // this is what lets a date-range filter answer "how much traffic did the site
 // get in this window" rather than "how did articles published in this window

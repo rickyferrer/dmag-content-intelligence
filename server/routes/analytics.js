@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
+import { fetchUsersForRange, fetchLoyalUsersForRange } from '../sync/ga4.js';
 
 const router = Router();
 
@@ -69,7 +70,16 @@ function computeContentSummary(db, dateFrom, dateTo, section, type, asOf = null)
 // real readers that day even though nothing new went out. Only valid when
 // there's no section/type filter, since site_daily_metrics has no such
 // breakdown — those views fall back to the per-article numbers instead.
-function computeTrafficSummary(db, dateFrom, dateTo) {
+//
+// Users/loyal users are fetched LIVE from GA4 with a single consolidated
+// date range rather than summed from the daily table. They're distinct-count
+// metrics, not additive event counts like pageviews/clicks — summing per-day
+// snapshots across a range over-counts every repeat visitor once per day
+// they showed up (a reader active 15 of 30 days would be counted 15 times,
+// not once). That's especially severe for loyal users, since "loyal" is by
+// definition a repeat visitor. Pageviews/subscribe_clicks/ad_revenue ARE
+// genuinely additive, so those still come from the fast pre-aggregated table.
+async function computeTrafficSummary(db, dateFrom, dateTo) {
   const where = [];
   const params = [];
   if (dateFrom) { where.push('date >= ?'); params.push(dateFrom); }
@@ -78,8 +88,6 @@ function computeTrafficSummary(db, dateFrom, dateTo) {
 
   const row = db.prepare(`
     SELECT
-      SUM(users) as total_users,
-      SUM(loyal_users) as total_loyal_users,
       SUM(pageviews) as total_pageviews,
       SUM(subscribe_clicks) as total_subscribe_clicks,
       SUM(ad_revenue) as total_ad_revenue,
@@ -90,9 +98,14 @@ function computeTrafficSummary(db, dateFrom, dateTo) {
     ${filter}
   `).get(...params);
 
+  const [total_users, rawLoyalUsers] = await Promise.all([
+    fetchUsersForRange(dateFrom, dateTo),
+    fetchLoyalUsersForRange(dateFrom, dateTo),
+  ]);
+
   return {
-    total_users: row.total_users || 0,
-    total_loyal_users: row.total_loyal_users || 0,
+    total_users,
+    total_loyal_users: Math.min(rawLoyalUsers, total_users), // cap, same rationale as the per-article sync
     total_pageviews: row.total_pageviews || 0,
     total_subscribe_clicks: row.total_subscribe_clicks || 0,
     total_ad_revenue: row.total_ad_revenue || 0,
@@ -108,13 +121,13 @@ function pctChange(curr, prev) {
 }
 
 // GET /api/analytics/summary
-router.get('/summary', (req, res) => {
+router.get('/summary', async (req, res) => {
   const db = getDb();
   const { dateFrom, dateTo, section, type } = req.query;
 
   const contentCurrent = computeContentSummary(db, dateFrom, dateTo, section, type);
   const useSiteWide = !section && !type;
-  const trafficCurrent = useSiteWide ? computeTrafficSummary(db, dateFrom, dateTo) : null;
+  const trafficCurrent = useSiteWide ? await computeTrafficSummary(db, dateFrom, dateTo) : null;
 
   const current = {
     total_content: contentCurrent.total_content,
@@ -149,19 +162,22 @@ router.get('/summary', (req, res) => {
     }
 
     if (useSiteWide) {
-      // Traffic-side previous period: a real shifted calendar window read
-      // straight from the daily table — no cohort-matching tricks needed.
+      // Traffic-side previous period: a real shifted calendar window.
       const priorTo = new Date(from.getTime() - 24 * 60 * 60 * 1000);
       const priorFrom = new Date(priorTo.getTime() - durationDays * 24 * 60 * 60 * 1000);
       const fmtDate = (d) => d.toISOString().slice(0, 10);
-      const trafficPrevious = computeTrafficSummary(db, fmtDate(priorFrom), fmtDate(priorTo));
+      const trafficPrevious = await computeTrafficSummary(db, fmtDate(priorFrom), fmtDate(priorTo));
 
+      // Users/loyal users are live GA4 queries — always an exact count for
+      // whatever range was requested, no historical-depth gating needed.
+      changes.total_users = pctChange(current.total_users, trafficPrevious.total_users);
+      changes.total_loyal_users = pctChange(current.total_loyal_users, trafficPrevious.total_loyal_users);
+
+      // Pageviews/subscribe_clicks/ad_revenue/newsletter still come from the
+      // pre-aggregated daily table, so still need the depth check.
       const expectedDays = durationDays + 1;
       const trafficCoverage = trafficPrevious.day_count / expectedDays;
-
       if (trafficCoverage >= 0.5) {
-        changes.total_users = pctChange(current.total_users, trafficPrevious.total_users);
-        changes.total_loyal_users = pctChange(current.total_loyal_users, trafficPrevious.total_loyal_users);
         changes.total_subscribe_clicks = pctChange(current.total_subscribe_clicks, trafficPrevious.total_subscribe_clicks);
         changes.total_ad_revenue = pctChange(current.total_ad_revenue, trafficPrevious.total_ad_revenue);
         changes.total_newsletter_signups = pctChange(current.total_newsletter_signups, trafficPrevious.total_newsletter_signups);
