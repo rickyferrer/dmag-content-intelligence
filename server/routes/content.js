@@ -9,7 +9,7 @@ const router = Router();
 router.get('/', (req, res) => {
   const db = getDb();
   const {
-    type, section, category, tag, need, writer, issue,
+    type, section, category, tag, need, writer, issue, search,
     dateFrom, dateTo,
     sortBy = 'published_at', order = 'desc',
     page = 1, limit = 50,
@@ -51,6 +51,7 @@ router.get('/', (req, res) => {
   if (category) { where.push("c.categories LIKE ?"); params.push(`%"slug":"${category}"%`); }
   if (tag) { where.push("c.tags LIKE ?"); params.push(`%"slug":"${tag}"%`); }
   if (issue) { where.push("c.url LIKE ?"); params.push(`%/publications/${issue}/%`); }
+  if (search) { where.push('(c.title LIKE ? OR c.url LIKE ?)'); params.push(`%${search}%`, `%${search}%`); }
 
   const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
