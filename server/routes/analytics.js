@@ -413,7 +413,11 @@ router.get('/by-issue', (req, res) => {
   const issueMap = {};
 
   for (const row of rows) {
-    const match = row.url.match(/\/publications\/([^/]+)\/(\d{4})\/([^/]+)\//);
+    // Requires a slug segment after the month (…/month/some-article-slug/),
+    // which excludes the issue's own bare landing page (…/month/ with nothing
+    // after it — e.g. a page literally titled "May") from being counted as
+    // an article or winning "top article" by traffic alone.
+    const match = row.url.match(/\/publications\/([^/]+)\/(\d{4})\/([^/]+)\/([^/]+)\//);
     if (!match) continue;
     const [, pub, yr, mo] = match;
 
