@@ -92,6 +92,7 @@ export default function Sources() {
   const [types, setTypes] = useState([]);
   const [filters, setFilters] = useState({ from: initFrom, to: initTo, type: '', preset: DEFAULT_PRESET });
   const [expanded, setExpanded] = useState(null);
+  const [lastAnalyticsSync, setLastAnalyticsSync] = useState(null);
 
   const load = ({ from, to, type }) => {
     setLoading(true);
@@ -109,10 +110,21 @@ export default function Sources() {
     load({ from: initFrom, to: initTo, type: '' });
     api.getContentTypes().then(setTypes).catch(console.error);
     api.getSourcePerformance().then(setPerf).catch(console.error);
+    api.getSyncStatus()
+      .then(status => setLastAnalyticsSync(status?.last_analytics_sync?.updated_at || null))
+      .catch(console.error);
   }, []);
 
   const setFilter = (key, value) => {
     const next = { ...filters, [key]: value };
+    setFilters(next);
+    load(next);
+  };
+
+  const isDefaultFilters = filters.preset === DEFAULT_PRESET && filters.type === '';
+
+  const clearFilters = () => {
+    const next = { from: initFrom, to: initTo, type: '', preset: DEFAULT_PRESET };
     setFilters(next);
     load(next);
   };
@@ -279,8 +291,26 @@ export default function Sources() {
       {loading ? (
         <div style={{ padding: 40, color: 'var(--text-muted)' }}>Loading...</div>
       ) : grandTotal === 0 ? (
-        <div style={{ padding: 40, color: 'var(--text-muted)', textAlign: 'center' }}>
-          No source data yet — trigger an analytics sync to populate.
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ color: 'var(--text-muted)' }}>
+            No source data matches these filters.
+          </div>
+          {!isDefaultFilters && (
+            <button
+              onClick={clearFilters}
+              style={{
+                marginTop: 12, padding: '6px 14px', borderRadius: 4, fontSize: 12,
+                background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
+                cursor: 'pointer',
+              }}
+            >
+              Clear filters
+            </button>
+          )}
+          <div style={{ marginTop: 16, fontSize: 11, color: 'var(--text-muted)' }}>
+            Last successful analytics sync:{' '}
+            {lastAnalyticsSync ? lastAnalyticsSync.slice(0, 19).replace('T', ' ') : 'never'}
+          </div>
         </div>
       ) : (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
