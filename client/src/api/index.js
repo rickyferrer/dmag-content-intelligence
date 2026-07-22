@@ -43,7 +43,8 @@ export const api = {
   getSettings: () => apiFetch('/settings'),
   updateSettings: (body) => apiFetch('/settings', { method: 'PUT', body: JSON.stringify(body) }),
   recalculateScores: () => apiFetch('/settings/recalculate', { method: 'POST' }),
-  cleanupData: (years = 2) => apiFetch('/settings/cleanup', { method: 'POST', body: JSON.stringify({ years }) }),
+  cleanupData: (years = 2) => apiFetch('/settings/cleanup', { method: 'POST', body: JSON.stringify({ years, confirm: 'DELETE' }) }),
   getExclusions: () => apiFetch('/settings/exclusions'),
   setExclusions: (urls) => apiFetch('/settings/exclusions', { method: 'POST', body: JSON.stringify({ urls }) }),
+  getAuditLog: () => apiFetch('/settings/audit-log'),
 };

@@ -66,9 +66,18 @@ nano .env
 NODE_ENV=production
 PORT=3001
 
-# Shared login for the team (pick a strong password)
+# Shared login for the team (pick a strong password) — read-only access to
+# every analysis tab (Overview, Content, Sections, etc.)
 DASHBOARD_USER=dmag
 DASHBOARD_PASS=choose-a-strong-password
+
+# Separate, stricter login required for Settings and all mutating actions
+# (sync triggers, score recalculation, scoring exclusions, destructive data
+# cleanup). Give this only to the small set of people who should administer
+# the dashboard, not the whole team. Admin credentials also work for viewing
+# (see server/index.js for why), so admins don't need both logins.
+ADMIN_USER=dmag-admin
+ADMIN_PASS=choose-a-different-strong-password
 
 # GA4 (service account is the primary auth now)
 GA4_PROPERTY_ID=320675632

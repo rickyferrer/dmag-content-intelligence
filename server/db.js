@@ -142,6 +142,18 @@ function initSchema() {
       avg_engagement_time REAL    DEFAULT 0,
       updated_at          TEXT DEFAULT CURRENT_TIMESTAMP
     );
+
+    -- Records every admin-gated mutation (sync triggers, score recalculation,
+    -- scoring exclusion changes, destructive data cleanup, weight edits) —
+    -- who (the admin Basic Auth username), what, and when.
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id      INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts      TEXT DEFAULT CURRENT_TIMESTAMP,
+      actor   TEXT,
+      action  TEXT,
+      details TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
   `);
 
   // Schema migrations — safe to run on every startup
@@ -168,6 +180,20 @@ function initSchema() {
   for (const [key, value] of Object.entries(weights)) {
     upsertSetting.run(key, value);
   }
+}
+
+// actor: the admin Basic Auth username (req.auth.user), or 'system' for
+// scheduled/cron-triggered actions. details: any JSON-serializable object.
+export function logAudit(actor, action, details) {
+  const db = getDb();
+  db.prepare('INSERT INTO audit_log (actor, action, details) VALUES (?, ?, ?)')
+    .run(actor || 'unknown', action, details != null ? JSON.stringify(details) : null);
+}
+
+export function getAuditLog(limit = 100) {
+  const db = getDb();
+  const rows = db.prepare('SELECT id, ts, actor, action, details FROM audit_log ORDER BY id DESC LIMIT ?').all(limit);
+  return rows.map(r => ({ ...r, details: r.details ? JSON.parse(r.details) : null }));
 }
 
 export function getSyncState(key) {

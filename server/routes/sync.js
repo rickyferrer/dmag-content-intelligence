@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getSyncStatus, runContentSync, runAnalyticsSync, runClassification } from '../sync/scheduler.js';
+import { logAudit } from '../db.js';
 
 const router = Router();
 
@@ -13,6 +14,7 @@ router.get('/status', (req, res) => {
 router.post('/trigger', async (req, res) => {
   const { type = 'all' } = req.body || {};
 
+  logAudit(req.auth?.user || 'unknown', 'trigger_sync', { type });
   res.json({ message: `Sync triggered: ${type}` });
 
   // Run in background after response — sequential when 'all' so analytics

@@ -23,6 +23,10 @@ export default function Settings() {
   const [exclusionText, setExclusionText] = useState('');
   const [exclusionResult, setExclusionResult] = useState(null);
   const [savingExclusions, setSavingExclusions] = useState(false);
+  const [cleanupConfirmText, setCleanupConfirmText] = useState('');
+  const [auditLog, setAuditLog] = useState([]);
+
+  const loadAuditLog = () => api.getAuditLog().then(setAuditLog).catch(console.error);
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch(console.error);
@@ -30,6 +34,7 @@ export default function Settings() {
     api.getExclusions()
       .then(rows => setExclusionText(rows.map(r => r.url).join('\n')))
       .catch(console.error);
+    loadAuditLog();
   }, []);
 
   const handleChange = (key, val) => {
@@ -44,6 +49,7 @@ export default function Settings() {
       setDirty({});
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      loadAuditLog();
     } catch (err) {
       alert('Save error: ' + err.message);
     } finally {
@@ -52,10 +58,11 @@ export default function Settings() {
   };
 
   const handleRecalculate = async () => {
+    if (!window.confirm('Recalculate True Value scores for all content using the current weights?')) return;
     setRecalculating(true);
     try {
       await api.recalculateScores();
-      setTimeout(() => setRecalculating(false), 3000);
+      setTimeout(() => { setRecalculating(false); loadAuditLog(); }, 3000);
     } catch (err) {
       alert('Recalculation error: ' + err.message);
       setRecalculating(false);
@@ -69,6 +76,7 @@ export default function Settings() {
       const urls = exclusionText.split('\n').map(u => u.trim()).filter(Boolean);
       const result = await api.setExclusions(urls);
       setExclusionResult(result);
+      loadAuditLog();
     } catch (err) {
       alert('Error saving exclusions: ' + err.message);
     } finally {
@@ -76,13 +84,18 @@ export default function Settings() {
     }
   };
 
+  // Destructive + irreversible, so this requires typing "DELETE" rather than
+  // a single dismissable confirm() dialog — the backend independently
+  // requires the same confirmation, so this isn't just a UI nicety.
   const handleCleanup = async () => {
-    if (!window.confirm('This will permanently delete all content published more than 2 years ago and its analytics data. Continue?')) return;
+    if (cleanupConfirmText !== 'DELETE') return;
     setCleaning(true);
     setCleanResult(null);
     try {
       const result = await api.cleanupData(2);
       setCleanResult(result);
+      setCleanupConfirmText('');
+      loadAuditLog();
     } catch (err) {
       alert('Cleanup error: ' + err.message);
     } finally {
@@ -91,6 +104,7 @@ export default function Settings() {
   };
 
   const handleTriggerSync = async (type) => {
+    if (!window.confirm(`Trigger a "${type}" sync now? This runs in the background and may take a while.`)) return;
     setTriggering(true);
     try {
       await api.triggerSync(type);
@@ -98,6 +112,7 @@ export default function Settings() {
         const status = await api.getSyncStatus().catch(() => syncStatus);
         setSyncStatus(status);
         setTriggering(false);
+        loadAuditLog();
       }, 2000);
     } catch (err) {
       alert('Trigger error: ' + err.message);
@@ -277,22 +292,41 @@ export default function Settings() {
           Also prunes excess snapshots, keeping the most recent 30 per content item.
           Future content syncs will only fetch the last 2 years automatically.
         </p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          background: '#c0392b0c', border: '1px solid #c0392b30', borderRadius: 6, padding: '10px 12px',
+        }}>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            This permanently deletes data. Type <strong style={{ color: '#c0392b', fontFamily: 'var(--font-mono)' }}>DELETE</strong> to enable:
+          </span>
+          <input
+            type="text"
+            value={cleanupConfirmText}
+            onChange={e => setCleanupConfirmText(e.target.value)}
+            placeholder="DELETE"
+            style={{
+              width: 100, padding: '5px 8px', fontSize: 12, fontFamily: 'var(--font-mono)',
+              border: '1px solid var(--border)', borderRadius: 4,
+              background: 'var(--bg-surface)', color: 'var(--text-primary)',
+            }}
+          />
           <button
             onClick={handleCleanup}
-            disabled={cleaning}
+            disabled={cleaning || cleanupConfirmText !== 'DELETE'}
             style={{
               padding: '8px 18px', borderRadius: 4, fontSize: 13, fontWeight: 500,
-              background: cleaning ? 'var(--bg-elevated)' : '#c0392b18',
+              background: cleaning || cleanupConfirmText !== 'DELETE' ? 'var(--bg-elevated)' : '#c0392b18',
               border: '1px solid #c0392b50',
-              color: cleaning ? 'var(--text-muted)' : '#c0392b',
-              opacity: cleaning ? 0.6 : 1,
-              cursor: cleaning ? 'not-allowed' : 'pointer',
+              color: cleaning || cleanupConfirmText !== 'DELETE' ? 'var(--text-muted)' : '#c0392b',
+              opacity: cleaning || cleanupConfirmText !== 'DELETE' ? 0.6 : 1,
+              cursor: cleaning || cleanupConfirmText !== 'DELETE' ? 'not-allowed' : 'pointer',
             }}
           >
             {cleaning ? 'Cleaning up…' : 'Delete old content (>2 years)'}
           </button>
+        </div>
 
+        <div style={{ marginTop: 12 }}>
           {cleanResult && (
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
               <span style={{ color: '#c0392b', fontWeight: 600 }}>Deleted </span>
@@ -309,6 +343,53 @@ export default function Settings() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Audit Log */}
+      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, gridColumn: '1 / -1' }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
+          Audit Log
+        </h3>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+          Every admin action taken on this page — who, what, and when. Most recent 100 entries.
+        </p>
+        {auditLog.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No admin actions recorded yet.</div>
+        ) : (
+          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  {['Time', 'Actor', 'Action', 'Details'].map(h => (
+                    <th key={h} style={{
+                      position: 'sticky', top: 0, background: 'var(--bg-surface)',
+                      padding: '6px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600,
+                      color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {auditLog.map(entry => (
+                  <tr key={entry.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                    <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      {entry.ts?.slice(0, 19).replace('T', ' ')}
+                    </td>
+                    <td style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                      {entry.actor}
+                    </td>
+                    <td style={{ padding: '6px 10px', fontSize: 12, color: 'var(--accent-gold)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                      {entry.action}
+                    </td>
+                    <td style={{ padding: '6px 10px', fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                      {entry.details ? JSON.stringify(entry.details) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

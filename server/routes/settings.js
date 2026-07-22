@@ -1,8 +1,12 @@
 import { Router } from 'express';
-import { getSettings, updateSettings, getDb } from '../db.js';
+import { getSettings, updateSettings, getDb, logAudit, getAuditLog } from '../db.js';
 import { scoreContent, pruneSnapshots } from '../sync/scheduler.js';
 
 const router = Router();
+
+// req.auth is set by express-basic-auth after a successful admin challenge —
+// this route tree is always mounted behind adminAuth (see server/index.js).
+const actorOf = (req) => req.auth?.user || 'unknown';
 
 // GET /api/settings
 router.get('/', (req, res) => {
@@ -34,6 +38,7 @@ router.put('/', (req, res) => {
   }
 
   updateSettings(updates);
+  logAudit(actorOf(req), 'update_settings', updates);
   res.json({ success: true, settings: getSettings() });
 });
 
@@ -42,6 +47,7 @@ router.post('/recalculate', (req, res) => {
   const db = getDb();
   const settings = getSettings();
 
+  logAudit(actorOf(req), 'recalculate_scores', {});
   res.json({ message: 'Recalculating True Value scores in background' });
 
   // Recompute 1-100 scores from stored signal values using current weights.
@@ -101,13 +107,23 @@ router.post('/exclusions', (req, res) => {
   }
 
   console.log(`[Settings] Exclusions updated: ${matched.length} matched, ${unmatched.length} not found`);
+  logAudit(actorOf(req), 'update_exclusions', { matched: matched.length, unmatched: unmatched.length });
   res.json({ matched, unmatched });
 });
 
 // POST /api/settings/cleanup
 // Deletes content older than `years` years (default 2) and all their snapshots,
 // then prunes excess snapshots (keeps last 30 per content item).
+//
+// Irreversibly deletes data, so — beyond the frontend's type-to-confirm UI —
+// this also requires an explicit { confirm: "DELETE" } in the request body.
+// That's enforced here, not just in the UI, so a direct API call (a stray
+// script, a replay, anything bypassing the modal) can't trigger it by accident.
 router.post('/cleanup', (req, res) => {
+  if (req.body?.confirm !== 'DELETE') {
+    return res.status(400).json({ error: 'Confirmation required — pass { confirm: "DELETE" } to proceed with this destructive operation.' });
+  }
+
   const db = getDb();
   const years = Math.max(1, parseInt(req.body?.years || 2, 10));
 
@@ -135,6 +151,11 @@ router.post('/cleanup', (req, res) => {
     const remainingSnapshots = db.prepare('SELECT COUNT(*) as n FROM analytics_snapshots').get().n;
 
     console.log(`[Settings] Cleanup: deleted ${contentResult.changes} content rows and ${snapshotResult.changes} snapshots older than ${cutoffIso}`);
+    logAudit(actorOf(req), 'cleanup_data', {
+      years, cutoff: cutoffIso,
+      contentDeleted: contentResult.changes,
+      snapshotsDeleted: snapshotResult.changes,
+    });
 
     res.json({
       cutoff: cutoffIso,
@@ -147,6 +168,11 @@ router.post('/cleanup', (req, res) => {
     console.error('[Settings] Cleanup error:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// GET /api/settings/audit-log — recent admin actions (who, what, when)
+router.get('/audit-log', (req, res) => {
+  res.json(getAuditLog(100));
 });
 
 export default router;
