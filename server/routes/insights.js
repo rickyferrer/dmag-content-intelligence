@@ -67,6 +67,24 @@ const SCHEMA_PROMPT = `You are an analyst answering questions about D Magazine's
 
 **gsc_queries** — real Google Search Console query data per article (rolling 90-day window): wp_id, snapshot_at, query, clicks, impressions, ctr, position. Same latest-snapshot pattern.
 
+**site_daily_metrics** — site-wide GA4 traffic by calendar date (one row per date, ~400 days of history), independent of any specific article: date, users, loyal_users, pageviews, sessions, subscribe_clicks, ad_revenue, newsletter_signups, avg_engagement_time.
+  - Use this table (not analytics_snapshots) for any question about site-wide traffic in a
+    specific date range — e.g. "how many users last week," "pageviews in March," "was last
+    weekend's traffic normal." analytics_snapshots only has each article's *current* rolling
+    trailing-30-day GA4 numbers (refreshed daily, not a specific calendar window), so it can't
+    answer a "traffic during date range X" question at all — filtering it by published_at
+    answers a different question ("how did articles published in X perform"), not "how much
+    traffic did the site get during X."
+  - IMPORTANT: 'users' and 'loyal_users' are distinct-count metrics, not additive event counts
+    like pageviews/subscribe_clicks/ad_revenue. Summing them across multiple days over-counts
+    every repeat visitor once per day they showed up (confirmed: a naive SUM of daily users
+    over 30 days once read 645,193 vs. a true 30-day-unique count of 605,897 — and 54,009 vs.
+    22,256 for loyal_users specifically, a 2.4x inflation, since "loyal" is by definition a
+    repeat-visit audience). If asked for total/unique users over a range, either report each
+    day's value individually, use AVG for a rough daily-typical figure, or say plainly that
+    this table can't give an exact period-unique count for users — do not SUM the users or
+    loyal_users columns across more than one row and present it as a total.
+
 ## Rules
 - Only SELECT queries. Use LIMIT for exploratory queries.
 - Prefer concrete numbers and article titles over vague summaries.
