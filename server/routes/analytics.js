@@ -466,17 +466,55 @@ router.get('/by-issue', (req, res) => {
 
 // GET /api/analytics/source-performance
 // GA4 channel-level conversion rates — direct measurement, no attribution.
+//
+// Raw rate (clicks * 1000 / users) is unstable at low volume: a channel with
+// 1 click from 9 users reports a 111/1k rate that looks like a top performer
+// but is really just noise. `opportunity_per_1k` is the lower bound of a 95%
+// Wilson score interval on the click rate — it shrinks toward 0 as sample
+// size shrinks, so small-sample channels stop dominating rankings without
+// hiding them outright. `low_confidence` flags channels below a minimum
+// sample size so the UI can badge/warn on them regardless of which column
+// is sorted.
+const MIN_USERS_FOR_CONFIDENCE = 50;
+const WILSON_Z = 1.96; // 95% CI
+
+function wilsonInterval(successes, n) {
+  if (n <= 0) return { lower: 0, upper: 0 };
+  const p = successes / n;
+  const z2 = WILSON_Z * WILSON_Z;
+  const denom = 1 + z2 / n;
+  const center = p + z2 / (2 * n);
+  const margin = WILSON_Z * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n));
+  return {
+    lower: Math.max(0, (center - margin) / denom),
+    upper: Math.min(1, (center + margin) / denom),
+  };
+}
+
 router.get('/source-performance', (req, res) => {
   const db = getDb();
   const rows = db.prepare(`
-    SELECT channel, users, sessions, subscribe_clicks, avg_engagement_time, ad_revenue,
-      CASE WHEN users > 0 THEN ROUND(subscribe_clicks * 1000.0 / users, 2) ELSE 0 END AS sub_per_1k,
-      CASE WHEN users > 0 THEN ROUND(ad_revenue * 1000.0 / users, 2) ELSE 0 END AS rev_per_1k
+    SELECT channel, users, sessions, subscribe_clicks, avg_engagement_time, ad_revenue
     FROM source_performance
     WHERE snapshot_at = (SELECT MAX(snapshot_at) FROM source_performance)
-    ORDER BY users DESC
   `).all();
-  res.json(rows);
+
+  const result = rows.map(r => {
+    const users = r.users || 0;
+    const clicks = r.subscribe_clicks || 0;
+    const ci = wilsonInterval(clicks, users);
+    return {
+      ...r,
+      sub_per_1k: users > 0 ? Math.round((clicks * 1000 / users) * 100) / 100 : 0,
+      rev_per_1k: users > 0 ? Math.round((r.ad_revenue * 1000 / users) * 100) / 100 : 0,
+      opportunity_per_1k: Math.round(ci.lower * 1000 * 100) / 100,
+      sub_ci_upper_per_1k: Math.round(ci.upper * 1000 * 100) / 100,
+      low_confidence: users < MIN_USERS_FOR_CONFIDENCE,
+    };
+  });
+
+  result.sort((a, b) => b.opportunity_per_1k - a.opportunity_per_1k);
+  res.json(result);
 });
 
 // GET /api/analytics/by-traffic-source

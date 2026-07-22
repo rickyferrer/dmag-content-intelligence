@@ -80,14 +80,22 @@ const PERF_COLS = [
   { label: 'Users',          key: 'users',               align: 'right' },
   { label: 'Sub Clicks',     key: 'subscribe_clicks',    align: 'right' },
   { label: 'Subs / 1k',     key: 'sub_per_1k',          align: 'right' },
+  { label: 'Opportunity',    key: 'opportunity_per_1k',  align: 'right' },
   { label: 'Avg Engagement', key: 'avg_engagement_time', align: 'right' },
   { label: 'Ad Rev / 1k',   key: 'rev_per_1k',          align: 'right' },
 ];
 
+const MIN_USERS_FOR_CONFIDENCE = 50;
+
 export default function Sources() {
   const [data, setData] = useState([]);
   const [perf, setPerf] = useState([]);
-  const [perfSort, setPerfSort] = useState({ key: 'users', dir: 'desc' });
+  // Default sort is the volume-weighted opportunity score (a 95% Wilson
+  // lower bound on the click rate), not the raw per-1k rate — a channel
+  // with 1 click from 9 users shouldn't outrank one with 700 clicks from
+  // 250K users just because its noisy rate is higher.
+  const [perfSort, setPerfSort] = useState({ key: 'opportunity_per_1k', dir: 'desc' });
+  const [minUsers, setMinUsers] = useState(0);
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
   const [filters, setFilters] = useState({ from: initFrom, to: initTo, type: '', preset: DEFAULT_PRESET });
@@ -218,72 +226,130 @@ export default function Sources() {
       {/* Channel Performance — GA4 direct measurement */}
       {perf.length > 0 && (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
             <div>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--text-primary)', margin: 0 }}>Channel Performance</h3>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                Direct GA4 measurement — actual conversions per channel, last 30 days
+                Direct GA4 measurement — actual conversions per channel, last 30 days. Sorted by{' '}
+                <strong>Opportunity</strong> by default — a volume-weighted estimate that doesn't let a single
+                lucky conversion outrank real traffic.
               </p>
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+              Min users:
+              <input
+                type="number"
+                min={0}
+                value={minUsers}
+                onChange={e => setMinUsers(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                style={{
+                  width: 60, padding: '4px 6px', fontSize: 12, fontFamily: 'var(--font-mono)',
+                  border: '1px solid var(--border)', borderRadius: 4,
+                  background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                }}
+              />
+            </label>
           </div>
           {(() => {
-            const sortedPerf = [...perf].sort((a, b) => {
+            const visiblePerf = perf.filter(r => (r.users || 0) >= minUsers);
+            const hiddenCount = perf.length - visiblePerf.length;
+            const sortedPerf = [...visiblePerf].sort((a, b) => {
               const av = a[perfSort.key] ?? 0;
               const bv = b[perfSort.key] ?? 0;
               if (typeof av === 'string') return perfSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
               return perfSort.dir === 'asc' ? av - bv : bv - av;
             });
-            const maxSub = Math.max(...perf.map(r => r.sub_per_1k || 0), 0.01);
+            const maxSub = Math.max(...visiblePerf.map(r => r.sub_per_1k || 0), 0.01);
+            const maxOpportunity = Math.max(...visiblePerf.map(r => r.opportunity_per_1k || 0), 0.01);
             const handleSort = (key) => setPerfSort(s =>
               s.key === key ? { key, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' }
             );
+            const confidenceTitle = (row) =>
+              `${row.low_confidence ? 'Low confidence — ' : ''}based on ${fmt(row.users)} users, ${fmt(row.subscribe_clicks)} subscribe clicks. ` +
+              `95% CI for subscribe rate: ${row.opportunity_per_1k.toFixed(2)} – ${row.sub_ci_upper_per_1k.toFixed(2)} per 1k.`;
             return (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
-                    {PERF_COLS.map(col => (
-                      <th key={col.key} onClick={() => handleSort(col.key)} style={{
-                        padding: '9px 14px', textAlign: col.align, fontSize: 11, fontWeight: 600,
-                        textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
-                        cursor: 'pointer', userSelect: 'none',
-                        color: perfSort.key === col.key ? 'var(--accent-gold)' : 'var(--text-muted)',
-                      }}>
-                        {col.label}
-                        <span style={{ marginLeft: 4, opacity: perfSort.key === col.key ? 1 : 0.25 }}>
-                          {perfSort.key === col.key ? (perfSort.dir === 'desc' ? '↓' : '↑') : '↕'}
-                        </span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedPerf.map(row => (
-                    <tr key={row.channel} style={{ borderBottom: '1px solid var(--border-subtle)' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                      onMouseLeave={e => e.currentTarget.style.background = ''}>
-                      <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{row.channel}</td>
-                      <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>{fmt(row.users)}</td>
-                      <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>{fmt(row.subscribe_clicks)}</td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-                          <div style={{ width: 60, height: 4, background: 'var(--bg-elevated)', borderRadius: 2 }}>
-                            <div style={{ height: '100%', borderRadius: 2, background: 'var(--accent-gold)', width: `${((row.sub_per_1k || 0) / maxSub) * 100}%` }} />
-                          </div>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: (row.sub_per_1k || 0) > 0 ? 'var(--accent-gold)' : 'var(--text-muted)', minWidth: 36 }}>
-                            {(row.sub_per_1k || 0).toFixed(2)}
+              <>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
+                      {PERF_COLS.map(col => (
+                        <th key={col.key} onClick={() => handleSort(col.key)} style={{
+                          padding: '9px 14px', textAlign: col.align, fontSize: 11, fontWeight: 600,
+                          textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
+                          cursor: 'pointer', userSelect: 'none',
+                          color: perfSort.key === col.key ? 'var(--accent-gold)' : 'var(--text-muted)',
+                        }}
+                          title={col.key === 'opportunity_per_1k' ? '95% confidence lower bound on the subscribe rate — penalizes small samples' : `Sort by ${col.label}`}
+                        >
+                          {col.label}
+                          <span style={{ marginLeft: 4, opacity: perfSort.key === col.key ? 1 : 0.25 }}>
+                            {perfSort.key === col.key ? (perfSort.dir === 'desc' ? '↓' : '↑') : '↕'}
                           </span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>{fmtSec(row.avg_engagement_time)}</td>
-                      <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>${(row.rev_per_1k || 0).toFixed(2)}</td>
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {sortedPerf.map(row => (
+                      <tr key={row.channel} style={{ borderBottom: '1px solid var(--border-subtle)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                        onMouseLeave={e => e.currentTarget.style.background = ''}>
+                        <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
+                          {row.channel}
+                          {row.low_confidence && (
+                            <span
+                              title={confidenceTitle(row)}
+                              style={{
+                                marginLeft: 6, fontSize: 10, fontWeight: 600, color: '#c0392b',
+                                background: '#c0392b18', border: '1px solid #c0392b40',
+                                borderRadius: 3, padding: '1px 5px', cursor: 'help',
+                              }}
+                            >
+                              low n
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>{fmt(row.users)}</td>
+                        <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>{fmt(row.subscribe_clicks)}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right' }} title={confidenceTitle(row)}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                            <div style={{ width: 60, height: 4, background: 'var(--bg-elevated)', borderRadius: 2 }}>
+                              <div style={{ height: '100%', borderRadius: 2, background: 'var(--accent-gold)', width: `${((row.sub_per_1k || 0) / maxSub) * 100}%` }} />
+                            </div>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: (row.sub_per_1k || 0) > 0 ? 'var(--accent-gold)' : 'var(--text-muted)', minWidth: 36 }}>
+                              {(row.sub_per_1k || 0).toFixed(2)}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right' }} title={confidenceTitle(row)}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                            <div style={{ width: 60, height: 4, background: 'var(--bg-elevated)', borderRadius: 2 }}>
+                              <div style={{ height: '100%', borderRadius: 2, background: '#2474bb', width: `${((row.opportunity_per_1k || 0) / maxOpportunity) * 100}%` }} />
+                            </div>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: (row.opportunity_per_1k || 0) > 0 ? '#2474bb' : 'var(--text-muted)', minWidth: 36 }}>
+                              {(row.opportunity_per_1k || 0).toFixed(2)}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>{fmtSec(row.avg_engagement_time)}</td>
+                        <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }} title={row.low_confidence ? `Low confidence — based on ${fmt(row.users)} users. Revenue per 1k is unstable at this sample size.` : undefined}>
+                          ${(row.rev_per_1k || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {hiddenCount > 0 && (
+                  <div style={{ padding: '8px 16px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)' }}>
+                    {hiddenCount} channel{hiddenCount === 1 ? '' : 's'} hidden below {minUsers} users.
+                  </div>
+                )}
+              </>
             );
           })()}
           <div style={{ padding: '10px 16px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', fontStyle: 'italic' }}>
             Note: GA4 groups Google Discover and Google News into "Organic Search". "Direct" includes dark social. Use the volume breakdown below for finer distinctions.
+            Channels marked <strong>low n</strong> have fewer than {MIN_USERS_FOR_CONFIDENCE} users — their raw rates (Subs/1k, Ad Rev/1k) are unreliable; hover a value for its confidence interval.
           </div>
         </div>
       )}
