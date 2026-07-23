@@ -64,6 +64,12 @@ function messagesToHistory(messages) {
   return out;
 }
 
+// The view unmounts entirely when you switch to another tab and back (each
+// tab is conditionally rendered, not just hidden), which would otherwise
+// drop the in-progress conversation from memory even though it's already
+// saved server-side — this is how we reopen it automatically on remount.
+const ACTIVE_CONVERSATION_KEY = 'insights_active_conversation_id';
+
 function fmtDate(iso) {
   if (!iso) return '';
   const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
@@ -84,7 +90,12 @@ export default function Insights() {
 
   const loadConversations = () => api.getInsightConversations().then(setConversations).catch(console.error);
 
-  useEffect(() => { loadConversations(); }, []);
+  useEffect(() => {
+    loadConversations();
+    const savedId = localStorage.getItem(ACTIVE_CONVERSATION_KEY);
+    if (savedId) openConversation(Number(savedId), { onMissing: () => localStorage.removeItem(ACTIVE_CONVERSATION_KEY) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -94,17 +105,20 @@ export default function Insights() {
     setConversationId(null);
     setHistory([]);
     setQuestion('');
+    localStorage.removeItem(ACTIVE_CONVERSATION_KEY);
   };
 
-  const openConversation = async (id) => {
+  const openConversation = async (id, { onMissing } = {}) => {
     if (id === conversationId) return;
     setLoadingConversation(true);
     try {
       const conv = await api.getInsightConversation(id);
       setConversationId(conv.id);
       setHistory(messagesToHistory(conv.messages));
+      localStorage.setItem(ACTIVE_CONVERSATION_KEY, String(conv.id));
     } catch (err) {
       console.error(err);
+      onMissing?.(); // e.g. the conversation was deleted from another tab
     } finally {
       setLoadingConversation(false);
     }
@@ -134,6 +148,7 @@ export default function Insights() {
       const res = await api.askInsight(text, conversationId);
       setHistory(h => h.map(e => e === entry ? { ...e, answer: res.answer, queries_run: res.queries_run || [], loading: false } : e));
       if (res.conversation_id !== conversationId) setConversationId(res.conversation_id);
+      localStorage.setItem(ACTIVE_CONVERSATION_KEY, String(res.conversation_id));
       loadConversations();
     } catch (err) {
       setHistory(h => h.map(e => e === entry ? { ...e, error: err.message, loading: false } : e));
