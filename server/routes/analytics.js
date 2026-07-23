@@ -491,6 +491,22 @@ function wilsonInterval(successes, n) {
   };
 }
 
+// Shapes a raw {users, subscribe_clicks, ad_revenue} row into the derived
+// rate/confidence fields shared by /source-performance and /channels.
+function shapeGA4Row(r) {
+  const users = r.users || 0;
+  const clicks = r.subscribe_clicks || 0;
+  const ci = wilsonInterval(clicks, users);
+  return {
+    ...r,
+    sub_per_1k: users > 0 ? Math.round((clicks * 1000 / users) * 100) / 100 : 0,
+    rev_per_1k: users > 0 ? Math.round(((r.ad_revenue || 0) * 1000 / users) * 100) / 100 : 0,
+    opportunity_per_1k: Math.round(ci.lower * 1000 * 100) / 100,
+    sub_ci_upper_per_1k: Math.round(ci.upper * 1000 * 100) / 100,
+    low_confidence: users < MIN_USERS_FOR_CONFIDENCE,
+  };
+}
+
 router.get('/source-performance', (req, res) => {
   const db = getDb();
   const rows = db.prepare(`
@@ -499,37 +515,22 @@ router.get('/source-performance', (req, res) => {
     WHERE snapshot_at = (SELECT MAX(snapshot_at) FROM source_performance)
   `).all();
 
-  const result = rows.map(r => {
-    const users = r.users || 0;
-    const clicks = r.subscribe_clicks || 0;
-    const ci = wilsonInterval(clicks, users);
-    return {
-      ...r,
-      sub_per_1k: users > 0 ? Math.round((clicks * 1000 / users) * 100) / 100 : 0,
-      rev_per_1k: users > 0 ? Math.round((r.ad_revenue * 1000 / users) * 100) / 100 : 0,
-      opportunity_per_1k: Math.round(ci.lower * 1000 * 100) / 100,
-      sub_ci_upper_per_1k: Math.round(ci.upper * 1000 * 100) / 100,
-      low_confidence: users < MIN_USERS_FOR_CONFIDENCE,
-    };
-  });
-
+  const result = rows.map(shapeGA4Row);
   result.sort((a, b) => b.opportunity_per_1k - a.opportunity_per_1k);
   res.json(result);
 });
 
-// GET /api/analytics/by-traffic-source
-// Returns per-source totals across all content, joined to content metadata for date filtering.
-router.get('/by-traffic-source', (req, res) => {
-  const db = getDb();
-  const { dateFrom, dateTo, type } = req.query;
-
+// Shared by /by-traffic-source and /channels: per-Marfeel-source volume
+// totals (pageviews, users, loyal/in-market, newsletter signups), scoped to
+// articles published in [dateFrom, dateTo] and optionally filtered by type.
+function fetchSourceRows(db, { dateFrom, dateTo, type }) {
   const where = ["cs.snapshot_at = lx.latest"];
   const params = [];
   if (dateFrom) { where.push('c.published_at >= ?'); params.push(dateFrom); }
   if (dateTo)   { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
   if (type)     { where.push('c.content_type = ?'); params.push(type); }
 
-  const rows = db.prepare(`
+  return db.prepare(`
     SELECT
       cs.source,
       SUM(cs.pageviews)               AS total_pageviews,
@@ -551,8 +552,209 @@ router.get('/by-traffic-source', (req, res) => {
     GROUP BY cs.source
     ORDER BY total_pageviews DESC
   `).all(...params);
+}
 
-  res.json(rows);
+// GET /api/analytics/by-traffic-source
+// Returns per-source totals across all content, joined to content metadata for date filtering.
+router.get('/by-traffic-source', (req, res) => {
+  const db = getDb();
+  const { dateFrom, dateTo, type } = req.query;
+  res.json(fetchSourceRows(db, { dateFrom, dateTo, type }));
+});
+
+// Custom channel taxonomy — buckets raw Marfeel `source` values (article-level,
+// date-scoped via published_at) into the groups shown in the Sources tab.
+const CUSTOM_CHANNELS = {
+  search: {
+    label: 'Search Engines',
+    color: '#2474bb',
+    sources: new Set(['Google', 'Bing', 'DuckDuckGo', 'Yahoo!', 'Ecosia', 'Google News',
+                      'Yandex', 'Brave', 'Baidu']),
+  },
+  discover: {
+    label: 'Google Discover',
+    color: '#e67e22',
+    sources: new Set(['Google Discover']),
+  },
+  dark_social: {
+    label: 'Dark Social',
+    color: '#8e44ad',
+    sources: new Set(['dark social']),
+  },
+  direct: {
+    label: 'Direct / Bookmark',
+    color: '#27ae60',
+    sources: new Set(['direct', 'bookmark']),
+  },
+  social: {
+    label: 'Social Media',
+    color: '#e74c3c',
+    sources: new Set(['Facebook', 'Reddit', 'Twitter', 'Instagram', 'LinkedIn',
+                      'Bluesky', 'Threads', 'Pinterest', 'Nextdoor', 'nextdoor.com',
+                      'later-linkinbio', 'linkin.bio', 'ig', 'com.reddit.frontpage',
+                      'old.reddit.com', 'linktr.ee']),
+  },
+  email: {
+    label: 'Email',
+    color: '#f39c12',
+    sources: new Set(['hs_email', 'newsletter', 'omnisend', 'Gmail', 'WEBCTA',
+                      'pushengage', 'hub.marfeel.com']),
+  },
+  ai: {
+    label: 'AI Referral',
+    color: '#1abc9c',
+    sources: new Set(['ChatGPT', 'Claude', 'Perplexity', 'perplexity.ai']),
+  },
+  referral: {
+    label: 'Referral',
+    color: '#95a5a6',
+    sources: new Set(), // catch-all for everything else
+  },
+};
+
+function customChannelFor(source) {
+  for (const [key, ch] of Object.entries(CUSTOM_CHANNELS)) {
+    if (key === 'referral') continue;
+    if (ch.sources.has(source)) return key;
+  }
+  return 'referral';
+}
+
+// GA4's `sessionDefaultChannelGrouping` is a DIFFERENT taxonomy than the
+// Marfeel-source buckets above, built by a different vendor with different
+// detection logic, over a fixed trailing-30-day window (GA4's API doesn't
+// support the arbitrary date ranges this page filters by). We only attach
+// GA4 conversion metrics to a custom channel where the mapping is a
+// reasonable single-channel match — everywhere else we say so explicitly
+// instead of guessing a split. See notes below for the two known conflations.
+const GA4_TO_CUSTOM_CHANNEL = {
+  'Organic Search': 'search',
+  'Organic Social': 'social',
+  'Email': 'email',
+  'AI Assistant': 'ai',
+  'Referral': 'referral',
+};
+
+const GA4_UNAVAILABLE_NOTES = {
+  discover: 'GA4 groups Google Discover into "Organic Search" and can\'t isolate it — conversion metrics are included in the Search Engines row instead of shown here.',
+  direct: 'GA4\'s "Direct" channel can\'t distinguish true direct/bookmark traffic from dark social — conversion metrics aren\'t split between the two, so neither is shown here.',
+  dark_social: 'GA4\'s "Direct" channel can\'t distinguish dark social from true direct/bookmark traffic — conversion metrics aren\'t split between the two, so neither is shown here.',
+};
+
+// GET /api/analytics/channels
+// The unified Sources view: custom (Marfeel-source-derived, date-scoped)
+// volume metrics merged with GA4 (channel-level, trailing-30-day) conversion
+// metrics, joined through an explicit, honest mapping between the two
+// taxonomies rather than a blended/approximated single metric set.
+router.get('/channels', (req, res) => {
+  const db = getDb();
+  const { dateFrom, dateTo, type } = req.query;
+
+  const sourceRows = fetchSourceRows(db, { dateFrom, dateTo, type });
+
+  const buckets = {};
+  for (const key of Object.keys(CUSTOM_CHANNELS)) {
+    buckets[key] = {
+      key,
+      label: CUSTOM_CHANNELS[key].label,
+      color: CUSTOM_CHANNELS[key].color,
+      pageviews: 0, users: 0, loyal_users: 0, inmarket_pv: 0, newsletter_signups: 0,
+      article_count: 0,
+      sources: [],
+    };
+  }
+
+  for (const row of sourceRows) {
+    const key = customChannelFor(row.source);
+    const b = buckets[key];
+    b.pageviews          += row.total_pageviews || 0;
+    b.users              += row.total_users || 0;
+    b.loyal_users        += row.total_loyal_users || 0;
+    b.inmarket_pv        += row.total_inmarket || 0;
+    b.newsletter_signups += row.total_newsletter_signups || 0;
+    b.article_count      += row.article_count || 0;
+    b.sources.push({
+      source: row.source,
+      pageviews: row.total_pageviews || 0,
+      article_count: row.article_count || 0,
+      users: row.total_users || 0,
+      loyal_users: row.total_loyal_users || 0,
+      inmarket_pv: row.total_inmarket || 0,
+      newsletter_signups: row.total_newsletter_signups || 0,
+    });
+  }
+
+  const channels = Object.values(buckets)
+    .filter(b => b.pageviews > 0)
+    .map(b => ({
+      ...b,
+      loyal_pct:    b.users > 0 ? (b.loyal_users / b.users) * 100 : 0,
+      inmarket_pct: b.users > 0 ? (b.inmarket_pv / b.users) * 100 : 0,
+      news_per_1k:  b.users > 0 ? (b.newsletter_signups / b.users) * 1000 : 0,
+      sources: b.sources.sort((a, b2) => b2.pageviews - a.pageviews),
+    }));
+
+  const maxLoyal = Math.max(...channels.map(c => c.loyal_pct), 0.01);
+  const maxInmkt = Math.max(...channels.map(c => c.inmarket_pct), 0.01);
+  const maxNews  = Math.max(...channels.map(c => c.news_per_1k), 0.01);
+  for (const c of channels) {
+    c.score = Math.round(
+      (c.loyal_pct    / maxLoyal) * 35 +
+      (c.inmarket_pct / maxInmkt) * 30 +
+      (c.news_per_1k  / maxNews)  * 35
+    );
+  }
+
+  // ── Merge in GA4 conversion metrics via the explicit mapping ──────────────
+  const ga4Snapshot = db.prepare(`
+    SELECT MAX(snapshot_at) AS snapshot_at FROM source_performance
+  `).get();
+  const ga4Rows = db.prepare(`
+    SELECT channel, users, sessions, subscribe_clicks, avg_engagement_time, ad_revenue
+    FROM source_performance
+    WHERE snapshot_at = (SELECT MAX(snapshot_at) FROM source_performance)
+  `).all();
+
+  const unmapped = { channels: [], users: 0, sessions: 0, subscribe_clicks: 0, ad_revenue: 0 };
+  const byCustomKey = {};
+  for (const row of ga4Rows) {
+    const customKey = GA4_TO_CUSTOM_CHANNEL[row.channel];
+    if (!customKey) {
+      unmapped.channels.push(row.channel);
+      unmapped.users            += row.users || 0;
+      unmapped.sessions         += row.sessions || 0;
+      unmapped.subscribe_clicks += row.subscribe_clicks || 0;
+      unmapped.ad_revenue       += row.ad_revenue || 0;
+      continue;
+    }
+    // Each custom key maps from at most one GA4 channel today, but sum
+    // defensively in case GA4 ever splits a channel we treat as 1:1.
+    if (!byCustomKey[customKey]) byCustomKey[customKey] = { users: 0, sessions: 0, subscribe_clicks: 0, ad_revenue: 0 };
+    byCustomKey[customKey].users            += row.users || 0;
+    byCustomKey[customKey].sessions         += row.sessions || 0;
+    byCustomKey[customKey].subscribe_clicks += row.subscribe_clicks || 0;
+    byCustomKey[customKey].ad_revenue       += row.ad_revenue || 0;
+  }
+
+  for (const c of channels) {
+    const raw = byCustomKey[c.key];
+    if (raw) {
+      c.ga4 = { status: 'approximate', note: 'GA4 and Marfeel classify traffic differently and GA4 always reflects a trailing 30 days, regardless of the date filter above — treat as directional.', ...shapeGA4Row(raw) };
+    } else {
+      c.ga4 = { status: 'unavailable', note: GA4_UNAVAILABLE_NOTES[c.key] || 'GA4 has no channel that reliably maps to this group.' };
+    }
+  }
+
+  channels.sort((a, b) => b.pageviews - a.pageviews);
+
+  res.json({
+    dateFrom: dateFrom || null,
+    dateTo: dateTo || null,
+    type: type || null,
+    ga4_snapshot_at: ga4Snapshot?.snapshot_at || null,
+    channels,
+    unmapped_ga4: unmapped,
+  });
 });
 
 // ── AI vulnerability heuristics ─────────────────────────────────────────────

@@ -1,70 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import {
+  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Cell, ZAxis,
+} from 'recharts';
 import { api } from '../api/index.js';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
-
-function fmtSec(s) {
-  if (!s) return '—';
-  const m = Math.floor(s / 60);
-  const sec = Math.round(s % 60);
-  return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
-}
-
-// Channel groupings — maps Marfeel source names to a channel bucket
-const CHANNELS = {
-  search: {
-    label: 'Organic Search',
-    color: '#2474bb',
-    sources: new Set(['Google', 'Bing', 'DuckDuckGo', 'Yahoo!', 'Ecosia', 'Google News',
-                      'Yandex', 'Brave', 'Baidu']),
-  },
-  discover: {
-    label: 'Google Discover',
-    color: '#e67e22',
-    sources: new Set(['Google Discover']),
-  },
-  dark_social: {
-    label: 'Dark Social',
-    color: '#8e44ad',
-    sources: new Set(['dark social']),
-  },
-  direct: {
-    label: 'Direct / Bookmark',
-    color: '#27ae60',
-    sources: new Set(['direct', 'bookmark']),
-  },
-  social: {
-    label: 'Social Media',
-    color: '#e74c3c',
-    sources: new Set(['Facebook', 'Reddit', 'Twitter', 'Instagram', 'LinkedIn',
-                      'Bluesky', 'Threads', 'Pinterest', 'Nextdoor', 'nextdoor.com',
-                      'later-linkinbio', 'linkin.bio', 'ig', 'com.reddit.frontpage',
-                      'old.reddit.com', 'linktr.ee']),
-  },
-  email: {
-    label: 'Email',
-    color: '#f39c12',
-    sources: new Set(['hs_email', 'newsletter', 'omnisend', 'Gmail', 'WEBCTA',
-                      'pushengage', 'hub.marfeel.com']),
-  },
-  ai: {
-    label: 'AI Referral',
-    color: '#1abc9c',
-    sources: new Set(['ChatGPT', 'Claude', 'Perplexity', 'perplexity.ai']),
-  },
-  referral: {
-    label: 'Referral',
-    color: '#95a5a6',
-    sources: new Set(), // catch-all for everything else
-  },
-};
-
-function getChannel(source) {
-  for (const [key, ch] of Object.entries(CHANNELS)) {
-    if (key === 'referral') continue;
-    if (ch.sources.has(source)) return key;
-  }
-  return 'referral';
-}
 
 function fmt(n) {
   if (!n) return '—';
@@ -75,31 +15,137 @@ function fmt(n) {
 
 const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
 
-const PERF_COLS = [
-  { label: 'Channel',        key: 'channel',             align: 'left'  },
-  { label: 'Users',          key: 'users',               align: 'right' },
-  { label: 'Sub Clicks',     key: 'subscribe_clicks',    align: 'right' },
-  { label: 'Subs / 1k',     key: 'sub_per_1k',          align: 'right' },
-  { label: 'Opportunity',    key: 'opportunity_per_1k',  align: 'right' },
-  { label: 'Avg Engagement', key: 'avg_engagement_time', align: 'right' },
-  { label: 'Ad Rev / 1k',   key: 'rev_per_1k',          align: 'right' },
+// Volume: what happened (traffic, reach, output) — fully date-scoped from
+// Marfeel-sourced, article-level data. Efficiency: how well it converted —
+// sourced from GA4's channel-level rollup, which is always a trailing 30
+// days and uses a different taxonomy (see GA4_UNAVAILABLE_NOTES server-side),
+// so those columns get an "≈" and a tooltip rather than blending silently.
+const VOLUME_COLS = [
+  { key: 'pageviews',           label: 'Traffic',            align: 'right' },
+  { key: 'users',                label: 'Users',              align: 'right' },
+  { key: 'article_count',        label: 'Articles',           align: 'right' },
+  { key: 'ga4_subscribe_clicks', label: 'Subscribe Clicks',   align: 'right' },
+  { key: 'newsletter_signups',   label: 'Newsletter Signups', align: 'right' },
 ];
 
-const MIN_USERS_FOR_CONFIDENCE = 50;
+const EFFICIENCY_COLS = [
+  { key: 'ga4_sub_per_1k', label: 'Clicks / 1K',  align: 'right' },
+  { key: 'loyal_pct',      label: 'Loyal %',       align: 'right' },
+  { key: 'inmarket_pct',   label: 'In-Market %',   align: 'right' },
+  { key: 'ga4_rev_per_1k', label: 'Rev / 1K',      align: 'right' },
+  { key: 'score',          label: 'Score',         align: 'right' },
+];
+
+function getSortValue(row, key) {
+  switch (key) {
+    case 'channel':               return row.label;
+    case 'pageviews':              return row.pageviews;
+    case 'users':                  return row.users;
+    case 'article_count':          return row.article_count;
+    case 'newsletter_signups':     return row.newsletter_signups;
+    case 'loyal_pct':              return row.loyal_pct;
+    case 'inmarket_pct':           return row.inmarket_pct;
+    case 'score':                  return row.score;
+    case 'ga4_subscribe_clicks':   return row.ga4?.status !== 'unavailable' ? row.ga4.subscribe_clicks : null;
+    case 'ga4_sub_per_1k':         return row.ga4?.status !== 'unavailable' ? row.ga4.sub_per_1k : null;
+    case 'ga4_rev_per_1k':         return row.ga4?.status !== 'unavailable' ? row.ga4.rev_per_1k : null;
+    default:                       return 0;
+  }
+}
+
+// Renders a GA4-sourced cell: "—" with an explanatory tooltip when the
+// mapping is unavailable, "≈value" with a confidence/CI tooltip otherwise.
+// This is the one place that's allowed to show a GA4 number next to a
+// custom-taxonomy channel — everywhere else we just say we can't.
+function Ga4Cell({ row, metric, format }) {
+  const g = row.ga4;
+  if (!g || g.status === 'unavailable') {
+    return <span title={g?.note} style={{ color: 'var(--text-muted)', cursor: 'help' }}>—</span>;
+  }
+  const ciNote = metric === 'sub_per_1k'
+    ? ` 95% CI: ${g.opportunity_per_1k.toFixed(2)} – ${g.sub_ci_upper_per_1k.toFixed(2)} per 1k.`
+    : '';
+  const title = `${g.low_confidence ? 'Low confidence — ' : ''}based on ${fmt(g.users)} GA4 users, ${fmt(g.subscribe_clicks)} subscribe clicks.${ciNote} ${g.note}`;
+  return (
+    <span title={title} style={{ cursor: 'help', color: g.low_confidence ? '#c0392b' : 'var(--text-secondary)' }}>
+      ≈{format(g[metric])}
+      {g.low_confidence && <sup style={{ marginLeft: 2 }}>low n</sup>}
+    </span>
+  );
+}
+
+function ChannelScatter({ channels }) {
+  const points = channels.filter(c => c.ga4 && c.ga4.status !== 'unavailable');
+  if (points.length < 2) return (
+    <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+      Not enough channels with GA4 conversion data to plot.
+    </div>
+  );
+  const maxRevenue = Math.max(...points.map(c => c.ga4.ad_revenue || 0), 1);
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (!active || !payload?.length) return null;
+    const d = payload[0]?.payload;
+    if (!d) return null;
+    return (
+      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px', fontSize: 12, lineHeight: 1.8 }}>
+        <div style={{ color: d.color, fontWeight: 600, marginBottom: 4 }}>{d.label}</div>
+        <div style={{ color: 'var(--text-secondary)' }}>Traffic: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{fmt(d.pageviews)}</span></div>
+        <div style={{ color: 'var(--text-secondary)' }}>Opportunity: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{d.ga4.opportunity_per_1k.toFixed(2)}/1k</span></div>
+        <div style={{ color: 'var(--text-secondary)' }}>Ad Revenue: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>${Math.round(d.ga4.ad_revenue).toLocaleString()}</span></div>
+        {d.ga4.low_confidence && <div style={{ color: '#c0392b', marginTop: 4 }}>Low confidence — small GA4 sample</div>}
+      </div>
+    );
+  };
+
+  return (
+    <ResponsiveContainer width="100%" height={320}>
+      <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+        <XAxis
+          dataKey="pageviews"
+          name="Traffic"
+          type="number"
+          domain={[0, 'dataMax']}
+          tickFormatter={fmt}
+          label={{ value: 'Traffic (pageviews)', position: 'insideBottom', offset: -10, fill: 'var(--text-muted)', fontSize: 11 }}
+          tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+          stroke="var(--border)"
+        />
+        <YAxis
+          dataKey={(d) => d.ga4.opportunity_per_1k}
+          name="Conversion Efficiency"
+          label={{ value: 'Conversion Efficiency (Opportunity/1k)', angle: -90, position: 'insideLeft', fill: 'var(--text-muted)', fontSize: 11 }}
+          tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+          stroke="var(--border)"
+        />
+        <ZAxis dataKey={(d) => d.ga4.ad_revenue} domain={[0, maxRevenue]} range={[80, 700]} name="Ad Revenue" />
+        <Tooltip content={<CustomTooltip />} />
+        <Scatter data={points} isAnimationActive={false}>
+          {points.map((entry, i) => (
+            <Cell
+              key={i}
+              fill={entry.color}
+              fillOpacity={entry.ga4.low_confidence ? 0.35 : 0.85}
+              stroke={entry.ga4.low_confidence ? entry.color : 'none'}
+              strokeDasharray={entry.ga4.low_confidence ? '3 3' : undefined}
+            />
+          ))}
+        </Scatter>
+      </ScatterChart>
+    </ResponsiveContainer>
+  );
+}
 
 export default function Sources() {
-  const [data, setData] = useState([]);
-  const [perf, setPerf] = useState([]);
-  // Default sort is the volume-weighted opportunity score (a 95% Wilson
-  // lower bound on the click rate), not the raw per-1k rate — a channel
-  // with 1 click from 9 users shouldn't outrank one with 700 clicks from
-  // 250K users just because its noisy rate is higher.
-  const [perfSort, setPerfSort] = useState({ key: 'opportunity_per_1k', dir: 'desc' });
-  const [minUsers, setMinUsers] = useState(0);
+  const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
   const [filters, setFilters] = useState({ from: initFrom, to: initTo, type: '', preset: DEFAULT_PRESET });
+  const [viewMode, setViewMode] = useState('volume');
   const [expanded, setExpanded] = useState(null);
+  const [sort, setSort] = useState({ key: 'pageviews', dir: 'desc' });
+  const [showScatter, setShowScatter] = useState(true);
   const [lastAnalyticsSync, setLastAnalyticsSync] = useState(null);
 
   const load = ({ from, to, type }) => {
@@ -108,8 +154,8 @@ export default function Sources() {
     if (from) params.dateFrom = from;
     if (to)   params.dateTo = to;
     if (type) params.type = type;
-    api.getByTrafficSource(params)
-      .then(setData)
+    api.getChannels(params)
+      .then(setResult)
       .catch(console.error)
       .finally(() => setLoading(false));
   };
@@ -117,7 +163,6 @@ export default function Sources() {
   useEffect(() => {
     load({ from: initFrom, to: initTo, type: '' });
     api.getContentTypes().then(setTypes).catch(console.error);
-    api.getSourcePerformance().then(setPerf).catch(console.error);
     api.getSyncStatus()
       .then(status => setLastAnalyticsSync(status?.last_analytics_sync?.updated_at || null))
       .catch(console.error);
@@ -137,65 +182,54 @@ export default function Sources() {
     load(next);
   };
 
-  // Aggregate rows into channels
-  const channelTotals = {};
-  const channelSources = {};
-  const channelMeta = {};
-  let grandTotal = 0;
+  const channels = result?.channels || [];
+  const unmapped = result?.unmapped_ga4;
+  const grandTotal = channels.reduce((s, c) => s + (c.pageviews || 0), 0);
 
-  for (const row of data) {
-    const ch = getChannel(row.source);
-    if (!channelTotals[ch]) {
-      channelTotals[ch] = 0;
-      channelSources[ch] = [];
-      channelMeta[ch] = { users: 0, loyal_users: 0, inmarket: 0, newsletter: 0 };
-    }
-    channelTotals[ch] += row.total_pageviews || 0;
-    channelSources[ch].push(row);
-    channelMeta[ch].users            += row.total_users || 0;
-    channelMeta[ch].loyal_users      += row.total_loyal_users || 0;
-    channelMeta[ch].inmarket         += row.total_inmarket || 0;
-    channelMeta[ch].newsletter       += row.total_newsletter_signups || 0;
-    grandTotal += row.total_pageviews || 0;
-  }
-
-  // Compute derived rates per channel
-  const channelRates = {};
-  for (const [ch, m] of Object.entries(channelMeta)) {
-    const loyal_pct     = m.users > 0 ? (m.loyal_users / m.users) * 100 : 0;
-    const inmarket_pct  = m.users > 0 ? (m.inmarket    / m.users) * 100 : 0;
-    const news_per_1k   = m.users > 0 ? (m.newsletter  / m.users) * 1000 : 0;
-    channelRates[ch] = { loyal_pct, inmarket_pct, news_per_1k, ...m };
-  }
-
-  // Compute score 0-100 — normalize each metric relative to best channel
-  const maxLoyal  = Math.max(...Object.values(channelRates).map(r => r.loyal_pct), 0.01);
-  const maxInmkt  = Math.max(...Object.values(channelRates).map(r => r.inmarket_pct), 0.01);
-  const maxNews   = Math.max(...Object.values(channelRates).map(r => r.news_per_1k), 0.01);
-  for (const ch of Object.keys(channelRates)) {
-    const r = channelRates[ch];
-    r.score = Math.round(
-      (r.loyal_pct   / maxLoyal) * 35 +
-      (r.inmarket_pct/ maxInmkt) * 30 +
-      (r.news_per_1k / maxNews)  * 35
-    );
-  }
-
-  // Sort channels by total pageviews
-  const sortedChannels = Object.entries(channelTotals)
-    .sort((a, b) => b[1] - a[1])
-    .filter(([, pv]) => pv > 0);
-
-  const barStyle = (color, pct) => ({
-    display: 'inline-block',
-    width: `${Math.max(2, pct)}%`,
-    height: 8,
-    background: color,
-    borderRadius: 4,
-    opacity: 0.85,
-    verticalAlign: 'middle',
-    marginRight: 8,
+  const cols = viewMode === 'volume' ? VOLUME_COLS : EFFICIENCY_COLS;
+  const sortedChannels = [...channels].sort((a, b) => {
+    const av = getSortValue(a, sort.key);
+    const bv = getSortValue(b, sort.key);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;  // unavailable GA4 metrics always sort last
+    if (bv == null) return -1;
+    if (typeof av === 'string') return sort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return sort.dir === 'asc' ? av - bv : bv - av;
   });
+  const handleSort = (key) => setSort(s =>
+    s.key === key ? { key, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' }
+  );
+
+  const gridCols = '200px repeat(5, 1fr) 32px';
+
+  const cellValue = (row, col) => {
+    switch (col.key) {
+      case 'pageviews':
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+            <div style={{ width: 48, height: 4, background: 'var(--bg-elevated)', borderRadius: 2 }}>
+              <div style={{ height: '100%', borderRadius: 2, background: row.color, width: `${Math.max(2, grandTotal > 0 ? (row.pageviews / grandTotal) * 100 : 0)}%` }} />
+            </div>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', minWidth: 40 }}>{fmt(row.pageviews)}</span>
+          </div>
+        );
+      case 'users':            return fmt(row.users);
+      case 'article_count':    return fmt(row.article_count);
+      case 'newsletter_signups': return fmt(row.newsletter_signups);
+      case 'loyal_pct':        return row.loyal_pct > 0 ? row.loyal_pct.toFixed(1) + '%' : '—';
+      case 'inmarket_pct':     return row.inmarket_pct > 0 ? row.inmarket_pct.toFixed(1) + '%' : '—';
+      case 'score':
+        return row.score > 0 ? (
+          <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-gold)', background: 'var(--accent-gold-bg)', padding: '2px 6px', borderRadius: 4 }}>
+            {row.score}
+          </span>
+        ) : '—';
+      case 'ga4_subscribe_clicks': return <Ga4Cell row={row} metric="subscribe_clicks" format={fmt} />;
+      case 'ga4_sub_per_1k':       return <Ga4Cell row={row} metric="sub_per_1k" format={v => v.toFixed(2)} />;
+      case 'ga4_rev_per_1k':       return <Ga4Cell row={row} metric="rev_per_1k" format={v => '$' + v.toFixed(2)} />;
+      default: return null;
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -216,147 +250,28 @@ export default function Sources() {
           <option value="">All Types</option>
           {types.map(t => <option key={t.content_type} value={t.content_type}>{t.content_type} ({t.count})</option>)}
         </select>
-        {!loading && grandTotal > 0 && (
-          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
-            {fmt(grandTotal)} total pageviews
-          </span>
-        )}
-      </div>
 
-      {/* Channel Performance — GA4 direct measurement */}
-      {perf.length > 0 && (
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-            <div>
-              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--text-primary)', margin: 0 }}>Channel Performance</h3>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                Direct GA4 measurement — actual conversions per channel, last 30 days. Sorted by{' '}
-                <strong>Opportunity</strong> by default — a volume-weighted estimate that doesn't let a single
-                lucky conversion outrank real traffic.
-              </p>
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-              Min users:
-              <input
-                type="number"
-                min={0}
-                value={minUsers}
-                onChange={e => setMinUsers(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                style={{
-                  width: 60, padding: '4px 6px', fontSize: 12, fontFamily: 'var(--font-mono)',
-                  border: '1px solid var(--border)', borderRadius: 4,
-                  background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-                }}
-              />
-            </label>
-          </div>
-          {(() => {
-            const visiblePerf = perf.filter(r => (r.users || 0) >= minUsers);
-            const hiddenCount = perf.length - visiblePerf.length;
-            const sortedPerf = [...visiblePerf].sort((a, b) => {
-              const av = a[perfSort.key] ?? 0;
-              const bv = b[perfSort.key] ?? 0;
-              if (typeof av === 'string') return perfSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
-              return perfSort.dir === 'asc' ? av - bv : bv - av;
-            });
-            const maxSub = Math.max(...visiblePerf.map(r => r.sub_per_1k || 0), 0.01);
-            const maxOpportunity = Math.max(...visiblePerf.map(r => r.opportunity_per_1k || 0), 0.01);
-            const handleSort = (key) => setPerfSort(s =>
-              s.key === key ? { key, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' }
-            );
-            const confidenceTitle = (row) =>
-              `${row.low_confidence ? 'Low confidence — ' : ''}based on ${fmt(row.users)} users, ${fmt(row.subscribe_clicks)} subscribe clicks. ` +
-              `95% CI for subscribe rate: ${row.opportunity_per_1k.toFixed(2)} – ${row.sub_ci_upper_per_1k.toFixed(2)} per 1k.`;
-            return (
-              <>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
-                      {PERF_COLS.map(col => (
-                        <th key={col.key} onClick={() => handleSort(col.key)} style={{
-                          padding: '9px 14px', textAlign: col.align, fontSize: 11, fontWeight: 600,
-                          textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
-                          cursor: 'pointer', userSelect: 'none',
-                          color: perfSort.key === col.key ? 'var(--accent-gold)' : 'var(--text-muted)',
-                        }}
-                          title={col.key === 'opportunity_per_1k' ? '95% confidence lower bound on the subscribe rate — penalizes small samples' : `Sort by ${col.label}`}
-                        >
-                          {col.label}
-                          <span style={{ marginLeft: 4, opacity: perfSort.key === col.key ? 1 : 0.25 }}>
-                            {perfSort.key === col.key ? (perfSort.dir === 'desc' ? '↓' : '↑') : '↕'}
-                          </span>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedPerf.map(row => (
-                      <tr key={row.channel} style={{ borderBottom: '1px solid var(--border-subtle)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                        onMouseLeave={e => e.currentTarget.style.background = ''}>
-                        <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
-                          {row.channel}
-                          {row.low_confidence && (
-                            <span
-                              title={confidenceTitle(row)}
-                              style={{
-                                marginLeft: 6, fontSize: 10, fontWeight: 600, color: '#c0392b',
-                                background: '#c0392b18', border: '1px solid #c0392b40',
-                                borderRadius: 3, padding: '1px 5px', cursor: 'help',
-                              }}
-                            >
-                              low n
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>{fmt(row.users)}</td>
-                        <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>{fmt(row.subscribe_clicks)}</td>
-                        <td style={{ padding: '10px 14px', textAlign: 'right' }} title={confidenceTitle(row)}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-                            <div style={{ width: 60, height: 4, background: 'var(--bg-elevated)', borderRadius: 2 }}>
-                              <div style={{ height: '100%', borderRadius: 2, background: 'var(--accent-gold)', width: `${((row.sub_per_1k || 0) / maxSub) * 100}%` }} />
-                            </div>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: (row.sub_per_1k || 0) > 0 ? 'var(--accent-gold)' : 'var(--text-muted)', minWidth: 36 }}>
-                              {(row.sub_per_1k || 0).toFixed(2)}
-                            </span>
-                          </div>
-                        </td>
-                        <td style={{ padding: '10px 14px', textAlign: 'right' }} title={confidenceTitle(row)}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-                            <div style={{ width: 60, height: 4, background: 'var(--bg-elevated)', borderRadius: 2 }}>
-                              <div style={{ height: '100%', borderRadius: 2, background: '#2474bb', width: `${((row.opportunity_per_1k || 0) / maxOpportunity) * 100}%` }} />
-                            </div>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: (row.opportunity_per_1k || 0) > 0 ? '#2474bb' : 'var(--text-muted)', minWidth: 36 }}>
-                              {(row.opportunity_per_1k || 0).toFixed(2)}
-                            </span>
-                          </div>
-                        </td>
-                        <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>{fmtSec(row.avg_engagement_time)}</td>
-                        <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }} title={row.low_confidence ? `Low confidence — based on ${fmt(row.users)} users. Revenue per 1k is unstable at this sample size.` : undefined}>
-                          ${(row.rev_per_1k || 0).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {hiddenCount > 0 && (
-                  <div style={{ padding: '8px 16px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)' }}>
-                    {hiddenCount} channel{hiddenCount === 1 ? '' : 's'} hidden below {minUsers} users.
-                  </div>
-                )}
-              </>
-            );
-          })()}
-          <div style={{ padding: '10px 16px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', fontStyle: 'italic' }}>
-            Note: GA4 groups Google Discover and Google News into "Organic Search". "Direct" includes dark social. Use the volume breakdown below for finer distinctions.
-            Channels marked <strong>low n</strong> have fewer than {MIN_USERS_FOR_CONFIDENCE} users — their raw rates (Subs/1k, Ad Rev/1k) are unreliable; hover a value for its confidence interval.
-          </div>
+        <div style={{ display: 'flex', marginLeft: 'auto', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+          {['volume', 'efficiency'].map(mode => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
+                background: viewMode === mode ? 'var(--accent-gold)' : 'var(--bg-elevated)',
+                color: viewMode === mode ? '#0f0f0f' : 'var(--text-secondary)',
+                textTransform: 'capitalize',
+              }}
+            >
+              {mode}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       {loading ? (
         <div style={{ padding: 40, color: 'var(--text-muted)' }}>Loading...</div>
-      ) : grandTotal === 0 ? (
+      ) : channels.length === 0 ? (
         <div style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ color: 'var(--text-muted)' }}>
             No source data matches these filters.
@@ -379,123 +294,130 @@ export default function Sources() {
           </div>
         </div>
       ) : (
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-          {/* Column headers */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '180px 1fr 90px 80px 80px 80px 60px 32px',
-            padding: '8px 16px',
-            borderBottom: '2px solid var(--border)',
-            background: 'var(--bg-elevated)',
-          }}>
-            {['Channel', 'Traffic Share', 'Pageviews', 'Articles', 'Loyal %', 'In-Market %', 'Newsletter', 'Score', ''].map((h, i) => (
-              <div key={i} style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: i > 1 ? 'right' : 'left' }}>
-                {h}
-              </div>
-            ))}
-          </div>
-          {/* Channel summary rows */}
-          {sortedChannels.map(([chKey, total]) => {
-            const ch = CHANNELS[chKey];
-            const pct = grandTotal > 0 ? (total / grandTotal) * 100 : 0;
-            const isOpen = expanded === chKey;
-            const sources = (channelSources[chKey] || []).sort((a, b) => b.total_pageviews - a.total_pageviews);
-
-            return (
-              <div key={chKey} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                {/* Channel header row */}
-                <div
-                  onClick={() => setExpanded(isOpen ? null : chKey)}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '180px 1fr 90px 80px 80px 80px 60px 32px',
-                    alignItems: 'center',
-                    padding: '14px 16px',
-                    cursor: 'pointer',
-                    background: isOpen ? 'var(--bg-elevated)' : 'transparent',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                  onMouseLeave={e => { if (!isOpen) e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: ch.color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>{ch.label}</span>
-                  </div>
-                  <div style={{ padding: '0 16px' }}>
-                    <span style={barStyle(ch.color, pct)} />
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{pct.toFixed(1)}%</span>
-                  </div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)', textAlign: 'right' }}>
-                    {fmt(total)}
-                  </div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>
-                    {sources.reduce((s, r) => s + r.article_count, 0)} arts
-                  </div>
-                  {/* Loyal % */}
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                    {channelRates[chKey]?.loyal_pct > 0 ? channelRates[chKey].loyal_pct.toFixed(1) + '%' : '—'}
-                  </div>
-                  {/* In-market % */}
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                    {channelRates[chKey]?.inmarket_pct > 0 ? channelRates[chKey].inmarket_pct.toFixed(1) + '%' : '—'}
-                  </div>
-                  {/* Newsletter */}
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                    {fmt(channelRates[chKey]?.newsletter)}
-                  </div>
-                  {/* Score */}
-                  <div style={{ textAlign: 'right' }}>
-                    {channelRates[chKey]?.score > 0 ? (
-                      <span style={{
-                        fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 600,
-                        color: 'var(--accent-gold)',
-                        background: 'var(--accent-gold-bg)',
-                        padding: '2px 6px', borderRadius: 4,
-                      }}>
-                        {channelRates[chKey].score}
-                      </span>
-                    ) : '—'}
-                  </div>
-                  <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-                    {isOpen ? '▲' : '▼'}
-                  </div>
-                </div>
-
-                {/* Expanded: individual sources within this channel */}
-                {isOpen && (
-                  <div style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border-subtle)' }}>
-                    {sources.map(row => {
-                      const sPct = total > 0 ? (row.total_pageviews / total) * 100 : 0;
-                      return (
-                        <div key={row.source} style={{
-                          display: 'grid',
-                          gridTemplateColumns: '180px 1fr 90px 80px 80px 80px 60px 32px',
-                          alignItems: 'center',
-                          padding: '10px 16px 10px 36px',
-                          borderBottom: '1px solid var(--border-subtle)',
-                        }}>
-                          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{row.source}</span>
-                          <div style={{ padding: '0 16px' }}>
-                            <span style={{ ...barStyle(ch.color, sPct), opacity: 0.5 }} />
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{sPct.toFixed(1)}% of channel</span>
-                          </div>
-                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                            {fmt(row.total_pageviews)}
-                          </div>
-                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>
-                            {row.article_count} arts
-                          </div>
-                          <div /><div /><div /><div />
-                        </div>
-                      );
-                    })}
-                  </div>
+        <>
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--text-primary)', margin: 0 }}>Channels</h3>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                {fmt(grandTotal)} total pageviews{filters.from && filters.to ? `, ${filters.from} – ${filters.to}` : ''}.{' '}
+                {viewMode === 'efficiency' && (
+                  <>Columns marked <strong>≈</strong> come from GA4's channel taxonomy (always trailing 30 days, regardless of the date filter above) — hover a value for its source and confidence.</>
                 )}
+              </p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: gridCols, padding: '8px 16px', borderBottom: '2px solid var(--border)', background: 'var(--bg-elevated)' }}>
+              <div
+                onClick={() => handleSort('channel')}
+                style={{ fontSize: 10, fontWeight: 600, color: sort.key === 'channel' ? 'var(--accent-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', userSelect: 'none' }}
+              >
+                Channel <span style={{ opacity: sort.key === 'channel' ? 1 : 0.25 }}>{sort.key === 'channel' ? (sort.dir === 'desc' ? '↓' : '↑') : '↕'}</span>
               </div>
-            );
-          })}
-        </div>
+              {cols.map(col => (
+                <div
+                  key={col.key}
+                  onClick={() => handleSort(col.key)}
+                  style={{ fontSize: 10, fontWeight: 600, color: sort.key === col.key ? 'var(--accent-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  {col.label} <span style={{ opacity: sort.key === col.key ? 1 : 0.25 }}>{sort.key === col.key ? (sort.dir === 'desc' ? '↓' : '↑') : '↕'}</span>
+                </div>
+              ))}
+              <div />
+            </div>
+
+            {sortedChannels.map(row => {
+              const isOpen = expanded === row.key;
+              return (
+                <div key={row.key} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                  <div
+                    onClick={() => setExpanded(isOpen ? null : row.key)}
+                    style={{
+                      display: 'grid', gridTemplateColumns: gridCols, alignItems: 'center',
+                      padding: '12px 16px', cursor: 'pointer',
+                      background: isOpen ? 'var(--bg-elevated)' : 'transparent',
+                    }}
+                    onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                    onMouseLeave={e => { if (!isOpen) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: row.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>{row.label}</span>
+                    </div>
+                    {cols.map(col => (
+                      <div key={col.key} style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                        {cellValue(row, col)}
+                      </div>
+                    ))}
+                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{isOpen ? '▲' : '▼'}</div>
+                  </div>
+
+                  {isOpen && (
+                    <div style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border-subtle)' }}>
+                      {row.sources.map(src => {
+                        const srcLoyalPct = src.users > 0 ? (src.loyal_users / src.users) * 100 : 0;
+                        const srcInmarketPct = src.users > 0 ? (src.inmarket_pv / src.users) * 100 : 0;
+                        const srcPct = row.pageviews > 0 ? (src.pageviews / row.pageviews) * 100 : 0;
+                        return (
+                          <div key={src.source} style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'center', padding: '9px 16px 9px 36px', borderBottom: '1px solid var(--border-subtle)' }}>
+                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{src.source}</span>
+                            {viewMode === 'volume' ? (
+                              <>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.pageviews)} ({srcPct.toFixed(0)}%)</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.users)}</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.article_count)}</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }} title="GA4 doesn't break subscribe clicks down by individual source, only by channel.">—</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.newsletter_signups)}</div>
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }} title="GA4 doesn't break conversion rates down by individual source, only by channel.">—</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{srcLoyalPct > 0 ? srcLoyalPct.toFixed(1) + '%' : '—'}</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{srcInmarketPct > 0 ? srcInmarketPct.toFixed(1) + '%' : '—'}</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }} title="GA4 doesn't break revenue down by individual source, only by channel.">—</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>—</div>
+                              </>
+                            )}
+                            <div />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {unmapped?.channels?.length > 0 && (
+              <div style={{ padding: '10px 16px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)' }}>
+                GA4 also recorded {fmt(unmapped.subscribe_clicks)} subscribe clicks from {fmt(unmapped.users)} users on channels with no
+                equivalent in this taxonomy ({unmapped.channels.join(', ')}) — not reflected in any row above.
+              </div>
+            )}
+            <div style={{ padding: '10px 16px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', fontStyle: 'italic' }}>
+              Direct / Bookmark and Dark Social conversion metrics are unavailable — GA4's "Direct" channel can't distinguish the two, so we don't
+              guess a split. Google Discover's conversions are folded into Search Engines by GA4 and can't be isolated.
+            </div>
+          </div>
+
+          {/* Opportunity scatter — supplements the table, doesn't replace it */}
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ padding: '14px 16px', borderBottom: showScatter ? '1px solid var(--border)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--text-primary)', margin: 0 }}>Opportunity Map</h3>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                  Traffic vs. conversion efficiency. Bubble size = ad revenue, color = channel. Dashed/faint bubbles are low-confidence (small GA4 sample).
+                </p>
+              </div>
+              <button
+                onClick={() => setShowScatter(s => !s)}
+                style={{ padding: '6px 12px', borderRadius: 4, fontSize: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+              >
+                {showScatter ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            {showScatter && <ChannelScatter channels={channels} />}
+          </div>
+        </>
       )}
     </div>
   );

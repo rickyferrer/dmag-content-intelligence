@@ -30,8 +30,7 @@ export const api = {
 
   // Insights
   askInsight: (question) => apiFetch('/insights/ask', { method: 'POST', body: JSON.stringify({ question }) }),
-  getByTrafficSource: (params = {}) => apiFetch('/analytics/by-traffic-source?' + new URLSearchParams(params)),
-  getSourcePerformance: () => apiFetch('/analytics/source-performance'),
+  getChannels: (params = {}) => apiFetch('/analytics/channels?' + new URLSearchParams(params)),
   getScatter: (params = {}) => apiFetch('/analytics/scatter?' + new URLSearchParams(params)),
   getTrend: (days = 30) => apiFetch(`/analytics/trend?days=${days}`),
 
