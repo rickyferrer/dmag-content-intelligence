@@ -3,6 +3,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  listInsightConversations, getInsightConversation, createInsightConversation,
+  appendInsightMessage, deleteInsightConversation, getRecentInsightMessages,
+} from '../db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', '..', 'content.db');
@@ -104,9 +108,32 @@ const QUERY_TOOL = {
   },
 };
 
+function makeTitle(question) {
+  const trimmed = question.trim();
+  return trimmed.length <= 60 ? trimmed : trimmed.slice(0, 57).trimEnd() + '…';
+}
+
+// GET /api/insights/conversations
+router.get('/conversations', (req, res) => {
+  res.json(listInsightConversations());
+});
+
+// GET /api/insights/conversations/:id
+router.get('/conversations/:id', (req, res) => {
+  const conversation = getInsightConversation(req.params.id);
+  if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+  res.json(conversation);
+});
+
+// DELETE /api/insights/conversations/:id
+router.delete('/conversations/:id', (req, res) => {
+  deleteInsightConversation(req.params.id);
+  res.json({ ok: true });
+});
+
 // POST /api/insights/ask
 router.post('/ask', async (req, res) => {
-  const { question } = req.body || {};
+  const { question, conversation_id } = req.body || {};
   if (!question || typeof question !== 'string' || !question.trim()) {
     return res.status(400).json({ error: 'question is required' });
   }
@@ -114,7 +141,11 @@ router.post('/ask', async (req, res) => {
     return res.status(500).json({ error: 'ANTHROPIC_API_KEY is not configured' });
   }
 
-  const messages = [{ role: 'user', content: question.trim() }];
+  const isNewConversation = !conversation_id;
+  const convId = conversation_id || createInsightConversation(makeTitle(question));
+  const priorMessages = isNewConversation ? [] : getRecentInsightMessages(convId).map(m => ({ role: m.role, content: m.content }));
+
+  const messages = [...priorMessages, { role: 'user', content: question.trim() }];
   const queriesRun = [];
   const MAX_TURNS = 6;
 
@@ -156,9 +187,15 @@ router.post('/ask', async (req, res) => {
       finalText = 'I wasn’t able to finish answering that within the allotted steps — try a narrower question.';
     }
 
-    res.json({ answer: finalText, queries_run: queriesRun });
+    appendInsightMessage(convId, 'user', question.trim());
+    appendInsightMessage(convId, 'assistant', finalText, queriesRun);
+
+    res.json({ conversation_id: convId, answer: finalText, queries_run: queriesRun });
   } catch (err) {
     console.error('[Insights] Error:', err.message);
+    // Don't leave an empty, titled-but-message-less conversation in the list
+    // if the very first question in it failed.
+    if (isNewConversation) { try { deleteInsightConversation(convId); } catch {} }
     res.status(500).json({ error: err.message });
   }
 });

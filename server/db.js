@@ -154,6 +154,25 @@ function initSchema() {
       details TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
+
+    -- Insights chat history — lets a conversation survive a page reload, and
+    -- lets follow-up questions ("what about last month?") be answered with
+    -- the prior Q&A as context instead of starting from scratch every time.
+    CREATE TABLE IF NOT EXISTS insight_conversations (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      title      TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS insight_messages (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id INTEGER NOT NULL REFERENCES insight_conversations(id),
+      role            TEXT NOT NULL,
+      content         TEXT NOT NULL,
+      queries_run     TEXT,
+      created_at      TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_insight_messages_conv ON insight_messages(conversation_id);
   `);
 
   // Schema migrations — safe to run on every startup
@@ -194,6 +213,59 @@ export function getAuditLog(limit = 100) {
   const db = getDb();
   const rows = db.prepare('SELECT id, ts, actor, action, details FROM audit_log ORDER BY id DESC LIMIT ?').all(limit);
   return rows.map(r => ({ ...r, details: r.details ? JSON.parse(r.details) : null }));
+}
+
+export function listInsightConversations(limit = 200) {
+  const db = getDb();
+  return db.prepare(`
+    SELECT id, title, created_at, updated_at
+    FROM insight_conversations
+    ORDER BY updated_at DESC
+    LIMIT ?
+  `).all(limit);
+}
+
+export function getInsightConversation(id) {
+  const db = getDb();
+  const conversation = db.prepare('SELECT id, title, created_at, updated_at FROM insight_conversations WHERE id = ?').get(id);
+  if (!conversation) return null;
+  const messages = db.prepare(`
+    SELECT id, role, content, queries_run, created_at
+    FROM insight_messages WHERE conversation_id = ? ORDER BY id
+  `).all(id);
+  return {
+    ...conversation,
+    messages: messages.map(m => ({ ...m, queries_run: m.queries_run ? JSON.parse(m.queries_run) : [] })),
+  };
+}
+
+export function createInsightConversation(title) {
+  const db = getDb();
+  return db.prepare('INSERT INTO insight_conversations (title) VALUES (?)').run(title).lastInsertRowid;
+}
+
+export function appendInsightMessage(conversationId, role, content, queriesRun = null) {
+  const db = getDb();
+  db.prepare('INSERT INTO insight_messages (conversation_id, role, content, queries_run) VALUES (?, ?, ?, ?)')
+    .run(conversationId, role, content, queriesRun?.length ? JSON.stringify(queriesRun) : null);
+  db.prepare('UPDATE insight_conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(conversationId);
+}
+
+export function deleteInsightConversation(id) {
+  const db = getDb();
+  db.prepare('DELETE FROM insight_messages WHERE conversation_id = ?').run(id);
+  db.prepare('DELETE FROM insight_conversations WHERE id = ?').run(id);
+}
+
+// Most-recent N messages, chronological — bounds how much prior context (and
+// token cost) a follow-up question drags along.
+export function getRecentInsightMessages(conversationId, limit = 12) {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT role, content FROM insight_messages
+    WHERE conversation_id = ? ORDER BY id DESC LIMIT ?
+  `).all(conversationId, limit);
+  return rows.reverse();
 }
 
 export function getSyncState(key) {

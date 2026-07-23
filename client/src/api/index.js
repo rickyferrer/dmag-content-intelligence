@@ -29,7 +29,10 @@ export const api = {
   getVulnerability: () => apiFetch('/analytics/vulnerability'),
 
   // Insights
-  askInsight: (question) => apiFetch('/insights/ask', { method: 'POST', body: JSON.stringify({ question }) }),
+  askInsight: (question, conversationId) => apiFetch('/insights/ask', { method: 'POST', body: JSON.stringify({ question, conversation_id: conversationId }) }),
+  getInsightConversations: () => apiFetch('/insights/conversations'),
+  getInsightConversation: (id) => apiFetch(`/insights/conversations/${id}`),
+  deleteInsightConversation: (id) => apiFetch(`/insights/conversations/${id}`, { method: 'DELETE' }),
   getChannels: (params = {}) => apiFetch('/analytics/channels?' + new URLSearchParams(params)),
   getScatter: (params = {}) => apiFetch('/analytics/scatter?' + new URLSearchParams(params)),
   getTrend: (days = 30) => apiFetch(`/analytics/trend?days=${days}`),
