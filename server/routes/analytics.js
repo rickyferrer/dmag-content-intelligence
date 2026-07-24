@@ -523,6 +523,20 @@ router.get('/source-performance', (req, res) => {
 // Shared by /by-traffic-source and /channels: per-Marfeel-source volume
 // totals (pageviews, users, loyal/in-market, newsletter signups), scoped to
 // articles published in [dateFrom, dateTo] and optionally filtered by type.
+//
+// content_sources has one row per (article, source) — a real per-source
+// pageview split. analytics_snapshots has only one row per article — GA4
+// and Marfeel don't report users/loyal-users/in-market/newsletter broken
+// down by referrer at all. A naive join of the two (one article row against
+// its N source rows) duplicates that article's FULL user count onto every
+// one of its sources — an article with 200 users split across 5 sources
+// would contribute 200 users to EACH source, 1,000 total, which is how a
+// channel ends up reporting more users than pageviews. Instead we allocate
+// each article's user-derived metrics across its sources proportionally by
+// that source's share of the article's pageviews — an estimate (GA4/Marfeel
+// don't tell us the true per-source split), but one that conserves the
+// article's real total instead of multiplying it, and can never let a
+// channel's estimated users exceed the traffic that produced them.
 function fetchSourceRows(db, { dateFrom, dateTo, type }) {
   const where = ["cs.snapshot_at = lx.latest"];
   const params = [];
@@ -530,20 +544,29 @@ function fetchSourceRows(db, { dateFrom, dateTo, type }) {
   if (dateTo)   { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
   if (type)     { where.push('c.content_type = ?'); params.push(type); }
 
-  return db.prepare(`
+  const rows = db.prepare(`
+    WITH article_totals AS (
+      SELECT cs.wp_id, SUM(cs.pageviews) AS article_pageviews
+      FROM content_sources cs
+      JOIN (
+        SELECT wp_id, MAX(snapshot_at) AS latest FROM content_sources GROUP BY wp_id
+      ) lx ON cs.wp_id = lx.wp_id AND cs.snapshot_at = lx.latest
+      GROUP BY cs.wp_id
+    )
     SELECT
       cs.source,
       SUM(cs.pageviews)               AS total_pageviews,
       COUNT(DISTINCT cs.wp_id)        AS article_count,
-      SUM(a.ga4_users)                AS total_users,
-      SUM(a.ga4_loyal_users)          AS total_loyal_users,
-      SUM(a.ga4_loyal_inmarket_pv)    AS total_inmarket,
-      SUM(a.mf_newsletter_signups)    AS total_newsletter_signups
+      SUM(CASE WHEN at.article_pageviews > 0 THEN a.ga4_users * cs.pageviews * 1.0 / at.article_pageviews ELSE 0 END)             AS total_users,
+      SUM(CASE WHEN at.article_pageviews > 0 THEN a.ga4_loyal_users * cs.pageviews * 1.0 / at.article_pageviews ELSE 0 END)       AS total_loyal_users,
+      SUM(CASE WHEN at.article_pageviews > 0 THEN a.ga4_loyal_inmarket_pv * cs.pageviews * 1.0 / at.article_pageviews ELSE 0 END) AS total_inmarket,
+      SUM(CASE WHEN at.article_pageviews > 0 THEN a.mf_newsletter_signups * cs.pageviews * 1.0 / at.article_pageviews ELSE 0 END) AS total_newsletter_signups
     FROM content_sources cs
     JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest FROM content_sources GROUP BY wp_id
     ) lx ON cs.wp_id = lx.wp_id
     JOIN content c ON c.wp_id = cs.wp_id
+    JOIN article_totals at ON at.wp_id = cs.wp_id
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
     ) lxa ON cs.wp_id = lxa.wp_id
@@ -552,6 +575,15 @@ function fetchSourceRows(db, { dateFrom, dateTo, type }) {
     GROUP BY cs.source
     ORDER BY total_pageviews DESC
   `).all(...params);
+
+  // Round the now-fractional allocated metrics back to whole numbers for display.
+  return rows.map(r => ({
+    ...r,
+    total_users: Math.round(r.total_users || 0),
+    total_loyal_users: Math.round(r.total_loyal_users || 0),
+    total_inmarket: Math.round(r.total_inmarket || 0),
+    total_newsletter_signups: Math.round(r.total_newsletter_signups || 0),
+  }));
 }
 
 // GET /api/analytics/by-traffic-source
@@ -754,6 +786,7 @@ router.get('/channels', (req, res) => {
     ga4_snapshot_at: ga4Snapshot?.snapshot_at || null,
     channels,
     unmapped_ga4: unmapped,
+    volume_metrics_note: 'Users, Loyal %, In-Market %, and Newsletter Signups are estimated per channel by splitting each article\'s total figures proportionally by pageview share across its traffic sources — GA4 and Marfeel report these per article, not broken down by individual source.',
   });
 });
 

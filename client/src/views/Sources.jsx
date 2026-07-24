@@ -36,6 +36,11 @@ const EFFICIENCY_COLS = [
   { key: 'score',          label: 'Score',         align: 'right' },
 ];
 
+// GA4/Marfeel report these per article, not broken down by traffic source —
+// values are estimated by splitting each article's total proportionally by
+// pageview share across its sources (see volume_metrics_note from the API).
+const ESTIMATED_COLS = new Set(['users', 'newsletter_signups', 'loyal_pct', 'inmarket_pct']);
+
 function getSortValue(row, key) {
   switch (key) {
     case 'channel':               return row.label;
@@ -184,6 +189,7 @@ export default function Sources() {
 
   const channels = result?.channels || [];
   const unmapped = result?.unmapped_ga4;
+  const volumeNote = result?.volume_metrics_note;
   const grandTotal = channels.reduce((s, c) => s + (c.pageviews || 0), 0);
 
   const cols = viewMode === 'volume' ? VOLUME_COLS : EFFICIENCY_COLS;
@@ -301,8 +307,9 @@ export default function Sources() {
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
                 {fmt(grandTotal)} total pageviews{filters.from && filters.to ? `, ${filters.from} – ${filters.to}` : ''}.{' '}
                 {viewMode === 'efficiency' && (
-                  <>Columns marked <strong>≈</strong> come from GA4's channel taxonomy (always trailing 30 days, regardless of the date filter above) — hover a value for its source and confidence.</>
+                  <>Columns marked <strong>≈</strong> come from GA4's channel taxonomy (always trailing 30 days, regardless of the date filter above) — hover a value for its source and confidence. </>
                 )}
+                Columns marked <strong>*</strong> are estimated — hover a header for details.
               </p>
             </div>
 
@@ -317,9 +324,10 @@ export default function Sources() {
                 <div
                   key={col.key}
                   onClick={() => handleSort(col.key)}
+                  title={ESTIMATED_COLS.has(col.key) ? volumeNote : undefined}
                   style={{ fontSize: 10, fontWeight: 600, color: sort.key === col.key ? 'var(--accent-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
                 >
-                  {col.label} <span style={{ opacity: sort.key === col.key ? 1 : 0.25 }}>{sort.key === col.key ? (sort.dir === 'desc' ? '↓' : '↑') : '↕'}</span>
+                  {col.label}{ESTIMATED_COLS.has(col.key) ? '*' : ''} <span style={{ opacity: sort.key === col.key ? 1 : 0.25 }}>{sort.key === col.key ? (sort.dir === 'desc' ? '↓' : '↑') : '↕'}</span>
                 </div>
               ))}
               <div />
