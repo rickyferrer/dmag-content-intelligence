@@ -877,31 +877,67 @@ function computeGenericFactor(rawTitle) {
   return { generic_factor, proper_noun_count: entityCount, is_listicle, has_local, entities };
 }
 
-// Classify a real GSC search query as "branded/durable" (mentions the article's
-// specific subject or a local place — hard for AI to intercept generically) or
-// "generic" (an informational query an AI answer box can absorb).
+// Classify a real GSC search query by intent, not just "branded vs generic" —
+// collapsing those into one bucket previously meant a navigational query like
+// "dallas news" (someone wanting to browse a news source, not get an answer)
+// scored identically to a true branded/entity query, AND identically-risky to
+// a pure how-to query once it fell out of that bucket. AI Overviews trigger
+// overwhelmingly for informational intent; navigational queries mostly don't
+// get one at all because there's no single "answer" to give.
+//   branded       — mentions this site or the article's own specific subject.
+//                    Nothing else can answer this; lowest risk.
+//   navigational   — short, destination-seeking, no question framing (e.g.
+//                    "dallas news", "news"). Wants to browse a source, not
+//                    read a summary. Low-moderate risk.
+//   local          — has a hyperlocal marker but isn't a bare navigational
+//                    query. AI can partially summarize; local specificity
+//                    still has some value. Moderate risk.
+//   informational  — how-to/explainer/general question, no local or brand or
+//                    navigational signal. AI Overview's primary target;
+//                    full risk weight.
+const QUERY_RISK_WEIGHT = { branded: 0.1, navigational: 0.35, local: 0.55, informational: 1.0 };
+const NAV_SUFFIXES = ['news', 'events', 'weather', 'traffic', 'jobs', 'obituaries', 'obituary'];
+const QUESTION_OR_HOWTO = /^(how|what|why|when|where|who|which|is|are|can|does|do)\b|\b(how to|guide to|best|top|vs\.?|versus)\b/i;
+
 function classifyQuery(query, entities) {
-  const q = (query || '').toLowerCase();
+  const q = (query || '').toLowerCase().trim();
+  if (!q) return 'informational';
   if (q.includes('dmagazine') || q.includes('d magazine')) return 'branded';
-  if (LOCAL_MARKERS.some(m => q.includes(m))) return 'branded';
   if (entities.some(e => q.includes(e))) return 'branded';
-  return 'generic';
+
+  const isQuestionOrHowTo = QUESTION_OR_HOWTO.test(q);
+  // Deliberately narrow: only a recognized destination-seeking suffix counts
+  // as navigational. A blanket "any short query" rule would also catch
+  // genuine short informational queries ("jury duty", "home equity") that
+  // just happen to be two words — that's not what navigational means.
+  const endsNav = !isQuestionOrHowTo && NAV_SUFFIXES.some(s => q === s || q.endsWith(' ' + s));
+  if (endsNav) return 'navigational';
+
+  const hasLocal = LOCAL_MARKERS.some(m => q.includes(m));
+  if (hasLocal) return 'local';
+  return 'informational';
 }
 
-// Given an article's GSC query rows, compute the share of clicks that came
-// from generic (AI-vulnerable) queries rather than branded/specific ones.
+// Given an article's GSC query rows, compute a click-weighted AI-Overview
+// risk share across the four intent categories above (instead of a flat
+// generic/branded split), plus the click distribution across categories so
+// the UI can show its work.
 function computeQueryRisk(queries, entities) {
   if (!queries || queries.length === 0) return null;
-  let genericClicks = 0, totalClicks = 0;
+  let weightedSum = 0, totalClicks = 0;
+  const by_category = { branded: 0, navigational: 0, local: 0, informational: 0 };
   for (const q of queries) {
+    const cat = classifyQuery(q.query, entities);
     totalClicks += q.clicks;
-    if (classifyQuery(q.query, entities) === 'generic') genericClicks += q.clicks;
+    weightedSum += q.clicks * QUERY_RISK_WEIGHT[cat];
+    by_category[cat] += q.clicks;
   }
   if (totalClicks === 0) return null;
   return {
-    generic_click_share: (genericClicks / totalClicks) * 100,
+    weighted_risk_pct: (weightedSum / totalClicks) * 100,
     query_count: queries.length,
     total_clicks: totalClicks,
+    by_category,
     top_queries: [...queries].sort((a, b) => b.clicks - a.clicks).slice(0, 5)
       .map(q => ({ query: q.query, clicks: q.clicks, type: classifyQuery(q.query, entities) })),
   };
@@ -928,6 +964,12 @@ function computeQueryRisk(queries, entities) {
 // contradiction ("100% risk, 0% search share").
 router.get('/vulnerability', (req, res) => {
   const db = getDb();
+  const {
+    section, publication, dateFrom, dateTo, userNeed,
+    dataSource,          // 'gsc' | 'estimated'
+    minClicks,           // minimum GSC click count (implies dataSource=gsc)
+    minSearchShare,      // minimum search_exposure_pct
+  } = req.query;
 
   const SEARCH_SOURCES = new Set([
     'Google', 'Bing', 'DuckDuckGo', 'Yahoo!', 'Ecosia',
@@ -951,6 +993,13 @@ router.get('/vulnerability', (req, res) => {
     if (SEARCH_SOURCES.has(row.source)) srcMap[row.wp_id].search_pv += row.pv;
   }
 
+  const where = ['c.user_need IS NOT NULL'];
+  const params = [];
+  if (section)  { where.push('c.section = ?'); params.push(section); }
+  if (userNeed) { where.push('c.user_need = ?'); params.push(userNeed); }
+  if (dateFrom) { where.push('c.published_at >= ?'); params.push(dateFrom); }
+  if (dateTo)   { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
+
   const articles = db.prepare(`
     SELECT c.wp_id, c.title, c.url, c.user_need, c.section, c.published_at,
       a.true_value, a.ga4_users, a.ga4_pageviews, a.mf_newsletter_signups
@@ -959,8 +1008,8 @@ router.get('/vulnerability', (req, res) => {
       SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
     ) lx ON c.wp_id = lx.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
-    WHERE c.user_need IS NOT NULL
-  `).all();
+    WHERE ${where.join(' AND ')}
+  `).all(...params);
 
   // Real search queries from the latest GSC snapshot, grouped by article.
   const gscRows = db.prepare(`
@@ -974,7 +1023,14 @@ router.get('/vulnerability', (req, res) => {
     gscByWpId[row.wp_id].push(row);
   }
 
-  const enriched = articles.map(art => {
+  // Imprint (D Magazine / D Home / D CEO) parsed from URL, same pattern as
+  // /by-issue — only articles under /publications/{imprint}/... have one.
+  function extractPublication(url) {
+    const m = (url || '').match(/\/publications\/([^/]+)\//);
+    return m ? m[1] : null;
+  }
+
+  let enriched = articles.map(art => {
     const s = srcMap[art.wp_id] || { search_pv: 0, total_pv: 0 };
     const search_exposure_pct = s.total_pv > 0 ? (s.search_pv / s.total_pv) * 100 : 0;
     const { generic_factor, proper_noun_count, is_listicle, has_local, entities } = computeGenericFactor(art.title);
@@ -987,19 +1043,25 @@ router.get('/vulnerability', (req, res) => {
 
     // AI susceptibility: how summarizable the CONTENT is, independent of how
     // much traffic currently depends on search. GSC path is grounded in what
-    // people actually searched; the title-based fallback is clamped well
-    // short of 0/100 since it's inferring from title text alone.
+    // people actually searched (now weighted across branded/navigational/
+    // local/informational intent, not a flat generic/branded split); the
+    // title-based fallback is clamped well short of 0/100 since it's
+    // inferring from title text alone.
     const susceptibility_pct = queryRisk
-      ? Math.min(100, queryRisk.generic_click_share * need_mult)
+      ? Math.min(100, queryRisk.weighted_risk_pct * need_mult)
       : Math.min(95, Math.max(5, need_mult * generic_factor * 55));
 
     // Confidence in that susceptibility estimate: real query data with a
-    // decent click sample earns high confidence; a handful of GSC clicks or
-    // a pure title guess (no observed query behavior at all) earns low
-    // confidence — same small-sample caution as the Sources tab's Wilson
-    // interval work, just expressed as a simple multiplier here.
+    // decent click sample earns high confidence; a pure title guess (no
+    // observed query behavior at all) earns a flat, middling confidence —
+    // same small-sample caution as the Sources tab's Wilson interval work,
+    // just expressed as a simple multiplier here. Deliberately starts BELOW
+    // the title-estimate baseline at very low click counts: a single GSC
+    // click's query classification isn't more trustworthy than a heuristic
+    // informed by thousands of similar articles, so it shouldn't score
+    // higher just because it's technically "real data."
     const confidence = queryRisk
-      ? Math.min(1, 0.5 + 0.5 * Math.min(1, queryRisk.total_clicks / 10))
+      ? Math.min(1, 0.3 + 0.7 * Math.min(1, queryRisk.total_clicks / 10))
       : 0.4;
 
     // The single ranking key: only high when the content is genuinely
@@ -1013,12 +1075,19 @@ router.get('/vulnerability', (req, res) => {
       ...art, search_exposure_pct, susceptibility_pct, confidence, impact_priority, risk_source,
       search_pv: s.search_pv, total_source_pv: s.total_pv,
       proper_noun_count, is_listicle, has_local, need_mult,
+      publication: extractPublication(art.url),
       generic_factor: risk_source === 'estimated' ? generic_factor : null,
-      generic_click_share: queryRisk?.generic_click_share ?? null,
+      query_categories: queryRisk?.by_category ?? null,
       gsc_click_count: queryRisk?.total_clicks ?? null,
       top_queries: queryRisk?.top_queries || null,
     };
   });
+
+  // Filters that depend on computed (not raw SQL) fields
+  if (publication)              enriched = enriched.filter(a => a.publication === publication);
+  if (dataSource)                enriched = enriched.filter(a => a.risk_source === dataSource);
+  if (minClicks)                 enriched = enriched.filter(a => (a.gsc_click_count ?? 0) >= Number(minClicks));
+  if (minSearchShare)            enriched = enriched.filter(a => a.search_exposure_pct >= Number(minSearchShare));
 
   // Aggregate by user need
   const needMap = {};
@@ -1060,14 +1129,15 @@ router.get('/vulnerability', (req, res) => {
     .sort((a, b) => b.newsletter_per_1k - a.newsletter_per_1k)
     .slice(0, 5);
 
-  // Top 25 articles by impact priority — the content with the most real,
+  // Top 50 articles by impact priority — the content with the most real,
   // multiplicative reason to worry (valuable, summarizable, search-dependent,
   // and estimated with reasonable confidence), not just the highest single
-  // factor in isolation.
+  // factor in isolation. The frontend can resort within this pool by any
+  // column; it's a "top N by our primary metric" pool, not the full dataset.
   const top_vulnerable = enriched
     .filter(a => (a.true_value || 0) > 0 && a.total_source_pv > 100)
     .sort((a, b) => b.impact_priority - a.impact_priority)
-    .slice(0, 25);
+    .slice(0, 50);
 
   const gsc_coverage = {
     articles_with_real_data: enriched.filter(a => a.risk_source === 'gsc').length,

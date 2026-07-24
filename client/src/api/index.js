@@ -26,7 +26,7 @@ export const api = {
   getByNeed: (params = {}) => apiFetch('/analytics/by-need?' + new URLSearchParams(params)),
   getBySection: (params = {}) => apiFetch('/analytics/by-section?' + new URLSearchParams(params)),
   getByIssue: (params = {}) => apiFetch('/analytics/by-issue?' + new URLSearchParams(params)),
-  getVulnerability: () => apiFetch('/analytics/vulnerability'),
+  getVulnerability: (params = {}) => apiFetch('/analytics/vulnerability?' + new URLSearchParams(params)),
 
   // Insights
   askInsight: (question, conversationId) => apiFetch('/insights/ask', { method: 'POST', body: JSON.stringify({ question, conversation_id: conversationId }) }),
