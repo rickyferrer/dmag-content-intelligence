@@ -908,9 +908,24 @@ function computeQueryRisk(queries, entities) {
 }
 
 // GET /api/analytics/vulnerability
-// Crosses user need + title specificity with organic search dependency to
-// estimate AI Overview / AI Mode risk — and surfaces owned-platform strength
-// (newsletter conversion) as the strategic counter-signal.
+// Three genuinely different questions, kept as three separate numbers rather
+// than blended into one "risk" score:
+//   1. AI susceptibility — how easily an answer engine can summarize this
+//      content, from either real GSC query language (when we have it) or a
+//      title/need-type heuristic (when we don't). A property of the CONTENT.
+//   2. Search exposure — how much of the article's actual traffic (per
+//      Marfeel's source breakdown) depends on organic search at all. A
+//      property of its TRAFFIC MIX. An article can be 100% summarizable and
+//      still have nothing to lose if none of its readers arrive via search.
+//   3. Confidence — how much to trust the susceptibility estimate: real GSC
+//      data with a decent click sample earns high confidence; a handful of
+//      GSC clicks or a title-only guess (no query data at all) earns low
+//      confidence.
+// impact_priority = true_value × susceptibility × exposure × confidence is
+// the single ranking key — it can only be high when all three multiply up,
+// so a highly summarizable article with negligible search exposure (or a
+// low-confidence guess) correctly ranks low instead of looking like a
+// contradiction ("100% risk, 0% search share").
 router.get('/vulnerability', (req, res) => {
   const db = getDb();
 
@@ -961,7 +976,7 @@ router.get('/vulnerability', (req, res) => {
 
   const enriched = articles.map(art => {
     const s = srcMap[art.wp_id] || { search_pv: 0, total_pv: 0 };
-    const search_pct = s.total_pv > 0 ? (s.search_pv / s.total_pv) * 100 : 0;
+    const search_exposure_pct = s.total_pv > 0 ? (s.search_pv / s.total_pv) * 100 : 0;
     const { generic_factor, proper_noun_count, is_listicle, has_local, entities } = computeGenericFactor(art.title);
     const need_mult = NEED_RISK_MULTIPLIER[art.user_need] ?? 1;
 
@@ -969,14 +984,38 @@ router.get('/vulnerability', (req, res) => {
     // measures what people searched, not a title-text guess.
     const queryRisk = computeQueryRisk(gscByWpId[art.wp_id], entities);
     const risk_source = queryRisk ? 'gsc' : 'estimated';
-    const adjusted_risk_pct = queryRisk
+
+    // AI susceptibility: how summarizable the CONTENT is, independent of how
+    // much traffic currently depends on search. GSC path is grounded in what
+    // people actually searched; the title-based fallback is clamped well
+    // short of 0/100 since it's inferring from title text alone.
+    const susceptibility_pct = queryRisk
       ? Math.min(100, queryRisk.generic_click_share * need_mult)
-      : Math.min(100, search_pct * need_mult * generic_factor);
+      : Math.min(95, Math.max(5, need_mult * generic_factor * 55));
+
+    // Confidence in that susceptibility estimate: real query data with a
+    // decent click sample earns high confidence; a handful of GSC clicks or
+    // a pure title guess (no observed query behavior at all) earns low
+    // confidence — same small-sample caution as the Sources tab's Wilson
+    // interval work, just expressed as a simple multiplier here.
+    const confidence = queryRisk
+      ? Math.min(1, 0.5 + 0.5 * Math.min(1, queryRisk.total_clicks / 10))
+      : 0.4;
+
+    // The single ranking key: only high when the content is genuinely
+    // summarizable AND actually depends on search traffic AND we trust the
+    // estimate — a 100%-susceptible article with 0% search exposure
+    // correctly lands near zero instead of looking like a contradiction.
+    const impact_priority = (art.true_value || 0)
+      * (susceptibility_pct / 100) * (search_exposure_pct / 100) * confidence;
 
     return {
-      ...art, search_pct, adjusted_risk_pct, risk_source,
+      ...art, search_exposure_pct, susceptibility_pct, confidence, impact_priority, risk_source,
       search_pv: s.search_pv, total_source_pv: s.total_pv,
-      proper_noun_count, is_listicle, has_local,
+      proper_noun_count, is_listicle, has_local, need_mult,
+      generic_factor: risk_source === 'estimated' ? generic_factor : null,
+      generic_click_share: queryRisk?.generic_click_share ?? null,
+      gsc_click_count: queryRisk?.total_clicks ?? null,
       top_queries: queryRisk?.top_queries || null,
     };
   });
@@ -986,32 +1025,33 @@ router.get('/vulnerability', (req, res) => {
   for (const art of enriched) {
     const n = art.user_need;
     if (!needMap[n]) needMap[n] = {
-      user_need: n, article_count: 0, high_risk_count: 0, total_true_value: 0,
+      user_need: n, article_count: 0, high_susceptibility_count: 0, total_true_value: 0,
       total_users: 0, total_newsletter_signups: 0,
-      _search_sum: 0, _adj_sum: 0, _arts: [],
+      _exposure_sum: 0, _susc_sum: 0, _impact_sum: 0, _arts: [],
     };
     needMap[n].article_count++;
     needMap[n].total_true_value += art.true_value || 0;
     needMap[n].total_users += art.ga4_users || 0;
     needMap[n].total_newsletter_signups += art.mf_newsletter_signups || 0;
-    needMap[n]._search_sum += art.search_pct;
-    needMap[n]._adj_sum += art.adjusted_risk_pct;
-    if (art.adjusted_risk_pct > 50) needMap[n].high_risk_count++;
+    needMap[n]._exposure_sum += art.search_exposure_pct;
+    needMap[n]._susc_sum += art.susceptibility_pct;
+    needMap[n]._impact_sum += art.impact_priority;
+    if (art.susceptibility_pct > 50) needMap[n].high_susceptibility_count++;
     needMap[n]._arts.push(art);
   }
 
-  const byNeed = Object.values(needMap).map(({ _search_sum, _adj_sum, _arts, ...n }) => {
-    const avg_search_pct = n.article_count > 0 ? _search_sum / n.article_count : 0;
-    const avg_adjusted_risk_pct = n.article_count > 0 ? _adj_sum / n.article_count : 0;
-    const value_at_risk = n.total_true_value * (avg_adjusted_risk_pct / 100);
+  const byNeed = Object.values(needMap).map(({ _exposure_sum, _susc_sum, _impact_sum, _arts, ...n }) => {
+    const avg_search_exposure_pct = n.article_count > 0 ? _exposure_sum / n.article_count : 0;
+    const avg_susceptibility_pct = n.article_count > 0 ? _susc_sum / n.article_count : 0;
+    const total_impact_priority = _impact_sum;
     const newsletter_per_1k = n.total_users > 0 ? (n.total_newsletter_signups / n.total_users) * 1000 : 0;
-    const top_vulnerable = _arts
-      .filter(a => a.adjusted_risk_pct > 30 && a.true_value > 0)
-      .sort((a, b) => b.true_value * (b.adjusted_risk_pct / 100) - a.true_value * (a.adjusted_risk_pct / 100))
+    const top_impact = _arts
+      .filter(a => a.true_value > 0)
+      .sort((a, b) => b.impact_priority - a.impact_priority)
       .slice(0, 3)
       .map(({ _arts, ...a }) => a);
-    return { ...n, avg_search_pct, avg_adjusted_risk_pct, value_at_risk, newsletter_per_1k, top_vulnerable };
-  }).sort((a, b) => b.value_at_risk - a.value_at_risk);
+    return { ...n, avg_search_exposure_pct, avg_susceptibility_pct, total_impact_priority, newsletter_per_1k, top_impact };
+  }).sort((a, b) => b.total_impact_priority - a.total_impact_priority);
 
   // Strategic strengths — needs ranked by owned-platform conversion (newsletter
   // signups per 1k users), the counter-signal to search dependency.
@@ -1020,10 +1060,13 @@ router.get('/vulnerability', (req, res) => {
     .sort((a, b) => b.newsletter_per_1k - a.newsletter_per_1k)
     .slice(0, 5);
 
-  // Top 25 most vulnerable articles overall, by adjusted risk
+  // Top 25 articles by impact priority — the content with the most real,
+  // multiplicative reason to worry (valuable, summarizable, search-dependent,
+  // and estimated with reasonable confidence), not just the highest single
+  // factor in isolation.
   const top_vulnerable = enriched
-    .filter(a => a.adjusted_risk_pct > 40 && (a.true_value || 0) > 0 && a.total_source_pv > 100)
-    .sort((a, b) => (b.true_value * b.adjusted_risk_pct) - (a.true_value * a.adjusted_risk_pct))
+    .filter(a => (a.true_value || 0) > 0 && a.total_source_pv > 100)
+    .sort((a, b) => b.impact_priority - a.impact_priority)
     .slice(0, 25);
 
   const gsc_coverage = {
