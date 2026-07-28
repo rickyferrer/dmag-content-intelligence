@@ -23,6 +23,7 @@ export default function ContentDetail({ wpId, onClose }) {
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [reclassifying, setReclassifying] = useState(false);
+  const [reclassifyingCategories, setReclassifyingCategories] = useState(false);
 
   useEffect(() => {
     if (!wpId) return;
@@ -43,6 +44,19 @@ export default function ContentDetail({ wpId, onClose }) {
       alert('Reclassification error: ' + err.message);
     } finally {
       setReclassifying(false);
+    }
+  };
+
+  const handleReclassifyCategories = async () => {
+    setReclassifyingCategories(true);
+    try {
+      await api.reclassifyCategories(wpId);
+      const updated = await api.getContentItem(wpId);
+      setItem(updated);
+    } catch (err) {
+      alert('Topic classification error: ' + err.message);
+    } finally {
+      setReclassifyingCategories(false);
     }
   };
 
@@ -105,6 +119,18 @@ export default function ContentDetail({ wpId, onClose }) {
               }}
             >
               {reclassifying ? 'Classifying...' : 'Re-classify'}
+            </button>
+            <button
+              onClick={handleReclassifyCategories}
+              disabled={reclassifyingCategories}
+              title="Reclassify into Google's Natural Language content-category taxonomy"
+              style={{
+                fontSize: 12, padding: '5px 10px', background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)', borderRadius: 4,
+                color: 'var(--text-secondary)', opacity: reclassifyingCategories ? 0.6 : 1,
+              }}
+            >
+              {reclassifyingCategories ? 'Classifying...' : 'Re-classify Topics'}
             </button>
           </div>
 
@@ -189,6 +215,26 @@ export default function ContentDetail({ wpId, onClose }) {
                     </div>
                   ));
                 })()}
+              </div>
+            </div>
+          )}
+
+          {/* Content Topics — Google Natural Language content categories */}
+          {item.categories?.length > 0 && (
+            <div>
+              <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                Content Topics
+              </h3>
+              <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '4px 0' }}>
+                {item.categories.map(c => (
+                  <div key={c.category} style={{ padding: '8px 14px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>{c.category.replace(/^\//, '').replace(/\//g, ' › ')}</span>
+                    <div style={{ width: 60, height: 4, background: 'var(--border)', borderRadius: 2 }}>
+                      <div style={{ height: '100%', borderRadius: 2, background: 'var(--accent-gold)', opacity: 0.7, width: `${(c.confidence || 0) * 100}%` }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 32, textAlign: 'right' }}>{((c.confidence || 0) * 100).toFixed(0)}%</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}

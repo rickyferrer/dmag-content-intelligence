@@ -3,6 +3,7 @@ import { syncWordPress } from './wordpress.js';
 import { syncGA4 } from './ga4.js';
 import { syncMarfeel } from './marfeel.js';
 import { classifyUnclassified } from '../classify/userNeeds.js';
+import { classifyCategoriesUnclassified } from './nlp.js';
 import { getDb, setSyncState, getSettings } from '../db.js';
 import { getScoreParams, valueToScore } from '../utils/trueValue.js';
 import { syncGA4Sources, syncGA4DailyTotals } from './ga4.js';
@@ -11,6 +12,7 @@ import { syncGSC } from './gsc.js';
 let syncRunning = false;
 let analyticsRunning = false;
 let classifyRunning = false;
+let categoryClassifyRunning = false;
 
 // Score all content on a 0-100 scale using the shared strategic-efficiency model
 // (see utils/trueValue.js): per-reader conversion/quality rates vs. benchmarks,
@@ -441,6 +443,24 @@ export async function runClassification() {
   }
 }
 
+// Only classifies NEW/edited content (a small batch — see sync/nlp.js).
+// Backfilling the existing library is a separate, manually-run script since
+// classifyText has real per-request cost at this repo's content volume.
+export async function runCategoryClassification() {
+  if (categoryClassifyRunning) {
+    console.log('[Scheduler] Category classification already running — skipping');
+    return;
+  }
+  categoryClassifyRunning = true;
+  try {
+    await classifyCategoriesUnclassified();
+  } catch (err) {
+    console.error('[Scheduler] Category classification error:', err.message);
+  } finally {
+    categoryClassifyRunning = false;
+  }
+}
+
 export function initScheduler() {
   // Full sync once a day at 6:00am Central — content, then analytics
   // (GA4/Marfeel/GSC), then classification, run sequentially in that order
@@ -450,6 +470,7 @@ export function initScheduler() {
     await runContentSync();
     await runAnalyticsSync();
     await runClassification();
+    await runCategoryClassification();
   }, { timezone: 'America/Chicago' });
 
   console.log('[Scheduler] Cron jobs initialized — daily full sync at 6:00am Central');

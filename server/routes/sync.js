@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getSyncStatus, runContentSync, runAnalyticsSync, runClassification } from '../sync/scheduler.js';
+import { getSyncStatus, runContentSync, runAnalyticsSync, runClassification, runCategoryClassification } from '../sync/scheduler.js';
 import { logAudit } from '../db.js';
 
 const router = Router();
@@ -28,6 +28,7 @@ router.post('/trigger', async (req, res) => {
     }
     if (type === 'classify' || type === 'all') {
       await runClassification().catch(err => console.error('[Sync API] Classification error:', err.message));
+      await runCategoryClassification().catch(err => console.error('[Sync API] Category classification error:', err.message));
     }
   };
   runAll();

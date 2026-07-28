@@ -173,6 +173,21 @@ function initSchema() {
       created_at      TEXT DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_insight_messages_conv ON insight_messages(conversation_id);
+
+    -- Google Cloud Natural Language content-category classification
+    -- (https://docs.cloud.google.com/natural-language/docs/categories). One
+    -- row per (article, category) since classifyText can return several
+    -- categories per article with independent confidence scores — unlike
+    -- user_need, which is a single primary/secondary pair on content itself.
+    CREATE TABLE IF NOT EXISTS content_categories (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      wp_id       INTEGER NOT NULL,
+      category    TEXT NOT NULL,
+      confidence  REAL,
+      snapshot_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_content_categories_wp ON content_categories(wp_id);
+    CREATE INDEX IF NOT EXISTS idx_content_categories_cat ON content_categories(category);
   `);
 
   // Schema migrations — safe to run on every startup
@@ -180,6 +195,7 @@ function initSchema() {
   try { db.exec("ALTER TABLE content ADD COLUMN writer TEXT DEFAULT ''"); } catch {}
   try { db.exec('ALTER TABLE content ADD COLUMN excluded_from_scoring INTEGER DEFAULT 0'); } catch {}
   try { db.exec('ALTER TABLE site_daily_metrics ADD COLUMN newsletter_signups INTEGER DEFAULT 0'); } catch {}
+  try { db.exec('ALTER TABLE content ADD COLUMN nlp_classified_at TEXT'); } catch {}
 
   // Seed default scoring weights if not present.
   // The True Value score blends per-reader conversion/quality rates, weighted by

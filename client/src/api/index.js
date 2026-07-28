@@ -20,6 +20,7 @@ export const api = {
   getTaxonomies: () => apiFetch('/content/taxonomies'),
   getWriters: () => apiFetch('/content/writers'),
   reclassify: (id) => apiFetch(`/content/${id}/reclassify`, { method: 'POST' }),
+  reclassifyCategories: (id) => apiFetch(`/content/${id}/reclassify-categories`, { method: 'POST' }),
 
   // Analytics
   getSummary: (params = {}) => apiFetch('/analytics/summary?' + new URLSearchParams(params)),

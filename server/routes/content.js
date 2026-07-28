@@ -1,7 +1,18 @@
 import { Router } from 'express';
 import { getDb, getSettings } from '../db.js';
 import { classifySingle } from '../classify/userNeeds.js';
+import { classifyCategoriesSingle } from '../sync/nlp.js';
 import { getValueBreakdown } from '../utils/trueValue.js';
+
+// A Google content-category path looks like "/Food & Drink/Restaurants" —
+// the filter dropdown works off the top-level segment (~30 options) since
+// the full taxonomy runs to several hundred leaf nodes, too many for a
+// single-select dropdown. Matching `category LIKE topLevel + '%'` catches
+// both the top-level category itself and any of its more specific children.
+function topLevelCategory(path) {
+  const m = /^(\/[^/]+)/.exec(path || '');
+  return m ? m[1] : path;
+}
 
 const router = Router();
 
@@ -10,7 +21,7 @@ router.get('/', (req, res) => {
   const db = getDb();
   const {
     type, section, category, tag, need, writer, issue, search,
-    dateFrom, dateTo,
+    nlpCategory, dateFrom, dateTo,
     sortBy = 'published_at', order = 'desc',
     page = 1, limit = 50,
   } = req.query;
@@ -52,6 +63,10 @@ router.get('/', (req, res) => {
   if (tag) { where.push("c.tags LIKE ?"); params.push(`%"slug":"${tag}"%`); }
   if (issue) { where.push("c.url LIKE ?"); params.push(`%/publications/${issue}/%`); }
   if (search) { where.push('(c.title LIKE ? OR c.url LIKE ?)'); params.push(`%${search}%`, `%${search}%`); }
+  if (nlpCategory) {
+    where.push('EXISTS (SELECT 1 FROM content_categories cc WHERE cc.wp_id = c.wp_id AND cc.category LIKE ?)');
+    params.push(`${nlpCategory}%`);
+  }
 
   const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
@@ -139,10 +154,25 @@ router.get('/taxonomies', (req, res) => {
     } catch { /* ignore */ }
   }
 
+  // Google content categories — one DISTINCT wp_id per top-level category,
+  // not one row per content_categories row (an article usually has several
+  // category rows, and counting those would inflate the per-category count).
+  const nlpCatRows = db.prepare('SELECT DISTINCT wp_id, category FROM content_categories').all();
+  const nlpCatMap = new Map(); // topLevel -> Set(wp_id)
+  for (const row of nlpCatRows) {
+    const top = topLevelCategory(row.category);
+    if (!nlpCatMap.has(top)) nlpCatMap.set(top, new Set());
+    nlpCatMap.get(top).add(row.wp_id);
+  }
+  const nlpCategories = [...nlpCatMap.entries()]
+    .map(([path, ids]) => ({ path, label: path.replace(/^\//, ''), count: ids.size }))
+    .sort((a, b) => b.count - a.count);
+
   res.json({
     sections,
     categories: [...catMap.values()].sort((a, b) => b.count - a.count).slice(0, 100),
     tags: [...tagMap.values()].sort((a, b) => b.count - a.count).slice(0, 200),
+    nlpCategories,
   });
 });
 
@@ -182,7 +212,11 @@ router.get('/:id', (req, res) => {
 
   const breakdown = getValueBreakdown(item, getSettings());
 
-  res.json({ ...item, history, sources, trueValueBreakdown: breakdown });
+  const categories = db.prepare(
+    'SELECT category, confidence FROM content_categories WHERE wp_id = ? ORDER BY confidence DESC'
+  ).all(wpId);
+
+  res.json({ ...item, history, sources, categories, trueValueBreakdown: breakdown });
 });
 
 // POST /api/content/:id/reclassify
@@ -190,6 +224,17 @@ router.post('/:id/reclassify', async (req, res) => {
   const wpId = parseInt(req.params.id);
   try {
     const result = await classifySingle(wpId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/content/:id/reclassify-categories
+router.post('/:id/reclassify-categories', async (req, res) => {
+  const wpId = parseInt(req.params.id);
+  try {
+    const result = await classifyCategoriesSingle(wpId);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

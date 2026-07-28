@@ -87,6 +87,23 @@ GA4_KEY_FILE=./credentials/ga4-service-account.json
 # access to the property in Search Console → Settings → Users and permissions)
 GSC_SITE_URL=sc-domain:dmagazine.com
 
+# Google Natural Language content categories (reuses the GA4 service account
+# by default — no separate credentials needed, just enable the API):
+#   1. In the same GCP project as GA4_KEY_FILE, enable the Cloud Natural
+#      Language API: console.cloud.google.com/apis/library/language.googleapis.com
+#   2. That's it — no new IAM role needed beyond enabling the API.
+# To use a different service account instead, set NLP_KEY_FILE (or
+# NLP_SERVICE_ACCOUNT_JSON, base64-encoded, same as GA4_SERVICE_ACCOUNT_JSON).
+#
+# Cost: classifyText is billed per request beyond a small free tier
+# (~5,000 units/month). The daily cron only classifies NEW/edited content,
+# which stays well within the free tier. The existing content library is
+# NOT backfilled automatically — run it manually, in controlled chunks,
+# once you've confirmed the cost is acceptable:
+#   node --env-file=.env server/scripts/backfill-nlp-categories.mjs --limit=200
+# NLP_KEY_FILE=./credentials/ga4-service-account.json   # optional override
+# NLP_BATCH_SIZE=20                                     # optional override, per cron run
+
 # Marfeel
 MARFEEL_EMAIL=...
 MARFEEL_PASSWORD=...

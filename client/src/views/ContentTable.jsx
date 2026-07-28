@@ -51,12 +51,12 @@ export default function ContentTable({ onSelect }) {
   const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 1 });
   const [loading, setLoading] = useState(false);
   const [types, setTypes] = useState([]);
-  const [taxonomies, setTaxonomies] = useState({ sections: [], categories: [], tags: [] });
+  const [taxonomies, setTaxonomies] = useState({ sections: [], categories: [], tags: [], nlpCategories: [] });
   const [writers, setWriters] = useState([]);
 
   const [issues, setIssues] = useState([]);
   const [filters, setFilters] = useState({
-    type: '', section: '', category: '', need: '', writer: '', issue: '', search: '',
+    type: '', section: '', category: '', nlpCategory: '', need: '', writer: '', issue: '', search: '',
     datePreset: DEFAULT_PRESET, dateFrom: initFrom, dateTo: initTo,
     sortBy: 'published_at', order: 'desc', page: 1, limit: 50,
   });
@@ -112,7 +112,7 @@ export default function ContentTable({ onSelect }) {
     setSearchInput('');
     const next = {
       ...filterRef.current,
-      type: '', section: '', category: '', need: '', writer: '', issue: '', search: '',
+      type: '', section: '', category: '', nlpCategory: '', need: '', writer: '', issue: '', search: '',
       datePreset: DEFAULT_PRESET, dateFrom: initFrom, dateTo: initTo,
       page: 1,
     };
@@ -152,6 +152,7 @@ export default function ContentTable({ onSelect }) {
   const typeOptions = types.map(t => ({ value: t.content_type, label: `${t.content_type} (${t.count})` }));
   const sectionOptions = taxonomies.sections.slice(0, 50).map(s => ({ value: s.section, label: `${s.section} (${s.count})` }));
   const categoryOptions = taxonomies.categories.slice(0, 100).map(c => ({ value: c.slug, label: `${c.name} (${c.count})` }));
+  const nlpCategoryOptions = taxonomies.nlpCategories.map(c => ({ value: c.path, label: `${c.label} (${c.count})` }));
   const needOptions = USER_NEEDS.map(n => ({ value: n, label: n.replace(/_/g, ' ') }));
   const writerOptions = writers.map(w => ({ value: w.writer, label: `${w.writer} (${w.count})` }));
   const issueOptions = issues.map(i => ({
@@ -167,6 +168,10 @@ export default function ContentTable({ onSelect }) {
   if (filters.category) {
     const cat = taxonomies.categories.find(c => c.slug === filters.category);
     activeFilters.push({ key: 'category', label: `Category: ${cat?.name || filters.category}` });
+  }
+  if (filters.nlpCategory) {
+    const topic = taxonomies.nlpCategories.find(c => c.path === filters.nlpCategory);
+    activeFilters.push({ key: 'nlpCategory', label: `Topic: ${topic?.label || filters.nlpCategory}` });
   }
   if (filters.need) activeFilters.push({ key: 'need', label: `Need: ${filters.need.replace(/_/g, ' ')}` });
   if (filters.writer) activeFilters.push({ key: 'writer', label: `Writer: ${filters.writer}` });
@@ -198,6 +203,11 @@ export default function ContentTable({ onSelect }) {
         <SearchableSelect value={filters.type} onChange={v => setFilter('type', v)} options={typeOptions} placeholder="All Types" />
         <SearchableSelect value={filters.section} onChange={v => setFilter('section', v)} options={sectionOptions} placeholder="All Sections" />
         <SearchableSelect value={filters.category} onChange={v => setFilter('category', v)} options={categoryOptions} placeholder="All Categories" />
+        {taxonomies.nlpCategories.length > 0 && (
+          <span title="Topic — Google Natural Language content category, distinct from the WordPress Category filter">
+            <SearchableSelect value={filters.nlpCategory} onChange={v => setFilter('nlpCategory', v)} options={nlpCategoryOptions} placeholder="All Topics" />
+          </span>
+        )}
         <SearchableSelect value={filters.need} onChange={v => setFilter('need', v)} options={needOptions} placeholder="All User Needs" />
         <SearchableSelect value={filters.writer} onChange={v => setFilter('writer', v)} options={writerOptions} placeholder="All Writers" minWidth={180} />
         {issues.length > 0 && (
