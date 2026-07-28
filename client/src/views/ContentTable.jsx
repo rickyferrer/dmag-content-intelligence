@@ -56,7 +56,7 @@ export default function ContentTable({ onSelect }) {
 
   const [issues, setIssues] = useState([]);
   const [filters, setFilters] = useState({
-    type: '', section: '', category: '', nlpCategory: '', need: '', writer: '', issue: '', search: '',
+    type: '', section: '', category: '', nlpCategory: '', tag: '', need: '', writer: '', issue: '', search: '',
     datePreset: DEFAULT_PRESET, dateFrom: initFrom, dateTo: initTo,
     sortBy: 'published_at', order: 'desc', page: 1, limit: 50,
   });
@@ -112,7 +112,7 @@ export default function ContentTable({ onSelect }) {
     setSearchInput('');
     const next = {
       ...filterRef.current,
-      type: '', section: '', category: '', nlpCategory: '', need: '', writer: '', issue: '', search: '',
+      type: '', section: '', category: '', nlpCategory: '', tag: '', need: '', writer: '', issue: '', search: '',
       datePreset: DEFAULT_PRESET, dateFrom: initFrom, dateTo: initTo,
       page: 1,
     };
@@ -153,6 +153,7 @@ export default function ContentTable({ onSelect }) {
   const sectionOptions = taxonomies.sections.slice(0, 50).map(s => ({ value: s.section, label: `${s.section} (${s.count})` }));
   const categoryOptions = taxonomies.categories.slice(0, 100).map(c => ({ value: c.slug, label: `${c.name} (${c.count})` }));
   const nlpCategoryOptions = taxonomies.nlpCategories.map(c => ({ value: c.path, label: `${c.label} (${c.count})` }));
+  const tagOptions = taxonomies.tags.map(t => ({ value: t.slug, label: `${t.name} (${t.count})` }));
   const needOptions = USER_NEEDS.map(n => ({ value: n, label: n.replace(/_/g, ' ') }));
   const writerOptions = writers.map(w => ({ value: w.writer, label: `${w.writer} (${w.count})` }));
   const issueOptions = issues.map(i => ({
@@ -172,6 +173,10 @@ export default function ContentTable({ onSelect }) {
   if (filters.nlpCategory) {
     const topic = taxonomies.nlpCategories.find(c => c.path === filters.nlpCategory);
     activeFilters.push({ key: 'nlpCategory', label: `Topic: ${topic?.label || filters.nlpCategory}` });
+  }
+  if (filters.tag) {
+    const tag = taxonomies.tags.find(t => t.slug === filters.tag);
+    activeFilters.push({ key: 'tag', label: `Tag: ${tag?.name || filters.tag}` });
   }
   if (filters.need) activeFilters.push({ key: 'need', label: `Need: ${filters.need.replace(/_/g, ' ')}` });
   if (filters.writer) activeFilters.push({ key: 'writer', label: `Writer: ${filters.writer}` });
@@ -208,6 +213,7 @@ export default function ContentTable({ onSelect }) {
             <SearchableSelect value={filters.nlpCategory} onChange={v => setFilter('nlpCategory', v)} options={nlpCategoryOptions} placeholder="All Topics" />
           </span>
         )}
+        <SearchableSelect value={filters.tag} onChange={v => setFilter('tag', v)} options={tagOptions} placeholder="All Tags" minWidth={160} />
         <SearchableSelect value={filters.need} onChange={v => setFilter('need', v)} options={needOptions} placeholder="All User Needs" />
         <SearchableSelect value={filters.writer} onChange={v => setFilter('writer', v)} options={writerOptions} placeholder="All Writers" minWidth={180} />
         {issues.length > 0 && (
