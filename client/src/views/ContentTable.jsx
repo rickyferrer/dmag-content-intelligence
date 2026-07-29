@@ -343,7 +343,23 @@ export default function ContentTable({ onSelect }) {
             {rows.length === 0 && !loading && (
               <tr>
                 <td colSpan={12} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
-                  No content found
+                  {activeFilters.length > 0 ? (
+                    <>
+                      <div>No content matches these filters.</div>
+                      <button
+                        onClick={clearAll}
+                        style={{
+                          marginTop: 12, padding: '6px 14px', borderRadius: 4, fontSize: 12,
+                          background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Clear all filters
+                      </button>
+                    </>
+                  ) : (
+                    'No content found'
+                  )}
                 </td>
               </tr>
             )}
