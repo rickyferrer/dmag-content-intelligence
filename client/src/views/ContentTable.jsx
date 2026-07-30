@@ -58,7 +58,7 @@ export default function ContentTable({ onSelect }) {
   const [filters, setFilters] = useState({
     type: '', section: '', category: '', nlpCategory: '', tag: '', need: '', writer: '', issue: '', search: '',
     datePreset: DEFAULT_PRESET, dateFrom: initFrom, dateTo: initTo,
-    sortBy: 'published_at', order: 'desc', page: 1, limit: 50,
+    sortBy: 'true_value', order: 'desc', page: 1, limit: 50,
   });
   const [searchInput, setSearchInput] = useState('');
 
