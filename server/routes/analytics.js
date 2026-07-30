@@ -836,9 +836,20 @@ function stripHtml(str) {
 // Estimate how "generic" a title is: proper-noun anchored / hyperlocal titles
 // get a lower (more durable) factor, generic listicle/how-to titles get higher.
 // Also returns the extracted entity tokens, reused to classify real GSC queries.
+// "Best of X" / "Top N" titles get flagged as generic listicles (is_listicle
+// below) — but that pattern conflates two very different things: a list
+// compiled from public info an AI could just as easily compile (genuinely
+// summarizable), and a judged awards franchise where staff actually did the
+// legwork — tasted the food, visited the business, sat on a judging panel —
+// which no AI can independently replicate or verify. "Winners"/"Award(s)" in
+// the title is a reasonably generalizable signal for the latter (Best
+// Lawyers, Best Doctors, 40 Under 40, D CEO Awards, Best of Big D Winners,
+// etc.) without hardcoding a fragile list of specific franchise names.
+const AWARDS_SIGNAL = /\b(winners?|award(s)?)\b/i;
+
 function computeGenericFactor(rawTitle) {
   const title = stripHtml(rawTitle).trim();
-  if (!title) return { generic_factor: 1, proper_noun_count: 0, is_listicle: false, has_local: false, entities: [] };
+  if (!title) return { generic_factor: 1, proper_noun_count: 0, is_listicle: false, has_local: false, has_awards_signal: false, entities: [] };
 
   const words = title.split(/\s+/);
   let entityCount = 0;
@@ -866,15 +877,17 @@ function computeGenericFactor(rawTitle) {
   const lower = title.toLowerCase();
   const is_listicle = /^(the\s+)?(top\s+\d+|(\d+\s+)?(best|worst)\b|how to|guide to|everything you need to know|what is|why (you|we|is))/i.test(title);
   const has_local = LOCAL_MARKERS.some(m => lower.includes(m));
+  const has_awards_signal = AWARDS_SIGNAL.test(title);
 
   let generic_factor = 1;
   if (entityCount >= 2) generic_factor *= 0.55;
   else if (entityCount === 1) generic_factor *= 0.8;
   if (is_listicle) generic_factor *= 1.25;
+  if (has_awards_signal) generic_factor *= 0.6;
   if (has_local) generic_factor *= 0.9;
   generic_factor = Math.max(0.3, Math.min(1.4, generic_factor));
 
-  return { generic_factor, proper_noun_count: entityCount, is_listicle, has_local, entities };
+  return { generic_factor, proper_noun_count: entityCount, is_listicle, has_local, has_awards_signal, entities };
 }
 
 // Classify a real GSC search query by intent, not just "branded vs generic" —
@@ -1033,7 +1046,7 @@ router.get('/vulnerability', (req, res) => {
   let enriched = articles.map(art => {
     const s = srcMap[art.wp_id] || { search_pv: 0, total_pv: 0 };
     const search_exposure_pct = s.total_pv > 0 ? (s.search_pv / s.total_pv) * 100 : 0;
-    const { generic_factor, proper_noun_count, is_listicle, has_local, entities } = computeGenericFactor(art.title);
+    const { generic_factor, proper_noun_count, is_listicle, has_local, has_awards_signal, entities } = computeGenericFactor(art.title);
     const need_mult = NEED_RISK_MULTIPLIER[art.user_need] ?? 1;
 
     // Prefer real GSC query classification when we have it — it directly
@@ -1074,7 +1087,7 @@ router.get('/vulnerability', (req, res) => {
     return {
       ...art, search_exposure_pct, susceptibility_pct, confidence, impact_priority, risk_source,
       search_pv: s.search_pv, total_source_pv: s.total_pv,
-      proper_noun_count, is_listicle, has_local, need_mult,
+      proper_noun_count, is_listicle, has_local, has_awards_signal, need_mult,
       publication: extractPublication(art.url),
       generic_factor: risk_source === 'estimated' ? generic_factor : null,
       query_categories: queryRisk?.by_category ?? null,
