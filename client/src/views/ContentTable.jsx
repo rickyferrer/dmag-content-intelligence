@@ -65,16 +65,24 @@ export default function ContentTable({ onSelect }) {
   const filterRef = useRef(filters);
   filterRef.current = filters;
 
+  const requestIdRef = useRef(0);
+
   const load = useCallback((f) => {
     setLoading(true);
+    const requestId = ++requestIdRef.current;
     const params = Object.fromEntries(Object.entries(f).filter(([, v]) => v !== ''));
     api.getContent(params)
       .then(res => {
+        // A newer request may have resolved first; ignore stale responses so
+        // they don't clobber the latest filter/sort with outdated rows.
+        if (requestId !== requestIdRef.current) return;
         setRows(res.data);
         setPagination(res.pagination);
       })
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (requestId === requestIdRef.current) setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
