@@ -1024,11 +1024,20 @@ router.get('/vulnerability', (req, res) => {
     WHERE ${where.join(' AND ')}
   `).all(...params);
 
-  // Real search queries from the latest GSC snapshot, grouped by article.
+  // Real search queries, unioned across all retained snapshots (each covers
+  // a rolling 90-day window; scheduler.js keeps the last 5). Using only the
+  // single latest snapshot dropped any article whose search activity had
+  // aged out of the current 90-day window, forcing it back to the title
+  // guess even though we had real data for it. One row per (wp_id, query),
+  // preferring the most recent snapshot that has it — not summed, so a
+  // query's clicks aren't double-counted across overlapping windows.
   const gscRows = db.prepare(`
-    SELECT wp_id, query, clicks, impressions, ctr, position
-    FROM gsc_queries
-    WHERE snapshot_at = (SELECT MAX(snapshot_at) FROM gsc_queries)
+    SELECT wp_id, query, clicks, impressions, ctr, position FROM (
+      SELECT wp_id, query, clicks, impressions, ctr, position,
+        ROW_NUMBER() OVER (PARTITION BY wp_id, query ORDER BY snapshot_at DESC) AS rn
+      FROM gsc_queries
+    )
+    WHERE rn = 1
   `).all();
   const gscByWpId = {};
   for (const row of gscRows) {
