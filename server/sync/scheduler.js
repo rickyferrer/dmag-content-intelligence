@@ -7,7 +7,7 @@ import { classifyCategoriesUnclassified } from './nlp.js';
 import { getDb, setSyncState, getSettings } from '../db.js';
 import { getScoreParams, valueToScore } from '../utils/trueValue.js';
 import { syncGA4Sources, syncGA4DailyTotals } from './ga4.js';
-import { syncGSC } from './gsc.js';
+import { syncGSC, syncGSCTrend } from './gsc.js';
 
 let syncRunning = false;
 let analyticsRunning = false;
@@ -411,6 +411,51 @@ export async function runAnalyticsSync() {
     } catch (err) {
       console.error('[Scheduler] GSC sync error:', err.message);
       setSyncState('last_gsc_sync_error', err.message);
+    }
+
+    // ── Search Console — per-page daily trend (no query dimension) ───────────
+    // Fills the CTR-decline fallback signal for articles that never earn
+    // enough per-query clicks to appear in gsc_queries. Independent try/catch
+    // so a trend-sync failure doesn't block the per-query sync above.
+    try {
+      const trendByUrl = await syncGSCTrend();
+      if (trendByUrl.size > 0) {
+        const urlToWpId = new Map();
+        for (const row of content) {
+          if (!row.url) continue;
+          const norm = (() => { try { const u = new URL(row.url); return u.origin + u.pathname; } catch { return row.url; } })();
+          urlToWpId.set(norm, row.wp_id);
+          urlToWpId.set(norm.endsWith('/') ? norm.slice(0, -1) : norm + '/', row.wp_id);
+        }
+
+        const upsertTrend = db.prepare(`
+          INSERT INTO gsc_page_daily (wp_id, date, clicks, impressions, ctr, position)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(wp_id, date) DO UPDATE SET
+            clicks = excluded.clicks, impressions = excluded.impressions,
+            ctr = excluded.ctr, position = excluded.position
+        `);
+        let trendUpserted = 0, trendMatched = 0;
+        db.transaction(() => {
+          for (const [url, days] of trendByUrl) {
+            const wpId = urlToWpId.get(url);
+            if (!wpId) continue;
+            trendMatched++;
+            for (const d of days) {
+              upsertTrend.run(wpId, d.date, d.clicks, d.impressions, d.ctr, d.position);
+              trendUpserted++;
+            }
+          }
+        })();
+        // Each sync re-fetches the full 90-day window, so any stored day
+        // older than that has aged out of GSC's own lookback — drop it.
+        db.prepare(`DELETE FROM gsc_page_daily WHERE date < date('now', '-95 days')`).run();
+        console.log(`[Scheduler] GSC trend: ${trendUpserted} day rows written for ${trendMatched} articles`);
+      }
+      setSyncState('last_gsc_trend_sync', snapshotAt);
+    } catch (err) {
+      console.error('[Scheduler] GSC trend sync error:', err.message);
+      setSyncState('last_gsc_trend_sync_error', err.message);
     }
 
     // ── Score all content on 1-100 scale ──────────────────────────────────────

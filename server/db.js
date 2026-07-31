@@ -124,6 +124,23 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_gsc_wp_snap ON gsc_queries(wp_id, snapshot_at);
     CREATE INDEX IF NOT EXISTS idx_gsc_snap     ON gsc_queries(snapshot_at);
 
+    -- Per-page (not per-query) daily GSC performance — used to detect the AI
+    -- Overview "fingerprint" (impressions holding steady while CTR drops) for
+    -- articles that never get enough clicks on any single query to show up
+    -- in gsc_queries. One row per (wp_id, date); each sync overwrites the
+    -- days it re-fetches, so this stays current without snapshot retention.
+    CREATE TABLE IF NOT EXISTS gsc_page_daily (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      wp_id       INTEGER,
+      date        TEXT,
+      clicks      INTEGER DEFAULT 0,
+      impressions INTEGER DEFAULT 0,
+      ctr         REAL    DEFAULT 0,
+      position    REAL    DEFAULT 0,
+      FOREIGN KEY (wp_id) REFERENCES content(wp_id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_gsc_daily_wp_date ON gsc_page_daily(wp_id, date);
+
     -- Site-wide GA4 traffic by calendar date, independent of which articles
     -- were published that day. Lets date-range filters answer "how much
     -- traffic did the site get in this window" rather than only "how did

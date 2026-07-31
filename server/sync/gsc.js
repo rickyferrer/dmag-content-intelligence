@@ -5,7 +5,7 @@ const SITE_URL = process.env.GSC_SITE_URL || 'sc-domain:dmagazine.com';
 const KEY_FILE = process.env.GA4_KEY_FILE || './credentials/ga4-service-account.json';
 const LOOKBACK_DAYS = 90;
 const ROW_LIMIT = 25000;
-const MAX_PAGES = 10; // safety cap — up to 250k page+query rows per sync
+const MAX_PAGES = 10; // safety cap — up to 250k rows per sync
 
 async function getAccessToken() {
   const { GoogleAuth } = await import('google-auth-library');
@@ -28,8 +28,11 @@ function fmtDate(d) {
   return d.toISOString().slice(0, 10);
 }
 
-// Fetch page+query rows from Search Console, paginated.
-async function fetchSearchAnalytics(token) {
+// Fetch rows from Search Console for the given dimension combination,
+// paginated. Shared by the per-query sync (dimensions: page, query) and the
+// per-day trend sync (dimensions: page, date) — same API, same auth, same
+// pagination, just a different breakdown of the same 90-day window.
+async function fetchSearchAnalytics(token, dimensions) {
   const endDate = new Date();
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - LOOKBACK_DAYS);
@@ -54,7 +57,7 @@ async function fetchSearchAnalytics(token) {
         body: JSON.stringify({
           startDate: fmtDate(startDate),
           endDate: fmtDate(endDate),
-          dimensions: ['page', 'query'],
+          dimensions,
           rowLimit: ROW_LIMIT,
           startRow,
         }),
@@ -94,7 +97,7 @@ function normalizeUrl(raw) {
 
 export async function syncGSC() {
   const token = await getAccessToken();
-  const rows = await fetchSearchAnalytics(token);
+  const rows = await fetchSearchAnalytics(token, ['page', 'query']);
 
   console.log(`[GSC] Fetched ${rows.length} page+query rows (last ${LOOKBACK_DAYS} days)`);
 
@@ -106,6 +109,34 @@ export async function syncGSC() {
     if (!byUrl.has(norm)) byUrl.set(norm, []);
     byUrl.get(norm).push({
       query,
+      clicks: row.clicks || 0,
+      impressions: row.impressions || 0,
+      ctr: row.ctr || 0,
+      position: row.position || 0,
+    });
+  }
+
+  return byUrl;
+}
+
+// Per-page daily trend — no query dimension, so a page shows up here even
+// when it never earns enough clicks on any single query to appear in
+// gsc_queries. This is what powers the CTR-decline-while-impressions-hold
+// fallback signal for articles that would otherwise fall back to a pure
+// title guess.
+export async function syncGSCTrend() {
+  const token = await getAccessToken();
+  const rows = await fetchSearchAnalytics(token, ['page', 'date']);
+
+  console.log(`[GSC] Fetched ${rows.length} page+date rows (last ${LOOKBACK_DAYS} days)`);
+
+  const byUrl = new Map(); // normalizedUrl → [{date, clicks, impressions, ctr, position}]
+  for (const row of rows) {
+    const [page, date] = row.keys;
+    const norm = normalizeUrl(page);
+    if (!byUrl.has(norm)) byUrl.set(norm, []);
+    byUrl.get(norm).push({
+      date,
       clicks: row.clicks || 0,
       impressions: row.impressions || 0,
       ctr: row.ctr || 0,

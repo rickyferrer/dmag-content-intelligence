@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
 import { fetchUsersForRange, fetchLoyalUsersForRange } from '../sync/ga4.js';
+import { computeTrendRisk } from '../utils/gscTrend.js';
 
 const router = Router();
 
@@ -1045,6 +1046,16 @@ router.get('/vulnerability', (req, res) => {
     gscByWpId[row.wp_id].push(row);
   }
 
+  // Per-page daily trend — fallback signal for articles with no per-query
+  // data at all (never earned enough clicks on any single query to appear
+  // in gsc_queries, but Search Console still recorded page-level impressions).
+  const trendRows = db.prepare(`SELECT wp_id, date, clicks, impressions FROM gsc_page_daily`).all();
+  const trendByWpId = {};
+  for (const row of trendRows) {
+    if (!trendByWpId[row.wp_id]) trendByWpId[row.wp_id] = [];
+    trendByWpId[row.wp_id].push(row);
+  }
+
   // Imprint (D Magazine / D Home / D CEO) parsed from URL, same pattern as
   // /by-issue — only articles under /publications/{imprint}/... have one.
   function extractPublication(url) {
@@ -1059,19 +1070,27 @@ router.get('/vulnerability', (req, res) => {
     const need_mult = NEED_RISK_MULTIPLIER[art.user_need] ?? 1;
 
     // Prefer real GSC query classification when we have it — it directly
-    // measures what people searched, not a title-text guess.
+    // measures what people searched, not a title-text guess. Next best:
+    // a real CTR-decline-while-impressions-hold trend from per-page daily
+    // data — still observed behavior, just without query-level intent.
+    // Title guess is the last resort, used only when Search Console has
+    // nothing usable for this article at all.
     const queryRisk = computeQueryRisk(gscByWpId[art.wp_id], entities);
-    const risk_source = queryRisk ? 'gsc' : 'estimated';
+    const trendRisk = queryRisk ? null : computeTrendRisk(trendByWpId[art.wp_id]);
+    const risk_source = queryRisk ? 'gsc' : trendRisk ? 'ctr_trend' : 'estimated';
 
     // AI susceptibility: how summarizable the CONTENT is, independent of how
     // much traffic currently depends on search. GSC path is grounded in what
     // people actually searched (now weighted across branded/navigational/
     // local/informational intent, not a flat generic/branded split); the
-    // title-based fallback is clamped well short of 0/100 since it's
-    // inferring from title text alone.
+    // trend path is grounded in an observed CTR shift; the title-based
+    // fallback is clamped well short of 0/100 since it's inferring from
+    // title text alone.
     const susceptibility_pct = queryRisk
       ? Math.min(100, queryRisk.weighted_risk_pct * need_mult)
-      : Math.min(95, Math.max(5, need_mult * generic_factor * 55));
+      : trendRisk
+        ? Math.min(100, trendRisk.weighted_risk_pct * need_mult)
+        : Math.min(95, Math.max(5, need_mult * generic_factor * 55));
 
     // Confidence in that susceptibility estimate: real query data with a
     // decent click sample earns high confidence; a pure title guess (no
@@ -1081,10 +1100,14 @@ router.get('/vulnerability', (req, res) => {
     // the title-estimate baseline at very low click counts: a single GSC
     // click's query classification isn't more trustworthy than a heuristic
     // informed by thousands of similar articles, so it shouldn't score
-    // higher just because it's technically "real data."
+    // higher just because it's technically "real data." The trend signal's
+    // own confidence (from computeTrendRisk) is capped below the query path
+    // for the same reason — it's derived/observed, not directly classified.
     const confidence = queryRisk
       ? Math.min(1, 0.3 + 0.7 * Math.min(1, queryRisk.total_clicks / 10))
-      : 0.4;
+      : trendRisk
+        ? trendRisk.confidence
+        : 0.4;
 
     // The single ranking key: only high when the content is genuinely
     // summarizable AND actually depends on search traffic AND we trust the
@@ -1102,6 +1125,8 @@ router.get('/vulnerability', (req, res) => {
       query_categories: queryRisk?.by_category ?? null,
       gsc_click_count: queryRisk?.total_clicks ?? null,
       top_queries: queryRisk?.top_queries || null,
+      ctr_drop_pct: trendRisk?.ctr_drop_pct ?? null,
+      trend_recent_impressions: trendRisk?.recent_impressions ?? null,
     };
   });
 
@@ -1163,6 +1188,7 @@ router.get('/vulnerability', (req, res) => {
 
   const gsc_coverage = {
     articles_with_real_data: enriched.filter(a => a.risk_source === 'gsc').length,
+    articles_with_trend_data: enriched.filter(a => a.risk_source === 'ctr_trend').length,
     articles_total: enriched.length,
   };
 
