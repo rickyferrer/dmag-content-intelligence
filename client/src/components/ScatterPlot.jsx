@@ -21,7 +21,7 @@ const CustomTooltip = ({ active, payload }) => {
     }}>
       <div style={{ color: meta.color, fontWeight: 600, marginBottom: 4 }}>{meta.label}</div>
       <div style={{ color: 'var(--text-secondary)' }}>Articles: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{d.article_count}</span></div>
-      <div style={{ color: 'var(--text-secondary)' }}>Avg True Value: <span style={{ color: 'var(--accent-gold)', fontFamily: 'var(--font-mono)' }}>{d.avg_true_value?.toFixed(1)}</span></div>
+      <div style={{ color: 'var(--text-secondary)' }}>Avg Content Value: <span style={{ color: 'var(--accent-gold)', fontFamily: 'var(--font-mono)' }}>{d.avg_true_value?.toFixed(1)}</span></div>
       <div style={{ color: 'var(--text-secondary)' }}>Total Pageviews: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{d.total_pageviews?.toLocaleString()}</span></div>
     </div>
   );
@@ -49,8 +49,8 @@ export default function ScatterPlot({ data }) {
         />
         <YAxis
           dataKey="avg_true_value"
-          name="Avg True Value"
-          label={{ value: 'Avg True Value', angle: -90, position: 'insideLeft', fill: 'var(--text-muted)', fontSize: 11 }}
+          name="Avg Content Value"
+          label={{ value: 'Avg Content Value', angle: -90, position: 'insideLeft', fill: 'var(--text-muted)', fontSize: 11 }}
           tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
           stroke="var(--border)"
         />

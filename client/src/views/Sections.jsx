@@ -94,7 +94,7 @@ export default function Sections() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-elevated)' }}>
-                {['Section', 'Articles', 'Total True Value', 'YOY', 'Users', 'Loyal Users', 'Pageviews', 'Sub Clicks', 'Newsletter', 'Avg Eng. Time', 'Top Article'].map(h => (
+                {['Section', 'Articles', 'Total Content Value', 'YOY', 'Users', 'Loyal Users', 'Pageviews', 'Sub Clicks', 'Newsletter', 'Avg Eng. Time', 'Top Article'].map(h => (
                   <th key={h} style={{
                     padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600,
                     color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',

@@ -134,7 +134,7 @@ export default function ContentDetail({ wpId, onClose }) {
             </button>
           </div>
 
-          {/* True Value Breakdown */}
+          {/* Content Value Breakdown */}
           {item.trueValueBreakdown && (() => {
             const bd = item.trueValueBreakdown;
             const DIMS = [
@@ -146,7 +146,7 @@ export default function ContentDetail({ wpId, onClose }) {
             ];
             return (
               <div>
-                <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>True Value Breakdown</h3>
+                <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Content Value Breakdown</h3>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
                   <div style={{ fontSize: 34, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-gold)', lineHeight: 1 }}>
                     {bd.score}
@@ -242,7 +242,7 @@ export default function ContentDetail({ wpId, onClose }) {
           {/* History chart */}
           {item.history?.length > 1 && (
             <div>
-              <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>True Value History</h3>
+              <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Content Value History</h3>
               <ResponsiveContainer width="100%" height={160}>
                 <LineChart data={item.history} margin={{ left: 0, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -252,7 +252,7 @@ export default function ContentDetail({ wpId, onClose }) {
                     contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }}
                     labelStyle={{ color: 'var(--text-secondary)' }}
                   />
-                  <Line type="monotone" dataKey="true_value" stroke="var(--accent-gold)" strokeWidth={2} dot={false} name="True Value" />
+                  <Line type="monotone" dataKey="true_value" stroke="var(--accent-gold)" strokeWidth={2} dot={false} name="Content Value" />
                 </LineChart>
               </ResponsiveContainer>
             </div>

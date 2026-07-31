@@ -1,4 +1,4 @@
-// Single source of truth for the True Value model.
+// Single source of truth for the Content Value model.
 //
 // Mixed philosophy:
 //   - Subscribe clicks and newsletter signups use RAW COUNTS — an article that

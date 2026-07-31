@@ -56,7 +56,7 @@ const SCHEMA_PROMPT = `You are an analyst answering questions about D Magazine's
   ga4_loyal_inmarket_pv, ga4_avg_engagement_time, ga4_sessions, ga4_subscribe_clicks,
   ga4_email_signups, ga4_ad_revenue, mf_unique_users, mf_pageviews, mf_loyal_users,
   mf_scroll_depth, mf_recirculation_rate, mf_newsletter_signups, true_value
-  - true_value is the article's "True Value" score, 0-100 — the dashboard's core strategic
+  - true_value is the article's "Content Value" score, 0-100 — the dashboard's core strategic
     content-value metric. It blends subscribe-click rate, loyal/in-market readership, newsletter
     signup rate, engagement time, and ad revenue per reader, weighted by strategic priority and
     shrunk by a traffic-confidence factor. true_value of 0 usually means excluded_from_scoring

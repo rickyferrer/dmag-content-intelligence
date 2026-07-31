@@ -48,7 +48,7 @@ router.post('/recalculate', (req, res) => {
   const settings = getSettings();
 
   logAudit(actorOf(req), 'recalculate_scores', {});
-  res.json({ message: 'Recalculating True Value scores in background' });
+  res.json({ message: 'Recalculating Content Value scores in background' });
 
   // Recompute 1-100 scores from stored signal values using current weights.
   // No re-fetch from GA4/Marfeel needed — signals are already in the DB.

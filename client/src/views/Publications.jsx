@@ -77,7 +77,7 @@ export default function Publications() {
     { key: 'date',                    label: 'Issue' },
     { key: 'publication',             label: 'Publication' },
     { key: 'article_count',           label: 'Articles' },
-    { key: 'total_true_value',        label: 'Total True Value' },
+    { key: 'total_true_value',        label: 'Total Content Value' },
     { key: 'total_users',             label: 'Users' },
     { key: 'total_loyal_users',       label: 'Loyal' },
     { key: 'total_pageviews',         label: 'Pageviews' },
@@ -165,7 +165,7 @@ export default function Publications() {
                     <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
                       {row.article_count}
                     </td>
-                    {/* Total True Value */}
+                    {/* Total Content Value */}
                     <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)', textAlign: 'right', fontWeight: 600 }}>
                       {row.total_true_value != null ? Math.round(row.total_true_value) : '—'}
                     </td>

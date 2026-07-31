@@ -140,7 +140,7 @@ export default function UserNeedsAnalysis() {
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Avg True Value</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Avg Content Value</div>
                     <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
                       {d?.avg_true_value != null ? d.avg_true_value.toFixed(1) : '—'}
                     </div>

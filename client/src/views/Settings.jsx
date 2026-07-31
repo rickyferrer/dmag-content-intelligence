@@ -58,7 +58,7 @@ export default function Settings() {
   };
 
   const handleRecalculate = async () => {
-    if (!window.confirm('Recalculate True Value scores for all content using the current weights?')) return;
+    if (!window.confirm('Recalculate Content Value scores for all content using the current weights?')) return;
     setRecalculating(true);
     try {
       await api.recalculateScores();
@@ -124,10 +124,10 @@ export default function Settings() {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
-      {/* True Value Model */}
+      {/* Content Value Model */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24 }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
-          True Value Model
+          Content Value Model
         </h3>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
           Each article is scored on how well it converts its readers (per-reader rates vs. a
@@ -239,7 +239,7 @@ export default function Settings() {
           Scoring Exclusions
         </h3>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-          Pages listed here are excluded from the 1–100 True Value normalization scale.
+          Pages listed here are excluded from the 1–100 Content Value normalization scale.
           Paste one URL per line. After saving, hit <strong>Recalculate All Scores</strong> to apply.
         </p>
         <textarea

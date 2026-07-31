@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../api/index.js';
 
 const EXAMPLE_QUESTIONS = [
-  'Which sections have the highest true value?',
+  'Which sections have the highest content value?',
   'What content is most vulnerable to AI Overviews?',
   'Which writers produce the highest-value content?',
   'What user need converts best to newsletter signups?',
@@ -236,7 +236,7 @@ export default function Insights() {
                   Ask about your content
                 </h3>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 18px', maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>
-                  Ask a question in plain English — Claude queries the live dashboard data (True Value scores,
+                  Ask a question in plain English — Claude queries the live dashboard data (Content Value scores,
                   GA4, Marfeel, Search Console) to answer with real numbers. Chats are saved automatically, and
                   you can ask follow-up questions in the same conversation.
                 </p>

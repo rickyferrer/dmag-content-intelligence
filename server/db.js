@@ -198,7 +198,7 @@ function initSchema() {
   try { db.exec('ALTER TABLE content ADD COLUMN nlp_classified_at TEXT'); } catch {}
 
   // Seed default scoring weights if not present.
-  // The True Value score blends per-reader conversion/quality rates, weighted by
+  // The Content Value score blends per-reader conversion/quality rates, weighted by
   // strategic priority. Subscriptions matter most; ad revenue (≈ traffic) is minor.
   const weights = {
     score_w_subscription: '40',  // subscribe-click rate per reader (the goal)

@@ -23,7 +23,7 @@ const NeedTooltip = ({ active, payload }) => {
   return (
     <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
       <div style={{ color: meta.color, fontWeight: 600 }}>{meta.label}</div>
-      <div style={{ color: 'var(--text-secondary)' }}>Total True Value: <b style={{ color: 'var(--accent-gold)' }}>{Math.round(d.total_true_value)}</b></div>
+      <div style={{ color: 'var(--text-secondary)' }}>Total Content Value: <b style={{ color: 'var(--accent-gold)' }}>{Math.round(d.total_true_value)}</b></div>
       <div style={{ color: 'var(--text-secondary)' }}>Articles: <b style={{ color: 'var(--text-primary)' }}>{d.article_count}</b></div>
     </div>
   );
@@ -115,7 +115,7 @@ export default function Overview() {
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
         <KPICard label="Total Content Items" value={fmt(summary?.total_content)} />
-        <KPICard label="Avg True Value" value={summary?.avg_true_value != null ? Math.round(summary.avg_true_value).toString() : '—'} gold change={summary?.changes?.avg_true_value} />
+        <KPICard label="Avg Content Value" value={summary?.avg_true_value != null ? Math.round(summary.avg_true_value).toString() : '—'} gold change={summary?.changes?.avg_true_value} />
         <KPICard label="Total Users" value={fmt(summary?.total_users)} change={summary?.changes?.total_users} />
         <KPICard label="Loyal Users" value={fmt(summary?.total_loyal_users)} change={summary?.changes?.total_loyal_users} />
         <KPICard label="Subscribe Clicks" value={fmt(summary?.total_subscribe_clicks)} change={summary?.changes?.total_subscribe_clicks} />
@@ -149,10 +149,10 @@ export default function Overview() {
         {/* Scatter Plot */}
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
           <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, marginBottom: 4, color: 'var(--text-primary)' }}>
-            Output vs. True Value
+            Output vs. Content Value
           </h3>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>
-            X = articles published · Y = avg True Value · bubble size = total pageviews
+            X = articles published · Y = avg Content Value · bubble size = total pageviews
           </p>
           <ScatterPlot data={scatter} />
         </div>
@@ -162,7 +162,7 @@ export default function Overview() {
       {trend.length > 0 && (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
           <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, marginBottom: 16, color: 'var(--text-primary)' }}>
-            True Value Trend (30 days)
+            Content Value Trend (30 days)
           </h3>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={trend} margin={{ left: 0, right: 20, bottom: 0 }}>
@@ -175,7 +175,7 @@ export default function Overview() {
                 itemStyle={{ color: 'var(--accent-gold)' }}
               />
               <Line type="monotone" dataKey="avg_true_value" stroke="var(--accent-gold)"
-                strokeWidth={2} dot={false} name="Avg True Value" isAnimationActive={false} />
+                strokeWidth={2} dot={false} name="Avg Content Value" isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>

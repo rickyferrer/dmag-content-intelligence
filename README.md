@@ -61,10 +61,10 @@ This starts the Express server on `http://localhost:3001` and the Vite dev serve
 
 ---
 
-## How the True Value Formula Works
+## How the Content Value Formula Works
 
 ```
-True Value = Ad Revenue
+Content Value = Ad Revenue
            + (Subscribe Clicks × W_subscription)
            + (Email Signups × W_signup)
            + (Loyal In-Market Pageviews × W_loyal_inmarket_pv)
@@ -121,7 +121,7 @@ Set `NODE_ENV=production` so the Express server serves the built React app.
 Once the `email_signup` event is instrumented on dmagazine.com:
 
 1. No code changes needed — the GA4 sync (`server/sync/ga4.js`) already queries for `email_signup` events and stores them in `ga4_email_signups`
-2. The True Value formula already includes `email_signups × W_signup` in the computation
+2. The Content Value formula already includes `email_signups × W_signup` in the computation
 3. Set `TV_WEIGHT_SIGNUP` in `.env` (default: `5`) to tune the contribution
 
 ---
@@ -141,7 +141,7 @@ Once the `email_signup` event is instrumented on dmagazine.com:
 │   ├── classify/
 │   │   └── userNeeds.js  Anthropic classification (User Needs Model 2.0)
 │   ├── routes/           Express route handlers
-│   └── utils/            True Value computation + HTML stripping
+│   └── utils/            Content Value computation + HTML stripping
 ├── client/
 │   └── src/
 │       ├── App.jsx        Navigation shell
