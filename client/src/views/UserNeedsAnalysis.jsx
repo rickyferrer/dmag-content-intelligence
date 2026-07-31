@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
-import { NEED_META } from '../components/NeedBadge.jsx';
+import { NEED_META, NeedInfoIcon } from '../components/NeedBadge.jsx';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 
 const ALL_NEEDS = [
@@ -107,7 +107,10 @@ export default function UserNeedsAnalysis() {
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                   <div>
-                    <div style={{ fontSize: 15, fontFamily: 'var(--font-display)', color: meta.color }}>{meta.label}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 15, fontFamily: 'var(--font-display)', color: meta.color }}>
+                      {meta.label}
+                      <NeedInfoIcon need={need} color={meta.color} />
+                    </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{d ? d.article_count : 0} articles</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
