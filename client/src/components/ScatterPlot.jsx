@@ -16,7 +16,7 @@ const CustomTooltip = ({ active, payload }) => {
       border: '1px solid var(--border)',
       borderRadius: 6,
       padding: '10px 14px',
-      fontSize: 12,
+      fontSize: 13,
       lineHeight: 1.8,
     }}>
       <div style={{ color: meta.color, fontWeight: 600, marginBottom: 4 }}>{meta.label}</div>
@@ -43,15 +43,15 @@ export default function ScatterPlot({ data }) {
           name="Articles Published"
           type="number"
           domain={[0, 'dataMax']}
-          label={{ value: 'Articles Published', position: 'insideBottom', offset: -10, fill: 'var(--text-muted)', fontSize: 11 }}
-          tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+          label={{ value: 'Articles Published', position: 'insideBottom', offset: -10, fill: 'var(--text-muted)', fontSize: 12 }}
+          tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
           stroke="var(--border)"
         />
         <YAxis
           dataKey="avg_true_value"
           name="Avg Content Value"
-          label={{ value: 'Avg Content Value', angle: -90, position: 'insideLeft', fill: 'var(--text-muted)', fontSize: 11 }}
-          tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+          label={{ value: 'Avg Content Value', angle: -90, position: 'insideLeft', fill: 'var(--text-muted)', fontSize: 12 }}
+          tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
           stroke="var(--border)"
         />
         <ZAxis dataKey="total_pageviews" range={[60, 600]} name="Total Pageviews" />

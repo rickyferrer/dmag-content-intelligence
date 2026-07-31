@@ -72,7 +72,7 @@ export default function DatePresets({ value, from, to, onChange }) {
             max={to || undefined}
             onChange={e => onChange('custom', e.target.value, to)}
           />
-          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>to</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>to</span>
           <input
             type="date"
             value={to || ''}

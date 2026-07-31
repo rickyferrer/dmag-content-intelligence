@@ -82,7 +82,7 @@ function Ga4Cell({ row, metric, format }) {
 function ChannelScatter({ channels }) {
   const points = channels.filter(c => c.ga4 && c.ga4.status !== 'unavailable');
   if (points.length < 2) return (
-    <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+    <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
       Not enough channels with GA4 conversion data to plot.
     </div>
   );
@@ -93,7 +93,7 @@ function ChannelScatter({ channels }) {
     const d = payload[0]?.payload;
     if (!d) return null;
     return (
-      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px', fontSize: 12, lineHeight: 1.8 }}>
+      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px', fontSize: 13, lineHeight: 1.8 }}>
         <div style={{ color: d.color, fontWeight: 600, marginBottom: 4 }}>{d.label}</div>
         <div style={{ color: 'var(--text-secondary)' }}>Traffic: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{fmt(d.pageviews)}</span></div>
         <div style={{ color: 'var(--text-secondary)' }}>Opportunity: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{d.ga4.opportunity_per_1k.toFixed(2)}/1k</span></div>
@@ -113,15 +113,15 @@ function ChannelScatter({ channels }) {
           type="number"
           domain={[0, 'dataMax']}
           tickFormatter={fmt}
-          label={{ value: 'Traffic (pageviews)', position: 'insideBottom', offset: -10, fill: 'var(--text-muted)', fontSize: 11 }}
-          tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+          label={{ value: 'Traffic (pageviews)', position: 'insideBottom', offset: -10, fill: 'var(--text-muted)', fontSize: 12 }}
+          tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
           stroke="var(--border)"
         />
         <YAxis
           dataKey={(d) => d.ga4.opportunity_per_1k}
           name="Conversion Efficiency"
-          label={{ value: 'Conversion Efficiency (Opportunity/1k)', angle: -90, position: 'insideLeft', fill: 'var(--text-muted)', fontSize: 11 }}
-          tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+          label={{ value: 'Conversion Efficiency (Opportunity/1k)', angle: -90, position: 'insideLeft', fill: 'var(--text-muted)', fontSize: 12 }}
+          tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
           stroke="var(--border)"
         />
         <ZAxis dataKey={(d) => d.ga4.ad_revenue} domain={[0, maxRevenue]} range={[80, 700]} name="Ad Revenue" />
@@ -216,7 +216,7 @@ export default function Sources() {
             <div style={{ width: 48, height: 4, background: 'var(--bg-elevated)', borderRadius: 2 }}>
               <div style={{ height: '100%', borderRadius: 2, background: row.color, width: `${Math.max(2, grandTotal > 0 ? (row.pageviews / grandTotal) * 100 : 0)}%` }} />
             </div>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', minWidth: 40 }}>{fmt(row.pageviews)}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)', minWidth: 40 }}>{fmt(row.pageviews)}</span>
           </div>
         );
       case 'users':            return fmt(row.users);
@@ -226,7 +226,7 @@ export default function Sources() {
       case 'inmarket_pct':     return row.inmarket_pct > 0 ? row.inmarket_pct.toFixed(1) + '%' : '—';
       case 'score':
         return row.score > 0 ? (
-          <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-gold)', background: 'var(--accent-gold-bg)', padding: '2px 6px', borderRadius: 4 }}>
+          <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-gold)', background: 'var(--accent-gold-bg)', padding: '2px 6px', borderRadius: 4 }}>
             {row.score}
           </span>
         ) : '—';
@@ -241,7 +241,7 @@ export default function Sources() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Published:</span>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Published:</span>
         <DatePresets
           value={filters.preset}
           from={filters.from}
@@ -263,7 +263,7 @@ export default function Sources() {
               key={mode}
               onClick={() => setViewMode(mode)}
               style={{
-                padding: '6px 14px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
+                padding: '6px 14px', fontSize: 13, fontWeight: 500, border: 'none', cursor: 'pointer',
                 background: viewMode === mode ? 'var(--accent-gold)' : 'var(--bg-elevated)',
                 color: viewMode === mode ? '#0f0f0f' : 'var(--text-secondary)',
                 textTransform: 'capitalize',
@@ -286,7 +286,7 @@ export default function Sources() {
             <button
               onClick={clearFilters}
               style={{
-                marginTop: 12, padding: '6px 14px', borderRadius: 4, fontSize: 12,
+                marginTop: 12, padding: '6px 14px', borderRadius: 4, fontSize: 13,
                 background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
                 cursor: 'pointer',
               }}
@@ -294,7 +294,7 @@ export default function Sources() {
               Clear filters
             </button>
           )}
-          <div style={{ marginTop: 16, fontSize: 11, color: 'var(--text-muted)' }}>
+          <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-muted)' }}>
             Last successful analytics sync:{' '}
             {lastAnalyticsSync ? lastAnalyticsSync.slice(0, 19).replace('T', ' ') : 'never'}
           </div>
@@ -303,8 +303,8 @@ export default function Sources() {
         <>
           <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
-              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--text-primary)', margin: 0 }}>Channels</h3>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--text-primary)', margin: 0 }}>Channels</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
                 {fmt(grandTotal)} total pageviews{filters.from && filters.to ? `, ${filters.from} – ${filters.to}` : ''}.{' '}
                 {viewMode === 'efficiency' && (
                   <>Columns marked <strong>≈</strong> come from GA4's channel taxonomy (always trailing 30 days, regardless of the date filter above) — hover a value for its source and confidence. </>
@@ -316,7 +316,7 @@ export default function Sources() {
             <div style={{ display: 'grid', gridTemplateColumns: gridCols, padding: '8px 16px', borderBottom: '2px solid var(--border)', background: 'var(--bg-elevated)' }}>
               <div
                 onClick={() => handleSort('channel')}
-                style={{ fontSize: 10, fontWeight: 600, color: sort.key === 'channel' ? 'var(--accent-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', userSelect: 'none' }}
+                style={{ fontSize: 11, fontWeight: 600, color: sort.key === 'channel' ? 'var(--accent-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', userSelect: 'none' }}
               >
                 Channel <span style={{ opacity: sort.key === 'channel' ? 1 : 0.25 }}>{sort.key === 'channel' ? (sort.dir === 'desc' ? '↓' : '↑') : '↕'}</span>
               </div>
@@ -325,7 +325,7 @@ export default function Sources() {
                   key={col.key}
                   onClick={() => handleSort(col.key)}
                   title={ESTIMATED_COLS.has(col.key) ? volumeNote : undefined}
-                  style={{ fontSize: 10, fontWeight: 600, color: sort.key === col.key ? 'var(--accent-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
+                  style={{ fontSize: 11, fontWeight: 600, color: sort.key === col.key ? 'var(--accent-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
                 >
                   {col.label}{ESTIMATED_COLS.has(col.key) ? '*' : ''} <span style={{ opacity: sort.key === col.key ? 1 : 0.25 }}>{sort.key === col.key ? (sort.dir === 'desc' ? '↓' : '↑') : '↕'}</span>
                 </div>
@@ -349,14 +349,14 @@ export default function Sources() {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ width: 10, height: 10, borderRadius: '50%', background: row.color, flexShrink: 0 }} />
-                      <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>{row.label}</span>
+                      <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>{row.label}</span>
                     </div>
                     {cols.map(col => (
-                      <div key={col.key} style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                      <div key={col.key} style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
                         {cellValue(row, col)}
                       </div>
                     ))}
-                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{isOpen ? '▲' : '▼'}</div>
+                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>{isOpen ? '▲' : '▼'}</div>
                   </div>
 
                   {isOpen && (
@@ -367,22 +367,22 @@ export default function Sources() {
                         const srcPct = row.pageviews > 0 ? (src.pageviews / row.pageviews) * 100 : 0;
                         return (
                           <div key={src.source} style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'center', padding: '9px 16px 9px 36px', borderBottom: '1px solid var(--border-subtle)' }}>
-                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{src.source}</span>
+                            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{src.source}</span>
                             {viewMode === 'volume' ? (
                               <>
-                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.pageviews)} ({srcPct.toFixed(0)}%)</div>
-                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.users)}</div>
-                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.article_count)}</div>
-                                <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }} title="GA4 doesn't break subscribe clicks down by individual source, only by channel.">—</div>
-                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.newsletter_signups)}</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.pageviews)} ({srcPct.toFixed(0)}%)</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.users)}</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.article_count)}</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }} title="GA4 doesn't break subscribe clicks down by individual source, only by channel.">—</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.newsletter_signups)}</div>
                               </>
                             ) : (
                               <>
-                                <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }} title="GA4 doesn't break conversion rates down by individual source, only by channel.">—</div>
-                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{srcLoyalPct > 0 ? srcLoyalPct.toFixed(1) + '%' : '—'}</div>
-                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{srcInmarketPct > 0 ? srcInmarketPct.toFixed(1) + '%' : '—'}</div>
-                                <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }} title="GA4 doesn't break revenue down by individual source, only by channel.">—</div>
-                                <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>—</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }} title="GA4 doesn't break conversion rates down by individual source, only by channel.">—</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-muted)', textAlign: 'right' }}>{srcLoyalPct > 0 ? srcLoyalPct.toFixed(1) + '%' : '—'}</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-muted)', textAlign: 'right' }}>{srcInmarketPct > 0 ? srcInmarketPct.toFixed(1) + '%' : '—'}</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }} title="GA4 doesn't break revenue down by individual source, only by channel.">—</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>—</div>
                               </>
                             )}
                             <div />
@@ -396,12 +396,12 @@ export default function Sources() {
             })}
 
             {unmapped?.channels?.length > 0 && (
-              <div style={{ padding: '10px 16px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)' }}>
+              <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)' }}>
                 GA4 also recorded {fmt(unmapped.subscribe_clicks)} subscribe clicks from {fmt(unmapped.users)} users on channels with no
                 equivalent in this taxonomy ({unmapped.channels.join(', ')}) — not reflected in any row above.
               </div>
             )}
-            <div style={{ padding: '10px 16px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', fontStyle: 'italic' }}>
+            <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', fontStyle: 'italic' }}>
               Direct / Bookmark and Dark Social conversion metrics are unavailable — GA4's "Direct" channel can't distinguish the two, so we don't
               guess a split. Google Discover's conversions are folded into Search Engines by GA4 and can't be isolated.
             </div>
@@ -411,14 +411,14 @@ export default function Sources() {
           <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
             <div style={{ padding: '14px 16px', borderBottom: showScatter ? '1px solid var(--border)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--text-primary)', margin: 0 }}>Opportunity Map</h3>
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--text-primary)', margin: 0 }}>Opportunity Map</h3>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
                   Traffic vs. conversion efficiency. Bubble size = ad revenue, color = channel. Dashed/faint bubbles are low-confidence (small GA4 sample).
                 </p>
               </div>
               <button
                 onClick={() => setShowScatter(s => !s)}
-                style={{ padding: '6px 12px', borderRadius: 4, fontSize: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                style={{ padding: '6px 12px', borderRadius: 4, fontSize: 13, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}
               >
                 {showScatter ? 'Hide' : 'Show'}
               </button>

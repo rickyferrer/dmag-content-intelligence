@@ -74,7 +74,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
         style={{
           width: '100%',
           padding: '6px 26px 6px 10px',
-          fontSize: 13,
+          fontSize: 14,
           border: `1px solid ${value ? 'var(--accent-gold)' : 'var(--border)'}`,
           borderRadius: 4,
           background: 'var(--bg-surface)',
@@ -83,7 +83,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
       />
       <span style={{
         position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-        fontSize: 10, color: 'var(--text-muted)', pointerEvents: 'none',
+        fontSize: 11, color: 'var(--text-muted)', pointerEvents: 'none',
       }}>
         {open ? '▲' : '▼'}
       </span>
@@ -101,7 +101,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
             onMouseDown={(e) => { e.preventDefault(); handleSelect(null); }}
             onMouseEnter={() => setHighlighted(0)}
             style={{
-              padding: '7px 10px', fontSize: 13, cursor: 'pointer',
+              padding: '7px 10px', fontSize: 14, cursor: 'pointer',
               color: 'var(--text-muted)', fontStyle: 'italic',
               background: highlighted === 0 ? 'var(--bg-hover)' : 'transparent',
             }}
@@ -109,7 +109,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
             {placeholder}
           </div>
           {filtered.length === 0 && (
-            <div style={{ padding: '7px 10px', fontSize: 12, color: 'var(--text-muted)' }}>No matches</div>
+            <div style={{ padding: '7px 10px', fontSize: 13, color: 'var(--text-muted)' }}>No matches</div>
           )}
           {filtered.map((opt, i) => (
             <div
@@ -117,7 +117,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
               onMouseDown={(e) => { e.preventDefault(); handleSelect(opt); }}
               onMouseEnter={() => setHighlighted(i + 1)}
               style={{
-                padding: '7px 10px', fontSize: 13, cursor: 'pointer',
+                padding: '7px 10px', fontSize: 14, cursor: 'pointer',
                 whiteSpace: 'nowrap',
                 color: String(opt.value) === String(value) ? 'var(--accent-gold)' : 'var(--text-primary)',
                 fontWeight: String(opt.value) === String(value) ? 600 : 400,

@@ -94,7 +94,7 @@ export default function Publications() {
         onClick={() => toggleSort(col.key)}
         style={{
           padding: '10px 12px', textAlign: col.key === 'top_article' ? 'left' : 'left',
-          fontSize: 11, fontWeight: 600, color: active ? 'var(--accent-gold)' : 'var(--text-muted)',
+          fontSize: 12, fontWeight: 600, color: active ? 'var(--accent-gold)' : 'var(--text-muted)',
           textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap',
           cursor: 'pointer', userSelect: 'none',
         }}
@@ -118,11 +118,11 @@ export default function Publications() {
           <option value="">All Years</option>
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 4 }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 4 }}>
           Last 2 years
         </span>
         {!loading && (
-          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
+          <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--text-muted)' }}>
             {sorted.length} issues
           </span>
         )}
@@ -155,42 +155,42 @@ export default function Publications() {
                     {/* Publication */}
                     <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                       <span style={{
-                        fontSize: 11, fontWeight: 600, color: pubColor,
+                        fontSize: 12, fontWeight: 600, color: pubColor,
                         background: pubColor + '18', padding: '2px 7px', borderRadius: 4,
                       }}>
                         {pubName}
                       </span>
                     </td>
                     {/* Articles */}
-                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--text-secondary)', textAlign: 'right' }}>
                       {row.article_count}
                     </td>
                     {/* Total Content Value */}
-                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)', textAlign: 'right', fontWeight: 600 }}>
+                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--accent-gold)', textAlign: 'right', fontWeight: 600 }}>
                       {row.total_true_value != null ? Math.round(row.total_true_value) : '—'}
                     </td>
                     {/* Users */}
-                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
                       {fmt(row.total_users)}
                     </td>
                     {/* Loyal */}
-                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
                       {fmt(row.total_loyal_users)}
                     </td>
                     {/* Pageviews */}
-                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
                       {fmt(row.total_pageviews)}
                     </td>
                     {/* Sub Clicks */}
-                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
                       {fmt(row.total_subscribe_clicks)}
                     </td>
                     {/* Newsletter */}
-                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
                       {fmt(row.total_newsletter_signups)}
                     </td>
                     {/* Avg Engagement */}
-                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {row.avg_engagement_time ? row.avg_engagement_time.toFixed(0) + 's' : '—'}
                     </td>
                     {/* Top Article */}
@@ -198,10 +198,10 @@ export default function Publications() {
                       {row.top_article ? (
                         <div>
                           <a href={row.top_article.url} target="_blank" rel="noopener noreferrer"
-                            style={{ fontSize: 12, color: pubColor, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            style={{ fontSize: 13, color: pubColor, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {row.top_article.title}
                           </a>
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                             TV {row.top_article.true_value != null ? Math.round(row.top_article.true_value) : '—'}
                           </span>
                         </div>

@@ -51,7 +51,7 @@ export default function UserNeedsAnalysis() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Date filter */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Published:</span>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Published:</span>
         <DatePresets
           value={filters.preset}
           from={filters.from}
@@ -70,17 +70,17 @@ export default function UserNeedsAnalysis() {
           background: 'var(--accent-gold-bg)', border: '1px solid var(--accent-gold-dim)',
           borderRadius: 8, padding: '14px 18px',
         }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-gold)', marginBottom: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-gold)', marginBottom: 6 }}>
             Gap Analysis — Underserved User Needs
           </div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+          <div style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
             {gaps.map(n => {
               const meta = NEED_META[n];
               const count = dataMap[n]?.article_count || 0;
               return (
                 <span key={n} style={{ display: 'inline-block', marginRight: 12 }}>
                   <span style={{ color: meta.color }}>{meta.label}</span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: 11 }}> ({count} articles)</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 12 }}> ({count} articles)</span>
                 </span>
               );
             })}
@@ -107,17 +107,17 @@ export default function UserNeedsAnalysis() {
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 15, fontFamily: 'var(--font-display)', color: meta.color }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 17, fontFamily: 'var(--font-display)', color: meta.color }}>
                       {meta.label}
                       <NeedInfoIcon need={need} color={meta.color} />
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{d ? d.article_count : 0} articles</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{d ? d.article_count : 0} articles</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 22, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-gold)', lineHeight: 1 }}>
+                    <div style={{ fontSize: 24, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-gold)', lineHeight: 1 }}>
                       {d?.total_true_value != null ? Math.round(d.total_true_value) : '—'}
                     </div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>total value</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>total value</div>
                   </div>
                 </div>
 
@@ -131,26 +131,26 @@ export default function UserNeedsAnalysis() {
                 {/* Stats grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Subscribe Clicks</div>
-                    <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Subscribe Clicks</div>
+                    <div style={{ fontSize: 15, fontFamily: 'var(--font-mono)', fontWeight: 500, color: 'var(--text-primary)' }}>
                       {d ? fmt(d.total_subscribe_clicks) : '—'}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Newsletter Signups</div>
-                    <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Newsletter Signups</div>
+                    <div style={{ fontSize: 15, fontFamily: 'var(--font-mono)', fontWeight: 500, color: 'var(--text-primary)' }}>
                       {d ? fmt(d.total_newsletter_signups) : '—'}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Avg Content Value</div>
-                    <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Avg Content Value</div>
+                    <div style={{ fontSize: 15, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
                       {d?.avg_true_value != null ? d.avg_true_value.toFixed(1) : '—'}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Avg Engagement</div>
-                    <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Avg Engagement</div>
+                    <div style={{ fontSize: 15, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
                       {d?.avg_engagement_time != null ? d.avg_engagement_time.toFixed(0) + 's' : '—'}
                     </div>
                   </div>
@@ -159,12 +159,12 @@ export default function UserNeedsAnalysis() {
                 {/* Top article */}
                 {d?.top_article && (
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>Top Article</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Top Article</div>
                     <a href={d.top_article.url} target="_blank" rel="noopener noreferrer"
-                      style={{ fontSize: 12, color: meta.color, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      style={{ fontSize: 13, color: meta.color, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {d.top_article.title}
                     </a>
-                    <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 2 }}>
+                    <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 2 }}>
                       Score: {d.top_article.true_value != null ? Math.round(d.top_article.true_value) : '—'}
                     </div>
                   </div>

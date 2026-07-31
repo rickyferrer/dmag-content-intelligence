@@ -49,7 +49,7 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img src="/logo/d-logo.png" alt="D Magazine" style={{ height: 32, width: 32, borderRadius: 4 }} />
           <span style={{
-            fontSize: 11,
+            fontSize: 12,
             color: 'var(--accent-gold)',
             fontWeight: 500,
             letterSpacing: '0.1em',
@@ -68,7 +68,7 @@ export default function App() {
                 padding: '5px 14px',
                 border: 'none',
                 borderRadius: 4,
-                fontSize: 13,
+                fontSize: 14,
                 fontWeight: view === item.id ? 500 : 400,
                 background: view === item.id ? 'var(--bg-elevated)' : 'transparent',
                 color: view === item.id ? 'var(--text-primary)' : 'var(--text-muted)',
@@ -94,7 +94,7 @@ export default function App() {
         <div style={{ marginBottom: 20 }}>
           <h1 style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 24,
+            fontSize: 26,
             color: 'var(--text-primary)',
             fontWeight: 400,
           }}>

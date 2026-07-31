@@ -22,7 +22,7 @@ export default function TrueValueBar({ value, max = 100 }) {
         }} />
       </div>
       <span style={{
-        fontSize: 12,
+        fontSize: 13,
         fontFamily: 'var(--font-mono)',
         color: score > 0 ? 'var(--accent-gold)' : 'var(--text-muted)',
         minWidth: 28,

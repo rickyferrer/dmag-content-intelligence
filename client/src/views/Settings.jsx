@@ -126,10 +126,10 @@ export default function Settings() {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
       {/* Content Value Model */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 4, color: 'var(--text-primary)' }}>
           Content Value Model
         </h3>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
           Each article is scored on how well it converts its readers (per-reader rates vs. a
           benchmark), weighted by strategic priority below — so a niche article that drives
           subscriptions beats a high-traffic article that doesn't. Weights are relative.
@@ -143,11 +143,11 @@ export default function Settings() {
               <div key={key}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{meta.label}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{meta.desc}</div>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>{meta.label}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{meta.desc}</div>
                   </div>
                   <div style={{
-                    fontFamily: 'var(--font-mono)', fontSize: 16,
+                    fontFamily: 'var(--font-mono)', fontSize: 18,
                     color: dirty[key] !== undefined ? 'var(--accent-gold)' : 'var(--text-secondary)',
                     minWidth: 60, textAlign: 'right',
                   }}>
@@ -161,7 +161,7 @@ export default function Settings() {
                   onChange={e => handleChange(key, e.target.value)}
                   style={{ width: '100%', accentColor: 'var(--accent-gold)' }}
                 />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                   <span>{meta.min}</span>
                   <span>{meta.max}</span>
                 </div>
@@ -175,7 +175,7 @@ export default function Settings() {
             onClick={handleSave}
             disabled={saving || Object.keys(dirty).length === 0}
             style={{
-              padding: '8px 18px', borderRadius: 4, fontSize: 13, fontWeight: 500,
+              padding: '8px 18px', borderRadius: 4, fontSize: 14, fontWeight: 500,
               background: 'var(--accent-gold)', border: 'none', color: '#0f0f0f',
               opacity: (saving || Object.keys(dirty).length === 0) ? 0.5 : 1,
             }}
@@ -186,7 +186,7 @@ export default function Settings() {
             onClick={handleRecalculate}
             disabled={recalculating}
             style={{
-              padding: '8px 18px', borderRadius: 4, fontSize: 13,
+              padding: '8px 18px', borderRadius: 4, fontSize: 14,
               background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
               opacity: recalculating ? 0.6 : 1,
             }}
@@ -198,16 +198,16 @@ export default function Settings() {
 
       {/* Sync Status */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 16, color: 'var(--text-primary)' }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 16, color: 'var(--text-primary)' }}>
           Sync Status
         </h3>
 
         {syncStatus && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
             {Object.entries(syncStatus).map(([key, val]) => (
-              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                 <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{key}</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                   {val?.updated_at ? val.updated_at.slice(0, 19).replace('T', ' ') : '—'}
                 </span>
               </div>
@@ -222,7 +222,7 @@ export default function Settings() {
               onClick={() => handleTriggerSync(type)}
               disabled={triggering}
               style={{
-                padding: '7px 14px', borderRadius: 4, fontSize: 12,
+                padding: '7px 14px', borderRadius: 4, fontSize: 13,
                 background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
                 opacity: triggering ? 0.6 : 1,
               }}
@@ -235,10 +235,10 @@ export default function Settings() {
 
       {/* Scoring Exclusions */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, gridColumn: '1 / -1' }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 4, color: 'var(--text-primary)' }}>
           Scoring Exclusions
         </h3>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
           Pages listed here are excluded from the 1–100 Content Value normalization scale.
           Paste one URL per line. After saving, hit <strong>Recalculate All Scores</strong> to apply.
         </p>
@@ -249,7 +249,7 @@ export default function Settings() {
           rows={8}
           style={{
             width: '100%', boxSizing: 'border-box',
-            fontFamily: 'var(--font-mono)', fontSize: 12,
+            fontFamily: 'var(--font-mono)', fontSize: 13,
             background: 'var(--bg-elevated)', border: '1px solid var(--border)',
             borderRadius: 4, padding: '10px 12px',
             color: 'var(--text-primary)', resize: 'vertical',
@@ -260,7 +260,7 @@ export default function Settings() {
             onClick={handleSaveExclusions}
             disabled={savingExclusions}
             style={{
-              padding: '8px 18px', borderRadius: 4, fontSize: 13, fontWeight: 500,
+              padding: '8px 18px', borderRadius: 4, fontSize: 14, fontWeight: 500,
               background: 'var(--accent-gold)', border: 'none', color: '#0f0f0f',
               opacity: savingExclusions ? 0.5 : 1,
             }}
@@ -269,7 +269,7 @@ export default function Settings() {
           </button>
 
           {exclusionResult && (
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
               <span style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>{exclusionResult.matched.length} matched</span>
               {exclusionResult.unmatched.length > 0 && (
                 <span style={{ color: '#c0392b', marginLeft: 12 }}>
@@ -284,10 +284,10 @@ export default function Settings() {
 
       {/* Data Cleanup */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, gridColumn: '1 / -1' }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 4, color: 'var(--text-primary)' }}>
           Data Cleanup
         </h3>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
           Remove content published more than 2 years ago and its associated analytics snapshots.
           Also prunes excess snapshots, keeping the most recent 30 per content item.
           Future content syncs will only fetch the last 2 years automatically.
@@ -296,7 +296,7 @@ export default function Settings() {
           display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
           background: '#c0392b0c', border: '1px solid #c0392b30', borderRadius: 6, padding: '10px 12px',
         }}>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
             This permanently deletes data. Type <strong style={{ color: '#c0392b', fontFamily: 'var(--font-mono)' }}>DELETE</strong> to enable:
           </span>
           <input
@@ -305,7 +305,7 @@ export default function Settings() {
             onChange={e => setCleanupConfirmText(e.target.value)}
             placeholder="DELETE"
             style={{
-              width: 100, padding: '5px 8px', fontSize: 12, fontFamily: 'var(--font-mono)',
+              width: 100, padding: '5px 8px', fontSize: 13, fontFamily: 'var(--font-mono)',
               border: '1px solid var(--border)', borderRadius: 4,
               background: 'var(--bg-surface)', color: 'var(--text-primary)',
             }}
@@ -314,7 +314,7 @@ export default function Settings() {
             onClick={handleCleanup}
             disabled={cleaning || cleanupConfirmText !== 'DELETE'}
             style={{
-              padding: '8px 18px', borderRadius: 4, fontSize: 13, fontWeight: 500,
+              padding: '8px 18px', borderRadius: 4, fontSize: 14, fontWeight: 500,
               background: cleaning || cleanupConfirmText !== 'DELETE' ? 'var(--bg-elevated)' : '#c0392b18',
               border: '1px solid #c0392b50',
               color: cleaning || cleanupConfirmText !== 'DELETE' ? 'var(--text-muted)' : '#c0392b',
@@ -328,7 +328,7 @@ export default function Settings() {
 
         <div style={{ marginTop: 12 }}>
           {cleanResult && (
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
               <span style={{ color: '#c0392b', fontWeight: 600 }}>Deleted </span>
               <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{cleanResult.contentDeleted.toLocaleString()}</span>
               {' content items and '}
@@ -347,14 +347,14 @@ export default function Settings() {
 
       {/* Audit Log */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, gridColumn: '1 / -1' }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 4, color: 'var(--text-primary)' }}>
           Audit Log
         </h3>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
           Every admin action taken on this page — who, what, and when. Most recent 100 entries.
         </p>
         {auditLog.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No admin actions recorded yet.</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No admin actions recorded yet.</div>
         ) : (
           <div style={{ maxHeight: 320, overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -363,7 +363,7 @@ export default function Settings() {
                   {['Time', 'Actor', 'Action', 'Details'].map(h => (
                     <th key={h} style={{
                       position: 'sticky', top: 0, background: 'var(--bg-surface)',
-                      padding: '6px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600,
+                      padding: '6px 10px', textAlign: 'left', fontSize: 12, fontWeight: 600,
                       color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
                     }}>{h}</th>
                   ))}
@@ -372,16 +372,16 @@ export default function Settings() {
               <tbody>
                 {auditLog.map(entry => (
                   <tr key={entry.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                    <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '6px 10px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                       {entry.ts?.slice(0, 19).replace('T', ' ')}
                     </td>
-                    <td style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '6px 10px', fontSize: 13, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                       {entry.actor}
                     </td>
-                    <td style={{ padding: '6px 10px', fontSize: 12, color: 'var(--accent-gold)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '6px 10px', fontSize: 13, color: 'var(--accent-gold)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                       {entry.action}
                     </td>
-                    <td style={{ padding: '6px 10px', fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                    <td style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
                       {entry.details ? JSON.stringify(entry.details) : '—'}
                     </td>
                   </tr>

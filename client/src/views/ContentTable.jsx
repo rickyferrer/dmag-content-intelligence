@@ -37,9 +37,9 @@ function fmt(n) {
 
 function SortArrow({ col, sortBy, order }) {
   if (sortBy !== col) {
-    return <span style={{ opacity: 0.25, marginLeft: 4, fontSize: 10 }}>↕</span>;
+    return <span style={{ opacity: 0.25, marginLeft: 4, fontSize: 11 }}>↕</span>;
   }
-  return <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--accent-gold)' }}>
+  return <span style={{ marginLeft: 4, fontSize: 11, color: 'var(--accent-gold)' }}>
     {order === 'desc' ? '↓' : '↑'}
   </span>;
 }
@@ -146,7 +146,7 @@ export default function ContentTable({ onSelect }) {
   const thStyle = (colKey) => ({
     padding: '10px 12px',
     textAlign: colKey === 'title' ? 'left' : 'left',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 600,
     color: filters.sortBy === colKey ? 'var(--accent-gold)' : 'var(--text-muted)',
     textTransform: 'uppercase',
@@ -207,7 +207,7 @@ export default function ContentTable({ onSelect }) {
           onChange={e => setSearchInput(e.target.value)}
           placeholder="Search title or URL…"
           style={{
-            padding: '6px 10px', fontSize: 13, minWidth: 200,
+            padding: '6px 10px', fontSize: 14, minWidth: 200,
             border: `1px solid ${filters.search ? 'var(--accent-gold)' : 'var(--border)'}`,
             borderRadius: 4, background: 'var(--bg-surface)', color: 'var(--text-primary)',
           }}
@@ -239,7 +239,7 @@ export default function ContentTable({ onSelect }) {
           }}
         />
 
-        <div style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 12, display: 'flex', alignItems: 'center', height: 30 }}>
+        <div style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 13, display: 'flex', alignItems: 'center', height: 30 }}>
           {loading ? 'Loading…' : `${pagination.total.toLocaleString()} items`}
         </div>
       </div>
@@ -250,7 +250,7 @@ export default function ContentTable({ onSelect }) {
           {activeFilters.map(f => (
             <span key={f.key} style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
-              fontSize: 12, color: 'var(--accent-gold)', background: 'var(--accent-gold-bg)',
+              fontSize: 13, color: 'var(--accent-gold)', background: 'var(--accent-gold-bg)',
               border: '1px solid var(--accent-gold)', borderRadius: 20, padding: '3px 6px 3px 10px',
             }}>
               {f.label}
@@ -259,7 +259,7 @@ export default function ContentTable({ onSelect }) {
                 aria-label={`Remove ${f.key} filter`}
                 style={{
                   border: 'none', background: 'transparent', color: 'inherit',
-                  cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '2px 4px',
+                  cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '2px 4px',
                 }}
               >
                 ×
@@ -269,7 +269,7 @@ export default function ContentTable({ onSelect }) {
           <button
             onClick={clearAll}
             style={{
-              fontSize: 12, color: 'var(--text-muted)', background: 'transparent',
+              fontSize: 13, color: 'var(--text-muted)', background: 'transparent',
               border: 'none', textDecoration: 'underline', cursor: 'pointer', padding: '3px 4px',
             }}
           >
@@ -310,14 +310,14 @@ export default function ContentTable({ onSelect }) {
                 onMouseLeave={e => e.currentTarget.style.background = ''}
               >
                 <td style={{ padding: '9px 12px', maxWidth: 300 }}>
-                  <div style={{ fontSize: 13, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {row.title}
                   </div>
-                  {(row.writer || row.author) && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{row.writer || row.author}</div>}
+                  {(row.writer || row.author) && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{row.writer || row.author}</div>}
                 </td>
-                <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{row.content_type}</td>
-                <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{row.section || '—'}</td>
-                <td style={{ padding: '9px 12px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '9px 12px', fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{row.content_type}</td>
+                <td style={{ padding: '9px 12px', fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{row.section || '—'}</td>
+                <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                   {row.published_at ? row.published_at.slice(0, 10) : '—'}
                 </td>
                 <td style={{ padding: '9px 12px' }}>
@@ -326,24 +326,24 @@ export default function ContentTable({ onSelect }) {
                 <td style={{ padding: '9px 12px', minWidth: 120 }}>
                   <TrueValueBar value={row.true_value} max={100} />
                 </td>
-                <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {fmt(row.ga4_users)}
                 </td>
-                <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {fmt(row.ga4_loyal_users)}
                 </td>
-                <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {row.ga4_users > 0 && row.ga4_inmarket_pageviews != null
                     ? Math.min(100, Math.round(row.ga4_inmarket_pageviews / row.ga4_users * 100)) + '%'
                     : '—'}
                 </td>
-                <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {fmt(row.ga4_subscribe_clicks)}
                 </td>
-                <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {fmt(row.mf_newsletter_signups)}
                 </td>
-                <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {row.ga4_avg_engagement_time != null ? row.ga4_avg_engagement_time.toFixed(0) + 's' : '—'}
                 </td>
               </tr>
@@ -357,7 +357,7 @@ export default function ContentTable({ onSelect }) {
                       <button
                         onClick={clearAll}
                         style={{
-                          marginTop: 12, padding: '6px 14px', borderRadius: 4, fontSize: 12,
+                          marginTop: 12, padding: '6px 14px', borderRadius: 4, fontSize: 13,
                           background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
                           cursor: 'pointer',
                         }}
@@ -385,7 +385,7 @@ export default function ContentTable({ onSelect }) {
           >
             ← Prev
           </button>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
             Page {pagination.page} of {pagination.pages}
           </span>
           <button

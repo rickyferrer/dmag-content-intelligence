@@ -30,7 +30,7 @@ function AnswerText({ text }) {
           return (
             <ul key={i} style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {lines.map((l, j) => (
-                <li key={j} style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.6 }}>
+                <li key={j} style={{ fontSize: 15, color: 'var(--text-primary)', lineHeight: 1.6 }}>
                   <InlineText text={l.replace(/^[-*]\s/, '')} />
                 </li>
               ))}
@@ -38,7 +38,7 @@ function AnswerText({ text }) {
           );
         }
         return (
-          <p key={i} style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.6 }}>
+          <p key={i} style={{ margin: 0, fontSize: 15, color: 'var(--text-primary)', lineHeight: 1.6 }}>
             <InlineText text={block} />
           </p>
         );
@@ -169,7 +169,7 @@ export default function Insights() {
         <button
           onClick={startNewChat}
           style={{
-            padding: '9px 14px', borderRadius: 6, fontSize: 13, fontWeight: 500,
+            padding: '9px 14px', borderRadius: 6, fontSize: 14, fontWeight: 500,
             background: 'var(--accent-gold)', border: 'none', color: '#fff', cursor: 'pointer',
             textAlign: 'left',
           }}
@@ -191,18 +191,18 @@ export default function Insights() {
             >
               <div style={{ minWidth: 0 }}>
                 <div style={{
-                  fontSize: 12.5, color: c.id === conversationId ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  fontSize: 13.5, color: c.id === conversationId ? 'var(--text-primary)' : 'var(--text-secondary)',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
                   {c.title || 'Untitled'}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{fmtDate(c.updated_at)}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{fmtDate(c.updated_at)}</div>
               </div>
               <button
                 onClick={e => deleteConversation(c.id, e)}
                 title="Delete conversation"
                 style={{
-                  flexShrink: 0, fontSize: 12, color: 'var(--text-muted)', background: 'none', border: 'none',
+                  flexShrink: 0, fontSize: 13, color: 'var(--text-muted)', background: 'none', border: 'none',
                   cursor: 'pointer', padding: '2px 4px', borderRadius: 4, lineHeight: 1,
                 }}
                 onMouseEnter={e => e.currentTarget.style.color = '#c0392b'}
@@ -213,7 +213,7 @@ export default function Insights() {
             </div>
           ))}
           {conversations.length === 0 && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '8px 10px' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 10px' }}>
               No saved chats yet.
             </div>
           )}
@@ -232,10 +232,10 @@ export default function Insights() {
                 background: 'var(--bg-surface)', border: '1px solid var(--border)',
                 borderRadius: 8, padding: 24, textAlign: 'center',
               }}>
-                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-primary)', margin: '0 0 8px' }}>
+                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-primary)', margin: '0 0 8px' }}>
                   Ask about your content
                 </h3>
-                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 18px', maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>
+                <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 18px', maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>
                   Ask a question in plain English — Claude queries the live dashboard data (Content Value scores,
                   GA4, Marfeel, Search Console) to answer with real numbers. Chats are saved automatically, and
                   you can ask follow-up questions in the same conversation.
@@ -246,7 +246,7 @@ export default function Insights() {
                       key={q}
                       onClick={() => ask(q)}
                       style={{
-                        fontSize: 12, color: 'var(--text-secondary)', background: 'var(--bg-elevated)',
+                        fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-elevated)',
                         border: '1px solid var(--border)', borderRadius: 20, padding: '7px 14px',
                       }}
                       onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
@@ -269,7 +269,7 @@ export default function Insights() {
                       <div style={{
                         background: 'var(--accent-gold)', color: '#fff',
                         borderRadius: '12px 12px 2px 12px', padding: '10px 14px',
-                        fontSize: 14,
+                        fontSize: 15,
                       }}>
                         {entry.question}
                       </div>
@@ -282,25 +282,25 @@ export default function Insights() {
                         borderRadius: '12px 12px 12px 2px', padding: '14px 16px',
                       }}>
                         {entry.loading && (
-                          <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                          <div style={{ fontSize: 14, color: 'var(--text-muted)', fontStyle: 'italic' }}>
                             Querying the dashboard…
                           </div>
                         )}
                         {entry.error && (
-                          <div style={{ fontSize: 13, color: '#e05c5c' }}>
+                          <div style={{ fontSize: 14, color: '#e05c5c' }}>
                             Something went wrong: {entry.error}
                           </div>
                         )}
                         {entry.answer && <AnswerText text={entry.answer} />}
                         {entry.queries_run?.length > 0 && (
-                          <details style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
+                          <details style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
                             <summary style={{ cursor: 'pointer' }}>
                               {entry.queries_run.length} quer{entry.queries_run.length === 1 ? 'y' : 'ies'} run
                             </summary>
                             <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
                               {entry.queries_run.map((sql, j) => (
                                 <code key={j} style={{
-                                  display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10,
+                                  display: 'block', fontFamily: 'var(--font-mono)', fontSize: 11,
                                   background: 'var(--bg-elevated)', padding: '6px 8px', borderRadius: 4,
                                   overflowX: 'auto', whiteSpace: 'pre',
                                 }}>
@@ -332,7 +332,7 @@ export default function Insights() {
             onChange={e => setQuestion(e.target.value)}
             placeholder={history.length > 0 ? 'Ask a follow-up question…' : 'Ask a question about your content…'}
             style={{
-              flex: 1, padding: '12px 16px', fontSize: 14,
+              flex: 1, padding: '12px 16px', fontSize: 15,
               border: '1px solid var(--border)', borderRadius: 24,
               background: 'var(--bg-surface)',
             }}
@@ -341,7 +341,7 @@ export default function Insights() {
             padding: '0 22px', borderRadius: 24, border: 'none',
             background: question.trim() ? 'var(--accent-gold)' : 'var(--bg-elevated)',
             color: question.trim() ? '#fff' : 'var(--text-muted)',
-            fontSize: 14, fontWeight: 500,
+            fontSize: 15, fontWeight: 500,
           }}>
             Ask
           </button>

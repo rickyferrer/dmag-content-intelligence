@@ -48,7 +48,7 @@ function NeedInfoIcon({ need, color }) {
         title="What defines this user need"
         style={{
           width: 14, height: 14, borderRadius: '50%', border: `1px solid ${color}88`,
-          background: open ? `${color}18` : 'none', color, fontSize: 9, fontWeight: 700,
+          background: open ? `${color}18` : 'none', color, fontSize: 10, fontWeight: 700,
           lineHeight: '12px', padding: 0, cursor: 'pointer', flexShrink: 0,
           fontFamily: 'var(--font-sans)', fontStyle: 'italic',
         }}
@@ -59,7 +59,7 @@ function NeedInfoIcon({ need, color }) {
         <div style={{
           position: 'absolute', top: '150%', left: 0, zIndex: 30,
           width: 220, background: 'var(--bg-surface)', border: '1px solid var(--border)',
-          borderRadius: 6, padding: '9px 11px', fontSize: 11, lineHeight: 1.5, fontWeight: 400,
+          borderRadius: 6, padding: '9px 11px', fontSize: 12, lineHeight: 1.5, fontWeight: 400,
           color: 'var(--text-secondary)', boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
         }}>
           {desc}
@@ -70,10 +70,10 @@ function NeedInfoIcon({ need, color }) {
 }
 
 export default function NeedBadge({ need, size = 'sm' }) {
-  if (!need) return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>;
+  if (!need) return <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>;
 
   const meta = NEED_META[need] || { label: need, color: '#888' };
-  const fontSize = size === 'lg' ? 13 : 11;
+  const fontSize = size === 'lg' ? 14 : 12;
   const padding = size === 'lg' ? '4px 10px' : '2px 7px';
 
   return (

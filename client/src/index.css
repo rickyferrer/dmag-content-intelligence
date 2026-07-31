@@ -70,7 +70,7 @@ html, body, #root {
   background: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -81,12 +81,12 @@ a:hover { text-decoration: underline; }
 button {
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 input, select {
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 14px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   color: var(--text-primary);
