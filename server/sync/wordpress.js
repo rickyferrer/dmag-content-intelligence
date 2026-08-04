@@ -355,7 +355,15 @@ export async function syncWordPress() {
     }
   }
 
-  setSyncState('last_wp_sync', now);
+  // Only advance the incremental-sync watermark on a clean run. If any content
+  // type errored out mid-pagination, its unfetched pages must not be permanently
+  // skipped — leaving `last_wp_sync` unchanged means the next run retries the
+  // same modified_after window instead of silently moving past the gap.
+  if (errors.length === 0) {
+    setSyncState('last_wp_sync', now);
+  } else {
+    console.warn(`[WP] ${errors.length} error(s) during sync — leaving last_wp_sync at ${lastSync || '(none)'} so the next run retries this window.`);
+  }
   console.log(`[WP] Sync complete. ${totalMeta} metadata, ${totalContent} content bodies. ${errors.length} errors.`);
   return { synced: totalMeta, errors };
 }
