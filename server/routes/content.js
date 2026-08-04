@@ -30,10 +30,11 @@ router.get('/', (req, res) => {
   const limitNum = Math.min(200, Math.max(1, parseInt(limit)));
   const offset = (pageNum - 1) * limitNum;
 
-  // Newsletter = historical backfill (weeks older than the live rolling
-  // window, so it can't double-count with the live number) + the live
-  // rolling-30-day value. See the historical_newsletter_signups join below.
+  // Newsletter / Sub Clicks = historical backfill (older than the live
+  // rolling window, so it can't double-count with the live number) + the
+  // live rolling-30-day value. See the historical_* joins below.
   const NEWSLETTER_TOTAL_EXPR = "(COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0))";
+  const SUBCLICKS_TOTAL_EXPR = "(COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0))";
 
   const validSorts = {
     true_value: 'a.true_value',
@@ -47,7 +48,7 @@ router.get('/', (req, res) => {
     type: 'c.content_type',
     section: 'c.section',
     need: 'c.user_need',
-    subscribe_clicks: 'a.ga4_subscribe_clicks',
+    subscribe_clicks: SUBCLICKS_TOTAL_EXPR,
     email_signups: 'a.ga4_email_signups',
     newsletter: NEWSLETTER_TOTAL_EXPR,
     writer: 'c.writer',
@@ -86,7 +87,8 @@ router.get('/', (req, res) => {
       a.ga4_subscribe_clicks, a.ga4_email_signups, a.ga4_ad_revenue,
       a.mf_unique_users, a.mf_pageviews, a.mf_loyal_users,
       a.mf_scroll_depth, a.mf_newsletter_signups, a.true_value, a.snapshot_at,
-      ${NEWSLETTER_TOTAL_EXPR} AS newsletter_signups_total
+      ${NEWSLETTER_TOTAL_EXPR} AS newsletter_signups_total,
+      ${SUBCLICKS_TOTAL_EXPR} AS subscribe_clicks_total
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots GROUP BY wp_id
@@ -101,6 +103,14 @@ router.get('/', (req, res) => {
       WHERE week_start < date('now', '-30 days')
       GROUP BY wp_id
     ) h ON h.wp_id = c.wp_id
+    LEFT JOIN (
+      -- Same non-overlap reasoning as the newsletter join above, applied to
+      -- daily rows instead of weekly.
+      SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
+      FROM historical_subscribe_clicks
+      WHERE date < date('now', '-30 days')
+      GROUP BY wp_id
+    ) hs ON hs.wp_id = c.wp_id
     ${whereClause}
     ORDER BY ${sortCol} ${sortDir}
     LIMIT ? OFFSET ?

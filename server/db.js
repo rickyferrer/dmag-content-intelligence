@@ -159,6 +159,22 @@ function initSchema() {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_hist_newsletter_wp_week ON historical_newsletter_signups(wp_id, week_start);
 
+    -- One-off backfill of per-article subscribe_click history from GA4's
+    -- Data API (server/scripts/backfill-historical-subscribe-clicks.mjs).
+    -- Unlike Marfeel, GA4 supports arbitrary historical date ranges directly
+    -- — this isn't a manual-export workaround, just a wider one-off query.
+    -- Daily grain (subscribe_clicks is a safe-to-sum event count). Re-run
+    -- periodically to extend coverage forward; not part of the daily sync.
+    CREATE TABLE IF NOT EXISTS historical_subscribe_clicks (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      wp_id            INTEGER,
+      date             TEXT,
+      subscribe_clicks INTEGER DEFAULT 0,
+      imported_at      TEXT,
+      FOREIGN KEY (wp_id) REFERENCES content(wp_id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_hist_subclicks_wp_date ON historical_subscribe_clicks(wp_id, date);
+
     -- Site-wide GA4 traffic by calendar date, independent of which articles
     -- were published that day. Lets date-range filters answer "how much
     -- traffic did the site get in this window" rather than only "how did

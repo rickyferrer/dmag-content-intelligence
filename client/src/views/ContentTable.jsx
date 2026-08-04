@@ -18,7 +18,7 @@ const COLUMNS = [
   { label: 'Users',         key: 'users' },
   { label: 'Loyal Users',   key: 'loyal_users' },
   { label: 'In-Market %',   key: 'inmarket' },
-  { label: 'Sub Clicks',    key: 'subscribe_clicks' },
+  { label: 'Sub Clicks',    key: 'subscribe_clicks', info: 'Live clicks from the last ~30 days, plus historical clicks backfilled from GA4 (back to mid-2025).' },
   { label: 'Newsletter',    key: 'newsletter', info: 'Live signups from the last ~30 days, plus historical signups backfilled from a one-time Marfeel export (through July 27, 2026).' },
   { label: 'Eng. Time',     key: 'engagement' },
 ];
@@ -338,7 +338,7 @@ export default function ContentTable({ onSelect }) {
                     : '—'}
                 </td>
                 <td style={{ padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {fmt(row.ga4_subscribe_clicks)}
+                  {fmt(row.subscribe_clicks_total)}
                 </td>
                 <td style={{ padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {fmt(row.newsletter_signups_total)}

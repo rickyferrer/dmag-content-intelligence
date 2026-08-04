@@ -330,6 +330,43 @@ export async function fetchLoyalUsersForRange(dateFrom, dateTo) {
   return Math.round(row?.activeUsers || 0);
 }
 
+// One-off historical backfill of per-article subscribe_click events, keyed
+// by page + day. Unlike Marfeel's newsletter-signup endpoint (no lookback
+// at all, see marfeel.js), GA4's Data API supports arbitrary historical date
+// ranges directly — no manual export needed, just ask further back. Daily
+// grain, not weekly, since subscribe_clicks is a safe-to-sum event count
+// (see the comment above fetchUsersForRange) and GA4 only returns rows that
+// actually had events, so this stays sparse rather than one row per
+// page-per-day regardless of activity.
+export async function fetchHistoricalSubscribeClicks(lookbackDays = 400) {
+  const rows = [];
+  const limit = 100000;
+  let offset = 0;
+
+  while (true) {
+    const data = await ga4Request(':runReport', {
+      dateRanges: [{ startDate: `${lookbackDays}daysAgo`, endDate: 'today' }],
+      dimensions: [{ name: 'pagePath' }, { name: 'date' }],
+      metrics: [{ name: 'eventCount' }],
+      dimensionFilter: {
+        filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'subscribe_click' } },
+      },
+      limit,
+      offset,
+    });
+    const batch = parseRows(data);
+    rows.push(...batch.map(r => ({
+      pagePath: r.pagePath,
+      date: formatGA4Date(r.date),
+      subscribe_clicks: Math.round(r.eventCount || 0),
+    })));
+    if (batch.length < limit) break;
+    offset += limit;
+  }
+
+  return rows;
+}
+
 // Site-wide traffic by calendar date, independent of any specific article —
 // this is what lets a date-range filter answer "how much traffic did the site
 // get in this window" rather than "how did articles published in this window
