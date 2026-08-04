@@ -18,14 +18,9 @@
 // a 90k-row / 11MB export plus its fully-parsed row array was enough to hit
 // V8's heap limit on a memory-constrained host (observed on Render). Peak
 // memory here is one line + the url->wp_id map, regardless of file size.
-import Database from 'better-sqlite3';
-import path from 'path';
 import fs from 'fs';
 import readline from 'readline';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '..', '..', 'content.db');
+import { getDb } from '../db.js';
 
 const args = process.argv.slice(2);
 const csvPath = args.find(a => !a.startsWith('--'));
@@ -113,7 +108,7 @@ async function main() {
   }
   console.log(`Found ${weeks.length} weeks (${weeks[0]}..${lastWeek}).`);
 
-  const db = new Database(DB_PATH);
+  const db = getDb();
   const content = db.prepare('SELECT wp_id, url FROM content WHERE url IS NOT NULL').all();
   const urlToWpId = new Map();
   for (const c of content) {
