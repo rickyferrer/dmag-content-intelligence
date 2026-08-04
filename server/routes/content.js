@@ -216,7 +216,18 @@ router.get('/:id', (req, res) => {
     'SELECT category, confidence FROM content_categories WHERE wp_id = ? ORDER BY confidence DESC'
   ).all(wpId);
 
-  res.json({ ...item, history, sources, categories, trueValueBreakdown: breakdown });
+  // One-time historical import (see import-historical-newsletter-signups.mjs)
+  // — weekly, not the rolling-30-day mf_newsletter_signups value above, so
+  // kept as its own field rather than merged into `history`.
+  const newsletterHistory = db.prepare(`
+    SELECT week_start, newsletter_signup, newsletter_signup_inline, unique_users,
+      (newsletter_signup + newsletter_signup_inline) AS total
+    FROM historical_newsletter_signups
+    WHERE wp_id = ?
+    ORDER BY week_start ASC
+  `).all(wpId);
+
+  res.json({ ...item, history, sources, categories, trueValueBreakdown: breakdown, newsletterHistory });
 });
 
 // POST /api/content/:id/reclassify

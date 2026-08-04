@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { api } from '../api/index.js';
 import NeedBadge from '../components/NeedBadge.jsx';
 
@@ -257,6 +257,40 @@ export default function ContentDetail({ wpId, onClose }) {
               </ResponsiveContainer>
             </div>
           )}
+
+          {/* Newsletter signups — one-time historical import, weekly grain.
+              Kept separate from Content Value History (a different, blended
+              metric) and from the rolling-30-day "Newsletter Signups" stat
+              above, since those are three different things that happen to
+              share a name. */}
+          {item.newsletterHistory?.length > 0 && (() => {
+            const totalSignups = item.newsletterHistory.reduce((s, r) => s + r.total, 0);
+            const firstWeek = item.newsletterHistory[0].week_start;
+            const lastWeek = item.newsletterHistory[item.newsletterHistory.length - 1].week_start;
+            return (
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                  Newsletter Signups History
+                </h3>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+                  {totalSignups} signups across {item.newsletterHistory.length} weeks ({firstWeek.slice(5)}–{lastWeek.slice(5)}),
+                  from a one-time Marfeel export — not the rolling 30-day count above.
+                </p>
+                <ResponsiveContainer width="100%" height={140}>
+                  <BarChart data={item.newsletterHistory} margin={{ left: 0, right: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="week_start" tickFormatter={v => v?.slice(5, 10)} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} stroke="var(--border)" />
+                    <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} stroke="var(--border)" allowDecimals={false} />
+                    <Tooltip
+                      contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12 }}
+                      labelStyle={{ color: 'var(--text-secondary)' }}
+                    />
+                    <Bar dataKey="total" fill="var(--accent-gold)" opacity={0.8} name="Signups" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            );
+          })()}
 
           {/* Metadata */}
           <div>

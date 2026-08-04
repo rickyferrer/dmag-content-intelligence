@@ -141,6 +141,24 @@ function initSchema() {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_gsc_daily_wp_date ON gsc_page_daily(wp_id, date);
 
+    -- One-time import of historical per-article newsletter signups from a
+    -- Marfeel CSV export (server/scripts/import-historical-newsletter-signups.mjs).
+    -- The live Marfeel API has no date-range/lookback capability at all (see
+    -- marfeel.js) — this is the only way to see newsletter performance for
+    -- content trafficked before this app started collecting it. Weekly
+    -- grain, matching the export's cadence; not an ongoing sync.
+    CREATE TABLE IF NOT EXISTS historical_newsletter_signups (
+      id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+      wp_id                    INTEGER,
+      week_start               TEXT,
+      newsletter_signup        INTEGER DEFAULT 0,
+      newsletter_signup_inline INTEGER DEFAULT 0,
+      unique_users             INTEGER DEFAULT 0,
+      imported_at              TEXT,
+      FOREIGN KEY (wp_id) REFERENCES content(wp_id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_hist_newsletter_wp_week ON historical_newsletter_signups(wp_id, week_start);
+
     -- Site-wide GA4 traffic by calendar date, independent of which articles
     -- were published that day. Lets date-range filters answer "how much
     -- traffic did the site get in this window" rather than only "how did
