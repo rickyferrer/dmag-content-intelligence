@@ -521,8 +521,31 @@ export function initScheduler() {
   console.log('[Scheduler] Cron jobs initialized — daily full sync at 6:00am Central');
 }
 
+// Watermarks that should update roughly daily — flagged stale if older than this,
+// so a silently-frozen sync (e.g. a process crash mid-run that never reaches the
+// final setSyncState call) surfaces in the UI instead of going unnoticed for weeks.
+const STALE_SYNC_THRESHOLD_HOURS = 36;
+const WATCHED_SYNC_KEYS = ['last_wp_sync', 'last_analytics_sync', 'last_gsc_sync'];
+
 export function getSyncStatus() {
   const db = getDb();
   const state = db.prepare('SELECT key, value, updated_at FROM sync_state').all();
-  return Object.fromEntries(state.map(r => [r.key, { value: r.value, updated_at: r.updated_at }]));
+  const result = Object.fromEntries(state.map(r => [r.key, { value: r.value, updated_at: r.updated_at }]));
+
+  for (const key of WATCHED_SYNC_KEYS) {
+    const entry = result[key];
+    if (!entry) {
+      // Never synced even once — genuinely stale, but there's no age to report.
+      // (Infinity would serialize to `null` over JSON anyway, so be explicit.)
+      result[key] = { value: null, updated_at: null, staleHours: null, stale: true };
+      continue;
+    }
+    // updated_at is written via SQLite's datetime('now'), which is UTC with no
+    // timezone suffix — append one so Date.parse doesn't treat it as local time.
+    const ageMs = Date.now() - Date.parse(entry.updated_at.replace(' ', 'T') + 'Z');
+    const staleHours = Math.floor(ageMs / 3_600_000);
+    result[key] = { ...entry, staleHours, stale: staleHours > STALE_SYNC_THRESHOLD_HOURS };
+  }
+
+  return result;
 }

@@ -206,8 +206,15 @@ export default function Settings() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
             {Object.entries(syncStatus).map(([key, val]) => (
               <div key={key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-                <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{key}</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                  {key}
+                  {val?.stale && (
+                    <span style={{ marginLeft: 8, color: '#e8a33d', fontSize: 11 }} title={val.staleHours == null ? 'Never completed' : `No update in ${val.staleHours}h`}>
+                      ⚠ {val.staleHours == null ? 'never run' : `stale (${val.staleHours}h)`}
+                    </span>
+                  )}
+                </span>
+                <span style={{ color: val?.stale ? '#e8a33d' : 'var(--text-muted)', fontSize: 12 }}>
                   {val?.updated_at ? val.updated_at.slice(0, 19).replace('T', ' ') : '—'}
                 </span>
               </div>

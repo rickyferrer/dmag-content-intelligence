@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Overview from './views/Overview.jsx';
 import ContentTable from './views/ContentTable.jsx';
 import ContentDetail from './views/ContentDetail.jsx';
@@ -9,6 +9,7 @@ import Publications from './views/Publications.jsx';
 import Vulnerability from './views/Vulnerability.jsx';
 import Insights from './views/Insights.jsx';
 import Settings from './views/Settings.jsx';
+import { api } from './api/index.js';
 
 const NAV = [
   { id: 'overview',      label: 'Overview' },
@@ -22,13 +23,42 @@ const NAV = [
   { id: 'settings',       label: 'Settings' },
 ];
 
+// Sync watermarks worth surfacing when they go stale — labels shown in the banner.
+const SYNC_LABELS = {
+  last_wp_sync: 'WordPress content sync',
+  last_analytics_sync: 'Analytics sync',
+  last_gsc_sync: 'Search Console sync',
+};
+const SYNC_HEALTH_POLL_MS = 10 * 60 * 1000; // 10 min — cheap, and this only needs to catch multi-day staleness
+
 export default function App() {
   const [view, setView] = useState('overview');
   const [selectedId, setSelectedId] = useState(null);
+  const [staleSyncs, setStaleSyncs] = useState([]);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   const handleSelect = (id) => {
     setSelectedId(id);
   };
+
+  // Poll sync status for staleness so a silently-frozen sync (see server/sync/
+  // wordpress.js — a mid-run crash can leave last_wp_sync stuck for weeks
+  // without ever logging an error) surfaces here instead of going unnoticed.
+  useEffect(() => {
+    const checkSyncHealth = () => {
+      api.getSyncStatus()
+        .then(status => {
+          const stale = Object.entries(SYNC_LABELS)
+            .filter(([key]) => status[key]?.stale)
+            .map(([key, label]) => ({ key, label, staleHours: status[key].staleHours ?? null }));
+          setStaleSyncs(stale);
+        })
+        .catch(() => {}); // health check is best-effort — never block the app on it
+    };
+    checkSyncHealth();
+    const interval = setInterval(checkSyncHealth, SYNC_HEALTH_POLL_MS);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -80,6 +110,41 @@ export default function App() {
           ))}
         </nav>
       </header>
+
+      {/* Stale-sync warning banner */}
+      {staleSyncs.length > 0 && !bannerDismissed && (
+        <div style={{
+          background: '#4a2a0a',
+          borderBottom: '1px solid #8a5a1a',
+          color: '#ffd699',
+          fontSize: 13,
+          padding: '8px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+          flexShrink: 0,
+        }}>
+          <span>
+            ⚠ {staleSyncs.map(s => s.staleHours == null ? `${s.label} has never completed` : `${s.label} hasn't updated in ${s.staleHours}h`).join(' · ')} — data may be missing or out of date.
+          </span>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexShrink: 0 }}>
+            <button
+              onClick={() => { setView('settings'); setSelectedId(null); }}
+              style={{ background: 'transparent', border: '1px solid #8a5a1a', color: '#ffd699', borderRadius: 4, padding: '3px 10px', fontSize: 12 }}
+            >
+              View Sync Status
+            </button>
+            <button
+              onClick={() => setBannerDismissed(true)}
+              aria-label="Dismiss"
+              style={{ background: 'transparent', border: 'none', color: '#ffd699', fontSize: 16, lineHeight: 1, padding: 0 }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <main style={{
