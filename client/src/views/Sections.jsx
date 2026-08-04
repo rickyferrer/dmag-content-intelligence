@@ -10,6 +10,10 @@ function fmt(n) {
   return String(Math.round(n));
 }
 
+// Hidden from the table for now (not deleted) — we don't have a full year
+// of history yet, so every YoY comparison would be against a near-empty or
+// missing prior-year bucket and wouldn't mean anything. Re-add the 'YOY'
+// header and the <YoY> cell below once there's enough backfilled data.
 function YoY({ current, prior }) {
   if (!prior || prior === 0) return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>;
   const pct = ((current - prior) / prior) * 100;
@@ -94,7 +98,7 @@ export default function Sections() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-elevated)' }}>
-                {['Section', 'Articles', 'Total Content Value', 'YOY', 'Users', 'Loyal Users', 'Pageviews', 'Sub Clicks', 'Newsletter', 'Avg Eng. Time', 'Top Article'].map(h => (
+                {['Section', 'Articles', 'Total Content Value', 'Users', 'Loyal Users', 'Pageviews', 'Sub Clicks', 'Newsletter', 'Avg Eng. Time', 'Top Article'].map(h => (
                   <th key={h} style={{
                     padding: '10px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600,
                     color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
@@ -130,9 +134,7 @@ export default function Sections() {
                       </span>
                     </div>
                   </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                    <YoY current={row.avg_true_value || 0} prior={row.py?.py_total_true_value} />
-                  </td>
+                  {/* YOY cell hidden along with the header above — see comment on YoY() */}
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
                     {fmt(row.total_users)}
                   </td>
@@ -168,7 +170,7 @@ export default function Sections() {
               ))}
               {data.length === 0 && (
                 <tr>
-                  <td colSpan={11} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={10} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
                     No section data found
                   </td>
                 </tr>
