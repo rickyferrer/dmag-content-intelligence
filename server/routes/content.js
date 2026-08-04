@@ -30,6 +30,11 @@ router.get('/', (req, res) => {
   const limitNum = Math.min(200, Math.max(1, parseInt(limit)));
   const offset = (pageNum - 1) * limitNum;
 
+  // Newsletter = historical backfill (weeks older than the live rolling
+  // window, so it can't double-count with the live number) + the live
+  // rolling-30-day value. See the historical_newsletter_signups join below.
+  const NEWSLETTER_TOTAL_EXPR = "(COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0))";
+
   const validSorts = {
     true_value: 'a.true_value',
     pageviews: 'a.ga4_pageviews',
@@ -44,7 +49,7 @@ router.get('/', (req, res) => {
     need: 'c.user_need',
     subscribe_clicks: 'a.ga4_subscribe_clicks',
     email_signups: 'a.ga4_email_signups',
-    newsletter: 'a.mf_newsletter_signups',
+    newsletter: NEWSLETTER_TOTAL_EXPR,
     writer: 'c.writer',
   };
   const sortCol = validSorts[sortBy] || 'c.published_at';
@@ -80,12 +85,22 @@ router.get('/', (req, res) => {
       a.ga4_avg_engagement_time, a.ga4_sessions,
       a.ga4_subscribe_clicks, a.ga4_email_signups, a.ga4_ad_revenue,
       a.mf_unique_users, a.mf_pageviews, a.mf_loyal_users,
-      a.mf_scroll_depth, a.mf_newsletter_signups, a.true_value, a.snapshot_at
+      a.mf_scroll_depth, a.mf_newsletter_signups, a.true_value, a.snapshot_at,
+      ${NEWSLETTER_TOTAL_EXPR} AS newsletter_signups_total
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots GROUP BY wp_id
     ) latest_snap ON c.wp_id = latest_snap.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = latest_snap.wp_id AND a.snapshot_at = latest_snap.latest
+    LEFT JOIN (
+      -- Only weeks older than the live rolling-30-day window, so this can't
+      -- double-count against a.mf_newsletter_signups (which already covers
+      -- roughly the last 30 days as of the last sync).
+      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
+      FROM historical_newsletter_signups
+      WHERE week_start < date('now', '-30 days')
+      GROUP BY wp_id
+    ) h ON h.wp_id = c.wp_id
     ${whereClause}
     ORDER BY ${sortCol} ${sortDir}
     LIMIT ? OFFSET ?

@@ -19,7 +19,7 @@ const COLUMNS = [
   { label: 'Loyal Users',   key: 'loyal_users' },
   { label: 'In-Market %',   key: 'inmarket' },
   { label: 'Sub Clicks',    key: 'subscribe_clicks' },
-  { label: 'Newsletter',    key: 'newsletter' },
+  { label: 'Newsletter',    key: 'newsletter', info: 'Live signups from the last ~30 days, plus historical signups backfilled from a one-time Marfeel export (through July 27, 2026).' },
   { label: 'Eng. Time',     key: 'engagement' },
 ];
 
@@ -288,7 +288,7 @@ export default function ContentTable({ onSelect }) {
                   key={col.key}
                   style={thStyle(col.key)}
                   onClick={() => handleHeaderClick(col.key)}
-                  title={`Sort by ${col.label}`}
+                  title={col.info ? `${col.info} (click to sort)` : `Sort by ${col.label}`}
                 >
                   {col.label}
                   <SortArrow col={col.key} sortBy={filters.sortBy} order={filters.order} />
@@ -341,7 +341,7 @@ export default function ContentTable({ onSelect }) {
                   {fmt(row.ga4_subscribe_clicks)}
                 </td>
                 <td style={{ padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {fmt(row.mf_newsletter_signups)}
+                  {fmt(row.newsletter_signups_total)}
                 </td>
                 <td style={{ padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {row.ga4_avg_engagement_time != null ? row.ga4_avg_engagement_time.toFixed(0) + 's' : '—'}
