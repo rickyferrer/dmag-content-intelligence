@@ -142,78 +142,85 @@ function pctChange(curr, prev) {
 
 // GET /api/analytics/summary
 router.get('/summary', async (req, res) => {
-  const db = getDb();
-  const { dateFrom, dateTo, section, type } = req.query;
+  try {
+    const db = getDb();
+    const { dateFrom, dateTo, section, type } = req.query;
 
-  const contentCurrent = computeContentSummary(db, dateFrom, dateTo, section, type);
-  const useSiteWide = !section && !type;
-  const trafficCurrent = useSiteWide ? await computeTrafficSummary(db, dateFrom, dateTo) : null;
+    const contentCurrent = computeContentSummary(db, dateFrom, dateTo, section, type);
+    const useSiteWide = !section && !type;
+    const trafficCurrent = useSiteWide ? await computeTrafficSummary(db, dateFrom, dateTo) : null;
 
-  const current = {
-    total_content: contentCurrent.total_content,
-    avg_true_value: contentCurrent.avg_true_value,
-    total_pageviews: useSiteWide ? trafficCurrent.total_pageviews : contentCurrent.total_pageviews,
-    total_users: useSiteWide ? trafficCurrent.total_users : contentCurrent.total_users,
-    total_loyal_users: useSiteWide ? trafficCurrent.total_loyal_users : contentCurrent.total_loyal_users,
-    total_subscribe_clicks: useSiteWide ? trafficCurrent.total_subscribe_clicks : contentCurrent.total_subscribe_clicks,
-    total_ad_revenue: useSiteWide ? trafficCurrent.total_ad_revenue : contentCurrent.total_ad_revenue,
-    total_newsletter_signups: useSiteWide ? trafficCurrent.total_newsletter_signups : contentCurrent.total_newsletter_signups,
-    avg_engagement_time: useSiteWide ? trafficCurrent.avg_engagement_time : contentCurrent.avg_engagement_time,
-  };
+    const current = {
+      total_content: contentCurrent.total_content,
+      avg_true_value: contentCurrent.avg_true_value,
+      total_pageviews: useSiteWide ? trafficCurrent.total_pageviews : contentCurrent.total_pageviews,
+      total_users: useSiteWide ? trafficCurrent.total_users : contentCurrent.total_users,
+      total_loyal_users: useSiteWide ? trafficCurrent.total_loyal_users : contentCurrent.total_loyal_users,
+      total_subscribe_clicks: useSiteWide ? trafficCurrent.total_subscribe_clicks : contentCurrent.total_subscribe_clicks,
+      total_ad_revenue: useSiteWide ? trafficCurrent.total_ad_revenue : contentCurrent.total_ad_revenue,
+      total_newsletter_signups: useSiteWide ? trafficCurrent.total_newsletter_signups : contentCurrent.total_newsletter_signups,
+      avg_engagement_time: useSiteWide ? trafficCurrent.avg_engagement_time : contentCurrent.avg_engagement_time,
+    };
 
-  // Only compute a comparison when there's an explicit range to derive a
-  // duration from — "all time" has no meaningful "N days ago".
-  let changes = {};
-  if (dateFrom && dateTo) {
-    const from = new Date(dateFrom + 'T00:00:00Z');
-    const to = new Date(dateTo + 'T00:00:00Z');
-    const durationDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)));
+    // Only compute a comparison when there's an explicit range to derive a
+    // duration from — "all time" has no meaningful "N days ago".
+    let changes = {};
+    if (dateFrom && dateTo) {
+      const from = new Date(dateFrom + 'T00:00:00Z');
+      const to = new Date(dateTo + 'T00:00:00Z');
+      const durationDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)));
 
-    // Content-side previous period (avg_true_value, newsletter signups):
-    // same cohort of articles, snapshot from ~N days ago.
-    const asOf = new Date(Date.now() - durationDays * 24 * 60 * 60 * 1000).toISOString();
-    const contentPrevious = computeContentSummary(db, dateFrom, dateTo, section, type, asOf);
-    const contentCoverage = contentCurrent.total_content > 0
-      ? contentPrevious.matched_count / contentCurrent.total_content
-      : 0;
+      // Content-side previous period (avg_true_value, newsletter signups):
+      // same cohort of articles, snapshot from ~N days ago.
+      const asOf = new Date(Date.now() - durationDays * 24 * 60 * 60 * 1000).toISOString();
+      const contentPrevious = computeContentSummary(db, dateFrom, dateTo, section, type, asOf);
+      const contentCoverage = contentCurrent.total_content > 0
+        ? contentPrevious.matched_count / contentCurrent.total_content
+        : 0;
 
-    if (contentCoverage >= 0.5) {
-      changes.avg_true_value = pctChange(contentCurrent.avg_true_value, contentPrevious.avg_true_value);
-    }
-
-    if (useSiteWide) {
-      // Traffic-side previous period: a real shifted calendar window.
-      const priorTo = new Date(from.getTime() - 24 * 60 * 60 * 1000);
-      const priorFrom = new Date(priorTo.getTime() - durationDays * 24 * 60 * 60 * 1000);
-      const fmtDate = (d) => d.toISOString().slice(0, 10);
-      const trafficPrevious = await computeTrafficSummary(db, fmtDate(priorFrom), fmtDate(priorTo));
-
-      // Users/loyal users are live GA4 queries — always an exact count for
-      // whatever range was requested, no historical-depth gating needed.
-      changes.total_users = pctChange(current.total_users, trafficPrevious.total_users);
-      changes.total_loyal_users = pctChange(current.total_loyal_users, trafficPrevious.total_loyal_users);
-
-      // Pageviews/subscribe_clicks/ad_revenue/newsletter still come from the
-      // pre-aggregated daily table, so still need the depth check.
-      const expectedDays = durationDays + 1;
-      const trafficCoverage = trafficPrevious.day_count / expectedDays;
-      if (trafficCoverage >= 0.5) {
-        changes.total_subscribe_clicks = pctChange(current.total_subscribe_clicks, trafficPrevious.total_subscribe_clicks);
-        changes.total_ad_revenue = pctChange(current.total_ad_revenue, trafficPrevious.total_ad_revenue);
-        changes.total_newsletter_signups = pctChange(current.total_newsletter_signups, trafficPrevious.total_newsletter_signups);
+      if (contentCoverage >= 0.5) {
+        changes.avg_true_value = pctChange(contentCurrent.avg_true_value, contentPrevious.avg_true_value);
       }
-    } else if (contentCoverage >= 0.5) {
-      // Section/type-scoped view — no site-wide breakdown available, so
-      // fall back to the per-article comparison for these too.
-      changes.total_users = pctChange(current.total_users, contentPrevious.total_users);
-      changes.total_newsletter_signups = pctChange(current.total_newsletter_signups, contentPrevious.total_newsletter_signups);
-      changes.total_loyal_users = pctChange(current.total_loyal_users, contentPrevious.total_loyal_users);
-      changes.total_subscribe_clicks = pctChange(current.total_subscribe_clicks, contentPrevious.total_subscribe_clicks);
-      changes.total_ad_revenue = pctChange(current.total_ad_revenue, contentPrevious.total_ad_revenue);
-    }
-  }
 
-  res.json({ ...current, changes });
+      if (useSiteWide) {
+        // Traffic-side previous period: a real shifted calendar window.
+        const priorTo = new Date(from.getTime() - 24 * 60 * 60 * 1000);
+        const priorFrom = new Date(priorTo.getTime() - durationDays * 24 * 60 * 60 * 1000);
+        const fmtDate = (d) => d.toISOString().slice(0, 10);
+        const trafficPrevious = await computeTrafficSummary(db, fmtDate(priorFrom), fmtDate(priorTo));
+
+        // Users/loyal users are live GA4 queries — always an exact count for
+        // whatever range was requested, no historical-depth gating needed.
+        changes.total_users = pctChange(current.total_users, trafficPrevious.total_users);
+        changes.total_loyal_users = pctChange(current.total_loyal_users, trafficPrevious.total_loyal_users);
+
+        // Pageviews/subscribe_clicks/ad_revenue/newsletter still come from the
+        // pre-aggregated daily table, so still need the depth check.
+        const expectedDays = durationDays + 1;
+        const trafficCoverage = trafficPrevious.day_count / expectedDays;
+        if (trafficCoverage >= 0.5) {
+          changes.total_subscribe_clicks = pctChange(current.total_subscribe_clicks, trafficPrevious.total_subscribe_clicks);
+          changes.total_ad_revenue = pctChange(current.total_ad_revenue, trafficPrevious.total_ad_revenue);
+          changes.total_newsletter_signups = pctChange(current.total_newsletter_signups, trafficPrevious.total_newsletter_signups);
+        }
+      } else if (contentCoverage >= 0.5) {
+        // Section/type-scoped view — no site-wide breakdown available, so
+        // fall back to the per-article comparison for these too.
+        changes.total_users = pctChange(current.total_users, contentPrevious.total_users);
+        changes.total_newsletter_signups = pctChange(current.total_newsletter_signups, contentPrevious.total_newsletter_signups);
+        changes.total_loyal_users = pctChange(current.total_loyal_users, contentPrevious.total_loyal_users);
+        changes.total_subscribe_clicks = pctChange(current.total_subscribe_clicks, contentPrevious.total_subscribe_clicks);
+        changes.total_ad_revenue = pctChange(current.total_ad_revenue, contentPrevious.total_ad_revenue);
+      }
+    }
+
+    res.json({ ...current, changes });
+  } catch (err) {
+    // GA4 (or any other external call in here) failing shouldn't take the
+    // whole server down — see server/index.js's unhandledRejection note.
+    console.error('[Server] /api/analytics/summary error:', err.message);
+    res.status(500).json({ error: 'Failed to load summary', message: err.message });
+  }
 });
 
 // GET /api/analytics/by-need

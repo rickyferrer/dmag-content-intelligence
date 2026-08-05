@@ -16,6 +16,22 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3001');
 const app = express();
 
+// Without this, any unhandled rejection anywhere in the app — a bad date
+// range to an external API, a flaky network call, anything in an async
+// route handler or cron job — crashes the entire Node process, taking the
+// whole site down for every user until Render restarts it (and right back
+// down again if the same request triggers it once more). Log and keep
+// running instead; an individual failed request should degrade to that one
+// request failing, not an outage. (Route handlers should still catch their
+// own expected failure modes for a clean response — this is the last-resort
+// net, not a substitute for that.)
+process.on('unhandledRejection', (reason) => {
+  console.error('[Server] Unhandled rejection (process kept alive):', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[Server] Uncaught exception (process kept alive):', err);
+});
+
 // Auth middleware — only if credentials are configured
 const authUser = process.env.DASHBOARD_USER;
 const authPass = process.env.DASHBOARD_PASS;

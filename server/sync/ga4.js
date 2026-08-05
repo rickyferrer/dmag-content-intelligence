@@ -297,7 +297,7 @@ function formatGA4Date(raw) {
 export async function fetchUsersForRange(dateFrom, dateTo) {
   const dateRanges = dateFrom && dateTo
     ? [{ startDate: dateFrom, endDate: dateTo }]
-    : [{ startDate: '2015-01-01', endDate: 'today' }]; // "all time" fallback
+    : [{ startDate: '2020-01-01', endDate: 'today' }]; // "all time" fallback — GA4 didn't exist before this, so it's safe for any real property
 
   const data = await ga4Request(':runReport', {
     dateRanges,
@@ -313,7 +313,7 @@ export async function fetchUsersForRange(dateFrom, dateTo) {
 export async function fetchLoyalUsersForRange(dateFrom, dateTo) {
   const dateRanges = dateFrom && dateTo
     ? [{ startDate: dateFrom, endDate: dateTo }]
-    : [{ startDate: '2015-01-01', endDate: 'today' }];
+    : [{ startDate: '2020-01-01', endDate: 'today' }]; // "all time" fallback — GA4 didn't exist before this, so it's safe for any real property
 
   const data = await ga4Request(':runReport', {
     dateRanges,
