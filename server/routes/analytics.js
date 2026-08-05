@@ -34,22 +34,41 @@ function computeContentSummary(db, dateFrom, dateTo, section, type, asOf = null)
     SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots ${snapshotCutoff} GROUP BY wp_id
   `;
 
+  // Historical backfill (older than ~30 days before the reference point —
+  // "now" for the current period, `asOf` for a prior-period comparison) +
+  // the live rolling value, same non-overlap pattern used everywhere else
+  // this app totals subscribe clicks / newsletter signups.
+  const referenceTime = asOf ? new Date(asOf).getTime() : Date.now();
+  const historyCutoff = new Date(referenceTime - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
   const latest = db.prepare(`
     SELECT
       AVG(CASE WHEN a.true_value > 0 THEN a.true_value END) as avg_true_value,
       SUM(a.ga4_pageviews) as total_pageviews,
       SUM(a.ga4_users) as total_users,
       SUM(a.ga4_loyal_users) as total_loyal_users,
-      SUM(a.ga4_subscribe_clicks) as total_subscribe_clicks,
+      SUM(COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) as total_subscribe_clicks,
       SUM(a.ga4_ad_revenue) as total_ad_revenue,
-      SUM(a.mf_newsletter_signups) as total_newsletter_signups,
+      SUM(COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) as total_newsletter_signups,
       AVG(a.ga4_avg_engagement_time) as avg_engagement_time,
       COUNT(DISTINCT c.wp_id) as matched_count
     FROM content c
     JOIN (${latestSubquery}) lx ON c.wp_id = lx.wp_id
     JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
+    LEFT JOIN (
+      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
+      FROM historical_newsletter_signups
+      WHERE week_start < ?
+      GROUP BY wp_id
+    ) h ON h.wp_id = c.wp_id
+    LEFT JOIN (
+      SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
+      FROM historical_subscribe_clicks
+      WHERE date < ?
+      GROUP BY wp_id
+    ) hs ON hs.wp_id = c.wp_id
     ${dateFilter}
-  `).get(...snapshotParams, ...dateParams);
+  `).get(...snapshotParams, historyCutoff, historyCutoff, ...dateParams);
 
   return {
     total_content: total.count,
@@ -219,14 +238,26 @@ router.get('/by-need', (req, res) => {
       AVG(a.ga4_pageviews) as avg_pageviews,
       SUM(a.ga4_pageviews) as total_pageviews,
       AVG(a.ga4_avg_engagement_time) as avg_engagement_time,
-      SUM(a.ga4_subscribe_clicks) as total_subscribe_clicks,
-      SUM(a.mf_newsletter_signups) as total_newsletter_signups,
+      SUM(COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) as total_subscribe_clicks,
+      SUM(COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) as total_newsletter_signups,
       AVG(c.user_need_confidence) as avg_confidence
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots GROUP BY wp_id
     ) lx ON c.wp_id = lx.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
+    LEFT JOIN (
+      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
+      FROM historical_newsletter_signups
+      WHERE week_start < date('now', '-30 days')
+      GROUP BY wp_id
+    ) h ON h.wp_id = c.wp_id
+    LEFT JOIN (
+      SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
+      FROM historical_subscribe_clicks
+      WHERE date < date('now', '-30 days')
+      GROUP BY wp_id
+    ) hs ON hs.wp_id = c.wp_id
     ${where}
     GROUP BY c.user_need
     ORDER BY total_true_value DESC
@@ -328,14 +359,26 @@ router.get('/by-section', (req, res) => {
       SUM(a.ga4_users)            AS total_users,
       SUM(a.ga4_loyal_users)      AS total_loyal_users,
       SUM(a.ga4_pageviews)        AS total_pageviews,
-      SUM(a.ga4_subscribe_clicks) AS total_subscribe_clicks,
+      SUM(COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS total_subscribe_clicks,
       AVG(a.ga4_avg_engagement_time) AS avg_engagement_time,
-      SUM(a.mf_newsletter_signups)   AS total_newsletter_signups
+      SUM(COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS total_newsletter_signups
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
     ) lx ON c.wp_id = lx.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
+    LEFT JOIN (
+      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
+      FROM historical_newsletter_signups
+      WHERE week_start < date('now', '-30 days')
+      GROUP BY wp_id
+    ) h ON h.wp_id = c.wp_id
+    LEFT JOIN (
+      SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
+      FROM historical_subscribe_clicks
+      WHERE date < date('now', '-30 days')
+      GROUP BY wp_id
+    ) hs ON hs.wp_id = c.wp_id
     WHERE ${where.join(' AND ')}
     GROUP BY c.section
     ORDER BY avg_true_value DESC
@@ -433,11 +476,10 @@ router.get('/by-issue', (req, res) => {
   const issueMap = {};
 
   for (const row of rows) {
-    // Requires a slug segment after the month (…/month/some-article-slug/),
-    // which excludes the issue's own bare landing page (…/month/ with nothing
-    // after it — e.g. a page literally titled "May") from being counted as
-    // an article or winning "top article" by traffic alone.
-    const match = row.url.match(/\/publications\/([^/]+)\/(\d{4})\/([^/]+)\/([^/]+)\//);
+    // A slug segment after the month is optional, so the issue's own bare
+    // landing page (…/month/ with nothing after it — e.g. a page literally
+    // titled "June") counts as part of the issue too, same as any article.
+    const match = row.url.match(/\/publications\/([^/]+)\/(\d{4})\/([^/]+)\//);
     if (!match) continue;
     const [, pub, yr, mo] = match;
 
@@ -580,7 +622,7 @@ function fetchSourceRows(db, { dateFrom, dateTo, type }) {
       SUM(CASE WHEN at.article_pageviews > 0 THEN a.ga4_users * cs.pageviews * 1.0 / at.article_pageviews ELSE 0 END)             AS total_users,
       SUM(CASE WHEN at.article_pageviews > 0 THEN a.ga4_loyal_users * cs.pageviews * 1.0 / at.article_pageviews ELSE 0 END)       AS total_loyal_users,
       SUM(CASE WHEN at.article_pageviews > 0 THEN a.ga4_loyal_inmarket_pv * cs.pageviews * 1.0 / at.article_pageviews ELSE 0 END) AS total_inmarket,
-      SUM(CASE WHEN at.article_pageviews > 0 THEN a.mf_newsletter_signups * cs.pageviews * 1.0 / at.article_pageviews ELSE 0 END) AS total_newsletter_signups
+      SUM(CASE WHEN at.article_pageviews > 0 THEN (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) * cs.pageviews * 1.0 / at.article_pageviews ELSE 0 END) AS total_newsletter_signups
     FROM content_sources cs
     JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest FROM content_sources GROUP BY wp_id
@@ -591,6 +633,16 @@ function fetchSourceRows(db, { dateFrom, dateTo, type }) {
       SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
     ) lxa ON cs.wp_id = lxa.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lxa.wp_id AND a.snapshot_at = lxa.latest
+    LEFT JOIN (
+      -- Historical backfill, apportioned by the same pageview-share formula
+      -- as the live number above, so old content's newsletter signups don't
+      -- vanish from a source's total just because they aged out of the
+      -- rolling 30-day window.
+      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
+      FROM historical_newsletter_signups
+      WHERE week_start < date('now', '-30 days')
+      GROUP BY wp_id
+    ) h ON h.wp_id = cs.wp_id
     WHERE ${where.join(' AND ')}
     GROUP BY cs.source
     ORDER BY total_pageviews DESC
@@ -1035,12 +1087,19 @@ router.get('/vulnerability', (req, res) => {
 
   const articles = db.prepare(`
     SELECT c.wp_id, c.title, c.url, c.user_need, c.section, c.published_at,
-      a.true_value, a.ga4_users, a.ga4_pageviews, a.mf_newsletter_signups
+      a.true_value, a.ga4_users, a.ga4_pageviews,
+      (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS mf_newsletter_signups
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
     ) lx ON c.wp_id = lx.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
+    LEFT JOIN (
+      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
+      FROM historical_newsletter_signups
+      WHERE week_start < date('now', '-30 days')
+      GROUP BY wp_id
+    ) h ON h.wp_id = c.wp_id
     WHERE ${where.join(' AND ')}
   `).all(...params);
 
