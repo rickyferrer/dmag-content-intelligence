@@ -397,15 +397,34 @@ router.get('/by-issue', (req, res) => {
   const db = getDb();
   const { publication, year } = req.query;
 
+  // Sub clicks / newsletter = historical backfill (older than the live
+  // rolling window, so it can't double-count with the live number) + the
+  // live rolling-30-day value — same non-overlap pattern as the Content
+  // tab's /api/content merge, so the two views agree instead of one
+  // silently showing only the live number for older issues.
   const rows = db.prepare(`
     SELECT c.wp_id, c.url, c.title, c.published_at,
-      a.true_value, a.ga4_users, a.ga4_pageviews, a.ga4_subscribe_clicks,
-      a.mf_newsletter_signups, a.ga4_loyal_users, a.ga4_avg_engagement_time
+      a.true_value, a.ga4_users, a.ga4_pageviews,
+      (COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS ga4_subscribe_clicks,
+      (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS mf_newsletter_signups,
+      a.ga4_loyal_users, a.ga4_avg_engagement_time
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
     ) lx ON c.wp_id = lx.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
+    LEFT JOIN (
+      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
+      FROM historical_newsletter_signups
+      WHERE week_start < date('now', '-30 days')
+      GROUP BY wp_id
+    ) h ON h.wp_id = c.wp_id
+    LEFT JOIN (
+      SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
+      FROM historical_subscribe_clicks
+      WHERE date < date('now', '-30 days')
+      GROUP BY wp_id
+    ) hs ON hs.wp_id = c.wp_id
     WHERE c.url LIKE '%/publications/%'
       AND c.published_at >= date('now', '-2 years')
   `).all();
