@@ -355,7 +355,8 @@ router.get('/by-section', (req, res) => {
     SELECT
       c.section,
       COUNT(c.wp_id)              AS article_count,
-      SUM(a.true_value)           AS avg_true_value,
+      SUM(a.true_value)           AS total_true_value,
+      AVG(a.true_value)           AS avg_true_value,
       SUM(a.ga4_users)            AS total_users,
       SUM(a.ga4_loyal_users)      AS total_loyal_users,
       SUM(a.ga4_pageviews)        AS total_pageviews,
@@ -381,7 +382,7 @@ router.get('/by-section', (req, res) => {
     ) hs ON hs.wp_id = c.wp_id
     WHERE ${where.join(' AND ')}
     GROUP BY c.section
-    ORDER BY avg_true_value DESC
+    ORDER BY total_true_value DESC
   `).all(...params);
 
   // Prior year query — same date range shifted back 1 year
@@ -516,6 +517,7 @@ router.get('/by-issue', (req, res) => {
   const result = Object.values(issueMap).map(({ _eng_sum, _eng_count, ...issue }) => ({
     ...issue,
     avg_engagement_time: _eng_count > 0 ? _eng_sum / _eng_count : 0,
+    avg_true_value: issue.article_count > 0 ? issue.total_true_value / issue.article_count : 0,
   }));
 
   result.sort((a, b) => {

@@ -61,7 +61,7 @@ export default function Sections() {
     load(next);
   };
 
-  const maxTv = Math.max(...data.map(d => d.avg_true_value || 0), 1);
+  const maxTv = Math.max(...data.map(d => d.total_true_value || 0), 1);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -98,7 +98,7 @@ export default function Sections() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-elevated)' }}>
-                {['Section', 'Articles', 'Total Content Value', 'Users', 'Loyal Users', 'Pageviews', 'Sub Clicks', 'Newsletter', 'Avg Eng. Time', 'Top Article'].map(h => (
+                {['Section', 'Articles', 'Total Content Value', 'Avg Content Value', 'Users', 'Loyal Users', 'Pageviews', 'Sub Clicks', 'Newsletter', 'Avg Eng. Time', 'Top Article'].map(h => (
                   <th key={h} style={{
                     padding: '10px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600,
                     color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
@@ -125,14 +125,17 @@ export default function Sections() {
                       <div style={{ flex: 1, height: 6, background: 'var(--bg-elevated)', borderRadius: 3 }}>
                         <div style={{
                           height: '100%', borderRadius: 3,
-                          width: `${((row.avg_true_value || 0) / maxTv) * 100}%`,
+                          width: `${((row.total_true_value || 0) / maxTv) * 100}%`,
                           background: 'var(--accent-gold)', opacity: 0.8,
                         }} />
                       </div>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)', minWidth: 42, textAlign: 'right' }}>
-                        {row.avg_true_value != null ? Math.round(row.avg_true_value) : '—'}
+                        {row.total_true_value != null ? Math.round(row.total_true_value) : '—'}
                       </span>
                     </div>
+                  </td>
+                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                    {row.avg_true_value != null ? row.avg_true_value.toFixed(1) : '—'}
                   </td>
                   {/* YOY cell hidden along with the header above — see comment on YoY() */}
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
@@ -170,7 +173,7 @@ export default function Sections() {
               ))}
               {data.length === 0 && (
                 <tr>
-                  <td colSpan={10} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={11} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
                     No section data found
                   </td>
                 </tr>

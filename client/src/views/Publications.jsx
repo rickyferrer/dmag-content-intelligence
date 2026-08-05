@@ -78,6 +78,7 @@ export default function Publications() {
     { key: 'publication',             label: 'Publication' },
     { key: 'article_count',           label: 'Articles' },
     { key: 'total_true_value',        label: 'Total Content Value' },
+    { key: 'avg_true_value',          label: 'Avg Content Value' },
     { key: 'total_users',             label: 'Users' },
     { key: 'total_loyal_users',       label: 'Loyal' },
     { key: 'total_pageviews',         label: 'Pageviews' },
@@ -169,6 +170,10 @@ export default function Publications() {
                     <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--accent-gold)', textAlign: 'right', fontWeight: 600 }}>
                       {row.total_true_value != null ? Math.round(row.total_true_value) : '—'}
                     </td>
+                    {/* Avg Content Value */}
+                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                      {row.avg_true_value != null ? row.avg_true_value.toFixed(1) : '—'}
+                    </td>
                     {/* Users */}
                     <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
                       {fmt(row.total_users)}
@@ -212,7 +217,7 @@ export default function Publications() {
               })}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={11} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={12} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
                     No publication issues found
                   </td>
                 </tr>
