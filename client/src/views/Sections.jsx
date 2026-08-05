@@ -32,11 +32,26 @@ function YoY({ current, prior }) {
 
 const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
 
+const COLS = [
+  { key: 'section',                  label: 'Section' },
+  { key: 'article_count',            label: 'Articles' },
+  { key: 'total_true_value',         label: 'Total Content Value' },
+  { key: 'avg_true_value',           label: 'Avg Content Value' },
+  { key: 'total_users',              label: 'Users' },
+  { key: 'total_loyal_users',        label: 'Loyal Users' },
+  { key: 'total_pageviews',          label: 'Pageviews' },
+  { key: 'total_subscribe_clicks',   label: 'Sub Clicks' },
+  { key: 'total_newsletter_signups', label: 'Newsletter' },
+  { key: 'avg_engagement_time',      label: 'Avg Eng. Time' },
+  { key: 'top_article',              label: 'Top Article', sortable: false },
+];
+
 export default function Sections() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
   const [filters, setFilters] = useState({ from: initFrom, to: initTo, type: '', preset: DEFAULT_PRESET });
+  const [sort, setSort] = useState({ col: 'total_true_value', dir: 'desc' });
 
   const load = ({ from, to, type }) => {
     setLoading(true);
@@ -62,6 +77,19 @@ export default function Sections() {
   };
 
   const maxTv = Math.max(...data.map(d => d.total_true_value || 0), 1);
+
+  const toggleSort = (col) => {
+    setSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'desc' });
+  };
+
+  const sorted = [...data].sort((a, b) => {
+    let av = a[sort.col], bv = b[sort.col];
+    if (sort.col === 'section') {
+      return sort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    }
+    av = av || 0; bv = bv || 0;
+    return sort.dir === 'asc' ? av - bv : bv - av;
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -98,17 +126,27 @@ export default function Sections() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-elevated)' }}>
-                {['Section', 'Articles', 'Total Content Value', 'Avg Content Value', 'Users', 'Loyal Users', 'Pageviews', 'Sub Clicks', 'Newsletter', 'Avg Eng. Time', 'Top Article'].map(h => (
-                  <th key={h} style={{
-                    padding: '10px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600,
-                    color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                    whiteSpace: 'nowrap',
-                  }}>{h}</th>
-                ))}
+                {COLS.map(col => {
+                  const active = sort.col === col.key;
+                  const sortable = col.sortable !== false;
+                  return (
+                    <th
+                      key={col.key}
+                      onClick={sortable ? () => toggleSort(col.key) : undefined}
+                      style={{
+                        padding: '10px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600,
+                        color: active ? 'var(--accent-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                        whiteSpace: 'nowrap', cursor: sortable ? 'pointer' : 'default', userSelect: 'none',
+                      }}
+                    >
+                      {col.label}{active ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : ''}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {data.map(row => (
+              {sorted.map(row => (
                 <tr key={row.section}
                   style={{ borderBottom: '1px solid var(--border-subtle)' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
