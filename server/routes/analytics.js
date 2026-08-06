@@ -1254,7 +1254,7 @@ router.get('/vulnerability', (req, res) => {
       .slice(0, 3)
       .map(({ _arts, ...a }) => a);
     return { ...n, avg_search_exposure_pct, avg_susceptibility_pct, total_impact_priority, newsletter_per_1k, top_impact };
-  }).sort((a, b) => b.total_impact_priority - a.total_impact_priority);
+  }).sort((a, b) => b.avg_susceptibility_pct - a.avg_susceptibility_pct);
 
   // Strategic strengths — needs ranked by owned-platform conversion (newsletter
   // signups per 1k users), the counter-signal to search dependency.
