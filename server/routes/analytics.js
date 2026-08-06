@@ -462,7 +462,11 @@ router.get('/by-writer', (req, res) => {
       c.writer,
       COUNT(c.wp_id)              AS article_count,
       SUM(a.true_value)           AS total_true_value,
-      AVG(a.true_value)           AS avg_true_value,
+      -- Excludes true_value = 0 (excluded-from-scoring or not enough
+      -- traffic yet) so a writer's average isn't dragged down by pieces
+      -- that were never meant to carry a real score — same convention
+      -- Overview's KPI card and the Insights AI already use.
+      AVG(CASE WHEN a.true_value > 0 THEN a.true_value END) AS avg_true_value,
       SUM(a.ga4_users)            AS total_users,
       SUM(a.ga4_loyal_users)      AS total_loyal_users,
       SUM(a.ga4_pageviews)        AS total_pageviews,
