@@ -442,6 +442,79 @@ router.get('/by-section', (req, res) => {
   })));
 });
 
+// GET /api/analytics/by-writer — top 10 writers by total Content Value.
+// c.writer is a comma-joined byline for multi-author pieces (see
+// backfill-writers.mjs), so a joint byline groups as its own bucket rather
+// than splitting credit between individual names — same simplification the
+// Content tab's writer filter already makes, kept consistent here.
+router.get('/by-writer', (req, res) => {
+  const db = getDb();
+  const { dateFrom, dateTo, type } = req.query;
+
+  const where = ["c.writer IS NOT NULL AND c.writer != ''"];
+  const params = [];
+  if (dateFrom) { where.push('c.published_at >= ?'); params.push(dateFrom); }
+  if (dateTo)   { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
+  if (type)     { where.push('c.content_type = ?'); params.push(type); }
+
+  const rows = db.prepare(`
+    SELECT
+      c.writer,
+      COUNT(c.wp_id)              AS article_count,
+      SUM(a.true_value)           AS total_true_value,
+      AVG(a.true_value)           AS avg_true_value,
+      SUM(a.ga4_users)            AS total_users,
+      SUM(a.ga4_loyal_users)      AS total_loyal_users,
+      SUM(a.ga4_pageviews)        AS total_pageviews,
+      SUM(COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS total_subscribe_clicks,
+      AVG(a.ga4_avg_engagement_time) AS avg_engagement_time,
+      SUM(COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS total_newsletter_signups
+    FROM content c
+    LEFT JOIN (
+      SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
+    ) lx ON c.wp_id = lx.wp_id
+    LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
+    LEFT JOIN (
+      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
+      FROM historical_newsletter_signups
+      WHERE week_start < date('now', '-30 days')
+      GROUP BY wp_id
+    ) h ON h.wp_id = c.wp_id
+    LEFT JOIN (
+      SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
+      FROM historical_subscribe_clicks
+      WHERE date < date('now', '-30 days')
+      GROUP BY wp_id
+    ) hs ON hs.wp_id = c.wp_id
+    WHERE ${where.join(' AND ')}
+    GROUP BY c.writer
+    ORDER BY total_true_value DESC
+    LIMIT 10
+  `).all(...params);
+
+  // Top article per writer
+  const topRows = db.prepare(`
+    SELECT c.writer, c.wp_id, c.title, c.url, a.true_value
+    FROM content c
+    JOIN (
+      SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
+    ) lx ON c.wp_id = lx.wp_id
+    JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
+    WHERE ${where.join(' AND ')}
+    ORDER BY a.true_value DESC
+  `).all(...params);
+
+  const topByWriter = {};
+  for (const art of topRows) {
+    if (!topByWriter[art.writer]) topByWriter[art.writer] = art;
+  }
+
+  res.json(rows.map(r => ({
+    ...r,
+    top_article: topByWriter[r.writer] || null,
+  })));
+});
+
 // GET /api/analytics/by-issue
 // Groups /publications/{pub}/{year}/{month}/* content into issues
 router.get('/by-issue', (req, res) => {

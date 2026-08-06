@@ -6,6 +6,7 @@ import UserNeedsAnalysis from './views/UserNeedsAnalysis.jsx';
 import Sections from './views/Sections.jsx';
 import Sources from './views/Sources.jsx';
 import Publications from './views/Publications.jsx';
+import Writers from './views/Writers.jsx';
 import Vulnerability from './views/Vulnerability.jsx';
 import Insights from './views/Insights.jsx';
 import Settings from './views/Settings.jsx';
@@ -15,6 +16,7 @@ const NAV = [
   { id: 'content',       label: 'Content' },
   { id: 'sections',      label: 'Sections' },
   { id: 'publications',  label: 'Publications' },
+  { id: 'writers',       label: 'Writers' },
   { id: 'sources',       label: 'Sources' },
   { id: 'needs',          label: 'User Needs' },
   { id: 'vulnerability',  label: 'AI Vulnerability' },
@@ -107,6 +109,7 @@ export default function App() {
         {view === 'sections'  && <Sections />}
         {view === 'sources'       && <Sources />}
         {view === 'publications'  && <Publications />}
+        {view === 'writers'        && <Writers />}
         {view === 'needs'          && <UserNeedsAnalysis />}
         {view === 'vulnerability'  && <Vulnerability />}
         {view === 'insights'       && <Insights />}

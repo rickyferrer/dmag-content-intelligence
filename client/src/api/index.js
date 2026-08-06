@@ -26,6 +26,7 @@ export const api = {
   getSummary: (params = {}) => apiFetch('/analytics/summary?' + new URLSearchParams(params)),
   getByNeed: (params = {}) => apiFetch('/analytics/by-need?' + new URLSearchParams(params)),
   getBySection: (params = {}) => apiFetch('/analytics/by-section?' + new URLSearchParams(params)),
+  getByWriter: (params = {}) => apiFetch('/analytics/by-writer?' + new URLSearchParams(params)),
   getByIssue: (params = {}) => apiFetch('/analytics/by-issue?' + new URLSearchParams(params)),
   getVulnerability: (params = {}) => apiFetch('/analytics/vulnerability?' + new URLSearchParams(params)),
 
