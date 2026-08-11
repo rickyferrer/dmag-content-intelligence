@@ -112,6 +112,18 @@ export default function Overview() {
         {loading && <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</span>}
       </div>
 
+      {/* Comparison caption — the % badges below are relative to this window,
+          which is otherwise invisible. Only appears when the current date
+          filter actually resolves to a concrete range ("All time" has no
+          meaningful "previous period" to compare against). */}
+      {summary?.previous_period && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -12 }}>
+          <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges below compare
+          to the previous period: <strong style={{ color: 'var(--text-secondary)' }}>{summary.previous_period.from}</strong> to{' '}
+          <strong style={{ color: 'var(--text-secondary)' }}>{summary.previous_period.to}</strong>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
         <KPICard label="Total Content Items" value={fmt(summary?.total_content)} />

@@ -165,10 +165,19 @@ router.get('/summary', async (req, res) => {
     // Only compute a comparison when there's an explicit range to derive a
     // duration from — "all time" has no meaningful "N days ago".
     let changes = {};
+    let previous_period = null;
     if (dateFrom && dateTo) {
       const from = new Date(dateFrom + 'T00:00:00Z');
       const to = new Date(dateTo + 'T00:00:00Z');
       const durationDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)));
+
+      // The comparison window, exposed to the client so the UI can label
+      // the % badges with what they're actually being compared against
+      // instead of leaving it implicit.
+      const fmtDate = (d) => d.toISOString().slice(0, 10);
+      const priorTo = new Date(from.getTime() - 24 * 60 * 60 * 1000);
+      const priorFrom = new Date(priorTo.getTime() - durationDays * 24 * 60 * 60 * 1000);
+      previous_period = { from: fmtDate(priorFrom), to: fmtDate(priorTo) };
 
       // Content-side previous period (avg_true_value, newsletter signups):
       // same cohort of articles, snapshot from ~N days ago.
@@ -184,9 +193,6 @@ router.get('/summary', async (req, res) => {
 
       if (useSiteWide) {
         // Traffic-side previous period: a real shifted calendar window.
-        const priorTo = new Date(from.getTime() - 24 * 60 * 60 * 1000);
-        const priorFrom = new Date(priorTo.getTime() - durationDays * 24 * 60 * 60 * 1000);
-        const fmtDate = (d) => d.toISOString().slice(0, 10);
         const trafficPrevious = await computeTrafficSummary(db, fmtDate(priorFrom), fmtDate(priorTo));
 
         // Users/loyal users are live GA4 queries — always an exact count for
@@ -214,7 +220,7 @@ router.get('/summary', async (req, res) => {
       }
     }
 
-    res.json({ ...current, changes });
+    res.json({ ...current, changes, previous_period });
   } catch (err) {
     // GA4 (or any other external call in here) failing shouldn't take the
     // whole server down — see server/index.js's unhandledRejection note.
