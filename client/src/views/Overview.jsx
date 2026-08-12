@@ -133,7 +133,12 @@ export default function Overview() {
         <KPICard label="Total Users" value={fmt(summary?.total_users)} change={summary?.changes?.total_users} />
         <KPICard label="Loyal Users" value={fmt(summary?.total_loyal_users)} change={summary?.changes?.total_loyal_users} />
         <KPICard label="Subscribe Clicks" value={fmt(summary?.total_subscribe_clicks)} change={summary?.changes?.total_subscribe_clicks} />
-        <KPICard label="Newsletter Signups" value={fmt(summary?.total_newsletter_signups)} change={summary?.changes?.total_newsletter_signups} />
+        <KPICard
+          label="Newsletter Signups"
+          value={fmt(summary?.total_newsletter_signups)}
+          change={summary?.changes?.total_newsletter_signups}
+          sub="Tracking began Jul 21, 2026 — longer ranges won't grow until real history catches up"
+        />
         <KPICard label="Ad Revenue (30d)" value={summary?.total_ad_revenue != null ? '$' + summary.total_ad_revenue.toFixed(0) : '—'} change={summary?.changes?.total_ad_revenue} />
       </div>
 
