@@ -6,6 +6,7 @@ import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePre
 import SearchableSelect from '../components/SearchableSelect.jsx';
 import { ChangeBadge } from '../components/KPICard.jsx';
 import { useComparisons } from '../context/ComparisonContext.jsx';
+import { SUBSCRIBE_CLICKS_NOTE, NEWSLETTER_NOTE } from '../constants/dataReliability.js';
 
 const PUB_DISPLAY = { 'd-magazine': 'D Magazine', 'd-home': 'D Home', 'd-ceo': 'D CEO' };
 
@@ -20,8 +21,8 @@ const COLUMNS = [
   { label: 'Users',         key: 'users' },
   { label: 'Loyal Users',   key: 'loyal_users' },
   { label: 'In-Market %',   key: 'inmarket' },
-  { label: 'Sub Clicks',    key: 'subscribe_clicks', info: 'Live clicks from the last ~30 days, plus historical clicks backfilled from GA4 (back to mid-2025).' },
-  { label: 'Newsletter',    key: 'newsletter', info: 'Live signups from the last ~30 days, plus historical signups backfilled from a one-time Marfeel export (through July 27, 2026).' },
+  { label: 'Sub Clicks',    key: 'subscribe_clicks', info: SUBSCRIBE_CLICKS_NOTE },
+  { label: 'Newsletter',    key: 'newsletter', info: NEWSLETTER_NOTE },
   { label: 'Eng. Time',     key: 'engagement' },
 ];
 

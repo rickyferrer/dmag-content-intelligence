@@ -7,6 +7,7 @@ import { api } from '../api/index.js';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 import { ChangeBadge } from '../components/KPICard.jsx';
 import { useComparisons } from '../context/ComparisonContext.jsx';
+import { NEWSLETTER_NOTE } from '../constants/dataReliability.js';
 
 function fmt(n) {
   if (!n) return '—';
@@ -42,6 +43,14 @@ const EFFICIENCY_COLS = [
 // values are estimated by splitting each article's total proportionally by
 // pageview share across its sources (see volume_metrics_note from the API).
 const ESTIMATED_COLS = new Set(['users', 'newsletter_signups', 'loyal_pct', 'inmarket_pct']);
+
+// Newsletter Signups here is apportioned from the same historical-backfill +
+// live-rolling merge used by Content/Sections/Writers, so it shares that
+// same reliability floor. Subscribe Clicks in this table is GA4
+// channel-level data instead (always trailing 30 days, no historical floor
+// of its own — see the Efficiency-columns note above), so it doesn't get
+// this note.
+const COLUMN_NOTES = { newsletter_signups: NEWSLETTER_NOTE };
 
 function getSortValue(row, key) {
   switch (key) {
@@ -355,7 +364,7 @@ export default function Sources() {
                 <div
                   key={col.key}
                   onClick={() => handleSort(col.key)}
-                  title={ESTIMATED_COLS.has(col.key) ? volumeNote : undefined}
+                  title={[ESTIMATED_COLS.has(col.key) ? volumeNote : null, COLUMN_NOTES[col.key]].filter(Boolean).join(' ') || undefined}
                   style={{ fontSize: 11, fontWeight: 600, color: sort.key === col.key ? 'var(--accent-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
                 >
                   {col.label}{ESTIMATED_COLS.has(col.key) ? '*' : ''} <span style={{ opacity: sort.key === col.key ? 1 : 0.25 }}>{sort.key === col.key ? (sort.dir === 'desc' ? '↓' : '↑') : '↕'}</span>

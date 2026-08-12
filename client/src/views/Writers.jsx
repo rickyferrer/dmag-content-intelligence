@@ -3,6 +3,7 @@ import { api } from '../api/index.js';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 import { ChangeBadge } from '../components/KPICard.jsx';
 import { useComparisons } from '../context/ComparisonContext.jsx';
+import { SUBSCRIBE_CLICKS_NOTE, NEWSLETTER_NOTE } from '../constants/dataReliability.js';
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -20,8 +21,8 @@ const COLS = [
   { key: 'total_users',              label: 'Users' },
   { key: 'total_loyal_users',        label: 'Loyal Users' },
   { key: 'total_pageviews',          label: 'Pageviews' },
-  { key: 'total_subscribe_clicks',   label: 'Sub Clicks' },
-  { key: 'total_newsletter_signups', label: 'Newsletter' },
+  { key: 'total_subscribe_clicks',   label: 'Sub Clicks', info: SUBSCRIBE_CLICKS_NOTE },
+  { key: 'total_newsletter_signups', label: 'Newsletter', info: NEWSLETTER_NOTE },
   { key: 'avg_engagement_time',      label: 'Avg Eng. Time' },
   { key: 'top_article',              label: 'Top Article', sortable: false },
 ];
@@ -127,13 +128,14 @@ export default function Writers() {
                     <th
                       key={col.key}
                       onClick={sortable ? () => toggleSort(col.key) : undefined}
+                      title={col.info}
                       style={{
                         padding: '10px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600,
                         color: active ? 'var(--accent-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
                         whiteSpace: 'nowrap', cursor: sortable ? 'pointer' : 'default', userSelect: 'none',
                       }}
                     >
-                      {col.label}{active ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : ''}
+                      {col.label}{col.info ? '*' : ''}{active ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : ''}
                     </th>
                   );
                 })}
