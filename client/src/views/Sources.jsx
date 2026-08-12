@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { api } from '../api/index.js';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
+import { ChangeBadge } from '../components/KPICard.jsx';
 
 function fmt(n) {
   if (!n) return '—';
@@ -217,11 +218,30 @@ export default function Sources() {
               <div style={{ height: '100%', borderRadius: 2, background: row.color, width: `${Math.max(2, grandTotal > 0 ? (row.pageviews / grandTotal) * 100 : 0)}%` }} />
             </div>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)', minWidth: 40 }}>{fmt(row.pageviews)}</span>
+            <ChangeBadge change={row.changes?.pageviews} />
           </div>
         );
-      case 'users':            return fmt(row.users);
-      case 'article_count':    return fmt(row.article_count);
-      case 'newsletter_signups': return fmt(row.newsletter_signups);
+      case 'users':
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+            {fmt(row.users)}
+            <ChangeBadge change={row.changes?.users} />
+          </div>
+        );
+      case 'article_count':
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+            {fmt(row.article_count)}
+            <ChangeBadge change={row.changes?.article_count} />
+          </div>
+        );
+      case 'newsletter_signups':
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+            {fmt(row.newsletter_signups)}
+            <ChangeBadge change={row.changes?.newsletter_signups} />
+          </div>
+        );
       case 'loyal_pct':        return row.loyal_pct > 0 ? row.loyal_pct.toFixed(1) + '%' : '—';
       case 'inmarket_pct':     return row.inmarket_pct > 0 ? row.inmarket_pct.toFixed(1) + '%' : '—';
       case 'score':
@@ -274,6 +294,15 @@ export default function Sources() {
           ))}
         </div>
       </div>
+
+      {result?.previous_period && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -12 }}>
+          <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges on the
+          Volume columns compare to the previous period: <strong style={{ color: 'var(--text-secondary)' }}>{result.previous_period.from}</strong> to{' '}
+          <strong style={{ color: 'var(--text-secondary)' }}>{result.previous_period.to}</strong>. Not shown on Subscribe Clicks or
+          Efficiency columns — those are GA4 channel-level data, always a trailing 30 days regardless of this filter.
+        </div>
+      )}
 
       {loading ? (
         <div style={{ padding: 40, color: 'var(--text-muted)' }}>Loading...</div>

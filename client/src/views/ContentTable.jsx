@@ -4,6 +4,7 @@ import NeedBadge from '../components/NeedBadge.jsx';
 import TrueValueBar from '../components/TrueValueBar.jsx';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 import SearchableSelect from '../components/SearchableSelect.jsx';
+import { ChangeBadge } from '../components/KPICard.jsx';
 
 const PUB_DISPLAY = { 'd-magazine': 'D Magazine', 'd-home': 'D Home', 'd-ceo': 'D CEO' };
 
@@ -49,6 +50,7 @@ const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
 export default function ContentTable({ onSelect }) {
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 1 });
+  const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [types, setTypes] = useState([]);
   const [taxonomies, setTaxonomies] = useState({ sections: [], categories: [], tags: [], nlpCategories: [] });
@@ -83,6 +85,11 @@ export default function ContentTable({ onSelect }) {
       .finally(() => {
         if (requestId === requestIdRef.current) setLoading(false);
       });
+    // Summary totals for the same filters — independent of pagination/sort,
+    // so a stale response here can't clobber a newer one out of order either.
+    api.getContentSummary(params)
+      .then(res => { if (requestId === requestIdRef.current) setSummary(res); })
+      .catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -275,6 +282,39 @@ export default function ContentTable({ onSelect }) {
           >
             Clear all
           </button>
+        </div>
+      )}
+
+      {/* Summary totals — the filtered set as a whole, not per-row (a
+          per-article "vs. previous period" badge wouldn't mean anything for
+          a single piece of content). */}
+      {summary && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'center',
+          background: 'var(--bg-surface)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: '12px 16px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Articles</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, color: 'var(--text-primary)' }}>{summary.article_count.toLocaleString()}</span>
+            <ChangeBadge change={summary.changes?.article_count} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total Content Value</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, color: 'var(--accent-gold)' }}>{Math.round(summary.total_true_value).toLocaleString()}</span>
+            <ChangeBadge change={summary.changes?.total_true_value} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Avg Content Value</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, color: 'var(--text-primary)' }}>{summary.avg_true_value.toFixed(1)}</span>
+            <ChangeBadge change={summary.changes?.avg_true_value} />
+          </div>
+          {summary.previous_period && (
+            <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
+              vs. previous period: <strong style={{ color: 'var(--text-secondary)' }}>{summary.previous_period.from}</strong> to{' '}
+              <strong style={{ color: 'var(--text-secondary)' }}>{summary.previous_period.to}</strong>
+            </div>
+          )}
         </div>
       )}
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
 import TrueValueBar from '../components/TrueValueBar.jsx';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
+import { ChangeBadge } from '../components/KPICard.jsx';
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -48,6 +49,7 @@ const COLS = [
 
 export default function Sections() {
   const [data, setData] = useState([]);
+  const [previousPeriod, setPreviousPeriod] = useState(null);
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
   const [filters, setFilters] = useState({ from: initFrom, to: initTo, type: '', preset: DEFAULT_PRESET });
@@ -60,7 +62,7 @@ export default function Sections() {
     if (to) params.dateTo = to;
     if (type) params.type = type;
     api.getBySection(params)
-      .then(setData)
+      .then(res => { setData(res.data); setPreviousPeriod(res.previous_period); })
       .catch(console.error)
       .finally(() => setLoading(false));
   };
@@ -119,6 +121,14 @@ export default function Sections() {
         )}
       </div>
 
+      {previousPeriod && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -12 }}>
+          <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges below compare
+          to the previous period: <strong style={{ color: 'var(--text-secondary)' }}>{previousPeriod.from}</strong> to{' '}
+          <strong style={{ color: 'var(--text-secondary)' }}>{previousPeriod.to}</strong>
+        </div>
+      )}
+
       {loading ? (
         <div style={{ padding: 40, color: 'var(--text-muted)' }}>Loading...</div>
       ) : (
@@ -156,7 +166,10 @@ export default function Sections() {
                     {row.section}
                   </td>
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                    {row.article_count}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                      {row.article_count}
+                      <ChangeBadge change={row.changes?.article_count} />
+                    </div>
                   </td>
                   <td style={{ padding: '10px 12px', minWidth: 140 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -170,29 +183,51 @@ export default function Sections() {
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)', minWidth: 42, textAlign: 'right' }}>
                         {row.total_true_value != null ? Math.round(row.total_true_value) : '—'}
                       </span>
+                      <ChangeBadge change={row.changes?.total_true_value} />
                     </div>
                   </td>
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                    {row.avg_true_value != null ? row.avg_true_value.toFixed(1) : '—'}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                      {row.avg_true_value != null ? row.avg_true_value.toFixed(1) : '—'}
+                      <ChangeBadge change={row.changes?.avg_true_value} />
+                    </div>
                   </td>
                   {/* YOY cell hidden along with the header above — see comment on YoY() */}
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                    {fmt(row.total_users)}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                      {fmt(row.total_users)}
+                      <ChangeBadge change={row.changes?.total_users} />
+                    </div>
                   </td>
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                    {fmt(row.total_loyal_users)}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                      {fmt(row.total_loyal_users)}
+                      <ChangeBadge change={row.changes?.total_loyal_users} />
+                    </div>
                   </td>
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                    {fmt(row.total_pageviews)}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                      {fmt(row.total_pageviews)}
+                      <ChangeBadge change={row.changes?.total_pageviews} />
+                    </div>
                   </td>
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                    {fmt(row.total_subscribe_clicks)}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                      {fmt(row.total_subscribe_clicks)}
+                      <ChangeBadge change={row.changes?.total_subscribe_clicks} />
+                    </div>
                   </td>
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                    {fmt(row.total_newsletter_signups)}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                      {fmt(row.total_newsletter_signups)}
+                      <ChangeBadge change={row.changes?.total_newsletter_signups} />
+                    </div>
                   </td>
                   <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {row.avg_engagement_time != null ? row.avg_engagement_time.toFixed(0) + 's' : '—'}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                      {row.avg_engagement_time != null ? row.avg_engagement_time.toFixed(0) + 's' : '—'}
+                      <ChangeBadge change={row.changes?.avg_engagement_time} />
+                    </div>
                   </td>
                   <td style={{ padding: '10px 12px', maxWidth: 260 }}>
                     {row.top_article ? (

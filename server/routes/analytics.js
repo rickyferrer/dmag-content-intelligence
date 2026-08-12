@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db.js';
 import { fetchUsersForRange, fetchLoyalUsersForRange } from '../sync/ga4.js';
 import { computeTrendRisk } from '../utils/gscTrend.js';
+import { pctChange, previousPeriodRange } from '../utils/period.js';
 
 const router = Router();
 
@@ -135,9 +136,68 @@ async function computeTrafficSummary(db, dateFrom, dateTo) {
   };
 }
 
-function pctChange(curr, prev) {
-  if (prev == null || prev === 0) return null;
-  return ((curr - prev) / prev) * 100;
+// Shared aggregate query for grouped leaderboards (by-section, by-writer) —
+// groupCol is a raw SQL column reference (e.g. 'c.section'), only ever
+// called with a hardcoded value from this file, never user input.
+function fetchGroupedAggregates(db, groupCol, groupAlias, whereSql, params) {
+  return db.prepare(`
+    SELECT
+      ${groupCol} AS ${groupAlias},
+      COUNT(c.wp_id)              AS article_count,
+      SUM(a.true_value)           AS total_true_value,
+      -- Excludes true_value = 0 (excluded-from-scoring or not enough
+      -- traffic yet) so an average isn't dragged down by pieces that were
+      -- never meant to carry a real score — same convention Overview's
+      -- KPI card, Insights, and the Writers tab already use.
+      AVG(CASE WHEN a.true_value > 0 THEN a.true_value END) AS avg_true_value,
+      SUM(a.ga4_users)            AS total_users,
+      SUM(a.ga4_loyal_users)      AS total_loyal_users,
+      SUM(a.ga4_pageviews)        AS total_pageviews,
+      SUM(COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS total_subscribe_clicks,
+      AVG(a.ga4_avg_engagement_time) AS avg_engagement_time,
+      SUM(COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS total_newsletter_signups
+    FROM content c
+    LEFT JOIN (
+      SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
+    ) lx ON c.wp_id = lx.wp_id
+    LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
+    LEFT JOIN (
+      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
+      FROM historical_newsletter_signups
+      WHERE week_start < date('now', '-30 days')
+      GROUP BY wp_id
+    ) h ON h.wp_id = c.wp_id
+    LEFT JOIN (
+      SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
+      FROM historical_subscribe_clicks
+      WHERE date < date('now', '-30 days')
+      GROUP BY wp_id
+    ) hs ON hs.wp_id = c.wp_id
+    WHERE ${whereSql}
+    GROUP BY ${groupCol}
+  `).all(...params);
+}
+
+const COMPARABLE_METRICS = [
+  'article_count', 'total_true_value', 'avg_true_value', 'total_users',
+  'total_loyal_users', 'total_pageviews', 'total_subscribe_clicks',
+  'total_newsletter_signups', 'avg_engagement_time',
+];
+
+// Attaches a `changes` object (% change per metric) to each row by matching
+// against a same-shape previous-period row set on groupKey. `changes` is
+// null for a row with no counterpart in the previous period (e.g. a writer
+// who published nothing last period) — nothing to compare against, not a
+// 0% change.
+function attachChanges(rows, groupKey, prevRows) {
+  const prevMap = Object.fromEntries(prevRows.map(r => [r[groupKey], r]));
+  return rows.map(r => {
+    const prev = prevMap[r[groupKey]];
+    if (!prev) return { ...r, changes: null };
+    const changes = {};
+    for (const m of COMPARABLE_METRICS) changes[m] = pctChange(r[m], prev[m]);
+    return { ...r, changes };
+  });
 }
 
 // GET /api/analytics/summary
@@ -364,39 +424,22 @@ router.get('/by-section', (req, res) => {
   if (dateTo)   { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
   if (type)     { where.push('c.content_type = ?'); params.push(type); }
 
-  const rows = db.prepare(`
-    SELECT
-      c.section,
-      COUNT(c.wp_id)              AS article_count,
-      SUM(a.true_value)           AS total_true_value,
-      AVG(a.true_value)           AS avg_true_value,
-      SUM(a.ga4_users)            AS total_users,
-      SUM(a.ga4_loyal_users)      AS total_loyal_users,
-      SUM(a.ga4_pageviews)        AS total_pageviews,
-      SUM(COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS total_subscribe_clicks,
-      AVG(a.ga4_avg_engagement_time) AS avg_engagement_time,
-      SUM(COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS total_newsletter_signups
-    FROM content c
-    LEFT JOIN (
-      SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
-    ) lx ON c.wp_id = lx.wp_id
-    LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
-    LEFT JOIN (
-      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
-      FROM historical_newsletter_signups
-      WHERE week_start < date('now', '-30 days')
-      GROUP BY wp_id
-    ) h ON h.wp_id = c.wp_id
-    LEFT JOIN (
-      SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
-      FROM historical_subscribe_clicks
-      WHERE date < date('now', '-30 days')
-      GROUP BY wp_id
-    ) hs ON hs.wp_id = c.wp_id
-    WHERE ${where.join(' AND ')}
-    GROUP BY c.section
-    ORDER BY total_true_value DESC
-  `).all(...params);
+  let rows = fetchGroupedAggregates(db, 'c.section', 'section', where.join(' AND '), params);
+  rows.sort((a, b) => (b.total_true_value || 0) - (a.total_true_value || 0));
+
+  // Previous period — same length window immediately before the current
+  // one (e.g. Last 30 Days vs. the 30 days before that), distinct from the
+  // prior-year comparison below.
+  const previous_period = previousPeriodRange(dateFrom, dateTo);
+  if (previous_period) {
+    const prevWhere = ["c.section IS NOT NULL AND c.section != ''", 'c.published_at >= ?', 'c.published_at <= ?'];
+    const prevParams = [previous_period.from, previous_period.to + 'T23:59:59'];
+    if (type) { prevWhere.push('c.content_type = ?'); prevParams.push(type); }
+    const prevRows = fetchGroupedAggregates(db, 'c.section', 'section', prevWhere.join(' AND '), prevParams);
+    rows = attachChanges(rows, 'section', prevRows);
+  } else {
+    rows = rows.map(r => ({ ...r, changes: null }));
+  }
 
   // Prior year query — same date range shifted back 1 year
   const pyWhere = ["c.section IS NOT NULL AND c.section != ''"];
@@ -441,11 +484,14 @@ router.get('/by-section', (req, res) => {
     if (!topBySection[art.section]) topBySection[art.section] = art;
   }
 
-  res.json(rows.map(r => ({
-    ...r,
-    top_article: topBySection[r.section] || null,
-    py: pyMap[r.section] || null,
-  })));
+  res.json({
+    data: rows.map(r => ({
+      ...r,
+      top_article: topBySection[r.section] || null,
+      py: pyMap[r.section] || null,
+    })),
+    previous_period,
+  });
 });
 
 // GET /api/analytics/by-writer — top 10 writers by total Content Value.
@@ -463,44 +509,23 @@ router.get('/by-writer', (req, res) => {
   if (dateTo)   { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
   if (type)     { where.push('c.content_type = ?'); params.push(type); }
 
-  const rows = db.prepare(`
-    SELECT
-      c.writer,
-      COUNT(c.wp_id)              AS article_count,
-      SUM(a.true_value)           AS total_true_value,
-      -- Excludes true_value = 0 (excluded-from-scoring or not enough
-      -- traffic yet) so a writer's average isn't dragged down by pieces
-      -- that were never meant to carry a real score — same convention
-      -- Overview's KPI card and the Insights AI already use.
-      AVG(CASE WHEN a.true_value > 0 THEN a.true_value END) AS avg_true_value,
-      SUM(a.ga4_users)            AS total_users,
-      SUM(a.ga4_loyal_users)      AS total_loyal_users,
-      SUM(a.ga4_pageviews)        AS total_pageviews,
-      SUM(COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS total_subscribe_clicks,
-      AVG(a.ga4_avg_engagement_time) AS avg_engagement_time,
-      SUM(COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS total_newsletter_signups
-    FROM content c
-    LEFT JOIN (
-      SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
-    ) lx ON c.wp_id = lx.wp_id
-    LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
-    LEFT JOIN (
-      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
-      FROM historical_newsletter_signups
-      WHERE week_start < date('now', '-30 days')
-      GROUP BY wp_id
-    ) h ON h.wp_id = c.wp_id
-    LEFT JOIN (
-      SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
-      FROM historical_subscribe_clicks
-      WHERE date < date('now', '-30 days')
-      GROUP BY wp_id
-    ) hs ON hs.wp_id = c.wp_id
-    WHERE ${where.join(' AND ')}
-    GROUP BY c.writer
-    ORDER BY total_true_value DESC
-    LIMIT 10
-  `).all(...params);
+  let rows = fetchGroupedAggregates(db, 'c.writer', 'writer', where.join(' AND '), params);
+  rows.sort((a, b) => (b.total_true_value || 0) - (a.total_true_value || 0));
+  rows = rows.slice(0, 10);
+
+  // Previous period — same length window immediately before the current
+  // one. Computed only for the 10 writers actually shown, after the
+  // top-10 cut, so a writer's comparison always matches the row on screen.
+  const previous_period = previousPeriodRange(dateFrom, dateTo);
+  if (previous_period) {
+    const prevWhere = ["c.writer IS NOT NULL AND c.writer != ''", 'c.published_at >= ?', 'c.published_at <= ?'];
+    const prevParams = [previous_period.from, previous_period.to + 'T23:59:59'];
+    if (type) { prevWhere.push('c.content_type = ?'); prevParams.push(type); }
+    const prevRows = fetchGroupedAggregates(db, 'c.writer', 'writer', prevWhere.join(' AND '), prevParams);
+    rows = attachChanges(rows, 'writer', prevRows);
+  } else {
+    rows = rows.map(r => ({ ...r, changes: null }));
+  }
 
   // Top article per writer
   const topRows = db.prepare(`
@@ -519,10 +544,13 @@ router.get('/by-writer', (req, res) => {
     if (!topByWriter[art.writer]) topByWriter[art.writer] = art;
   }
 
-  res.json(rows.map(r => ({
-    ...r,
-    top_article: topByWriter[r.writer] || null,
-  })));
+  res.json({
+    data: rows.map(r => ({
+      ...r,
+      top_article: topByWriter[r.writer] || null,
+    })),
+    previous_period,
+  });
 });
 
 // GET /api/analytics/by-issue
@@ -808,6 +836,30 @@ const CUSTOM_CHANNELS = {
   },
 };
 
+// Sums fetchSourceRows() output into per-channel totals for just the
+// metrics that are genuinely date-scoped (Marfeel-sourced, article-level) —
+// used to diff a channel against its previous period. Deliberately excludes
+// GA4 channel-level metrics (subscribe clicks, loyal %, in-market %, revenue)
+// since GA4 is always a trailing-30-day snapshot regardless of the date
+// filter, so comparing it against a shifted "previous period" would compare
+// two overlapping or nonsensical windows — see GA4_UNAVAILABLE_NOTES/note
+// above for the same reasoning applied to the Efficiency columns.
+function buildChannelTotals(sourceRows) {
+  const buckets = {};
+  for (const key of Object.keys(CUSTOM_CHANNELS)) {
+    buckets[key] = { key, pageviews: 0, users: 0, article_count: 0, newsletter_signups: 0 };
+  }
+  for (const row of sourceRows) {
+    const key = customChannelFor(row.source);
+    const b = buckets[key];
+    b.pageviews          += row.total_pageviews || 0;
+    b.users              += row.total_users || 0;
+    b.article_count      += row.article_count || 0;
+    b.newsletter_signups += row.total_newsletter_signups || 0;
+  }
+  return buckets;
+}
+
 function customChannelFor(source) {
   for (const [key, ch] of Object.entries(CUSTOM_CHANNELS)) {
     if (key === 'referral') continue;
@@ -943,6 +995,29 @@ router.get('/channels', (req, res) => {
 
   channels.sort((a, b) => b.pageviews - a.pageviews);
 
+  // Previous-period comparison — Volume columns only (Traffic, Users,
+  // Articles, Newsletter Signups). Efficiency columns and the "Subscribe
+  // Clicks" volume column are both GA4 channel-level data, always a
+  // trailing 30 days regardless of the date filter, so a shifted
+  // "previous period" wouldn't mean what it means everywhere else — see
+  // buildChannelTotals() above.
+  const previous_period = previousPeriodRange(dateFrom, dateTo);
+  if (previous_period) {
+    const prevSourceRows = fetchSourceRows(db, { dateFrom: previous_period.from, dateTo: previous_period.to, type });
+    const prevTotals = buildChannelTotals(prevSourceRows);
+    for (const c of channels) {
+      const prev = prevTotals[c.key];
+      c.changes = prev ? {
+        pageviews: pctChange(c.pageviews, prev.pageviews),
+        users: pctChange(c.users, prev.users),
+        article_count: pctChange(c.article_count, prev.article_count),
+        newsletter_signups: pctChange(c.newsletter_signups, prev.newsletter_signups),
+      } : null;
+    }
+  } else {
+    for (const c of channels) c.changes = null;
+  }
+
   res.json({
     dateFrom: dateFrom || null,
     dateTo: dateTo || null,
@@ -950,6 +1025,7 @@ router.get('/channels', (req, res) => {
     ga4_snapshot_at: ga4Snapshot?.snapshot_at || null,
     channels,
     unmapped_ga4: unmapped,
+    previous_period,
     volume_metrics_note: 'Users, Loyal %, In-Market %, and Newsletter Signups are estimated per channel by splitting each article\'s total figures proportionally by pageview share across its traffic sources — GA4 and Marfeel report these per article, not broken down by individual source.',
   });
 });

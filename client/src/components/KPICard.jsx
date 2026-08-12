@@ -1,6 +1,6 @@
 import React from 'react';
 
-function ChangeBadge({ change }) {
+export function ChangeBadge({ change }) {
   if (change === null || change === undefined) return null;
   const isPos = change >= 0;
   const color = isPos ? '#4caf86' : '#e05c5c';

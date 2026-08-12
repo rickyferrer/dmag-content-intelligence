@@ -3,6 +3,7 @@ import { getDb, getSettings } from '../db.js';
 import { classifySingle } from '../classify/userNeeds.js';
 import { classifyCategoriesSingle } from '../sync/nlp.js';
 import { getValueBreakdown } from '../utils/trueValue.js';
+import { pctChange, previousPeriodRange } from '../utils/period.js';
 
 // A Google content-category path looks like "/Food & Drink/Restaurants" —
 // the filter dropdown works off the top-level segment (~30 options) since
@@ -16,12 +17,38 @@ function topLevelCategory(path) {
 
 const router = Router();
 
+// Builds the shared filter WHERE clause used by both the main content list
+// below and the /summary comparison endpoint. `dateOverride` (an
+// {from, to} pair) lets /summary reuse every other active filter while
+// substituting a shifted date range for its previous-period query.
+function buildContentWhere(query, dateOverride) {
+  const { type, section, category, tag, need, writer, issue, search, nlpCategory } = query;
+  const dateFrom = dateOverride ? dateOverride.from : query.dateFrom;
+  const dateTo = dateOverride ? dateOverride.to : query.dateTo;
+
+  const where = [];
+  const params = [];
+  if (type) { where.push('c.content_type = ?'); params.push(type); }
+  if (section) { where.push('c.section = ?'); params.push(section); }
+  if (need) { where.push('c.user_need = ?'); params.push(need); }
+  if (writer) { where.push('c.writer = ?'); params.push(writer); }
+  if (dateFrom) { where.push('c.published_at >= ?'); params.push(dateFrom); }
+  if (dateTo) { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
+  if (category) { where.push("c.categories LIKE ?"); params.push(`%"slug":"${category}"%`); }
+  if (tag) { where.push("c.tags LIKE ?"); params.push(`%"slug":"${tag}"%`); }
+  if (issue) { where.push("c.url LIKE ?"); params.push(`%/publications/${issue}/%`); }
+  if (search) { where.push('(c.title LIKE ? OR c.url LIKE ?)'); params.push(`%${search}%`, `%${search}%`); }
+  if (nlpCategory) {
+    where.push('EXISTS (SELECT 1 FROM content_categories cc WHERE cc.wp_id = c.wp_id AND cc.category LIKE ?)');
+    params.push(`${nlpCategory}%`);
+  }
+  return { where, params };
+}
+
 // GET /api/content
 router.get('/', (req, res) => {
   const db = getDb();
   const {
-    type, section, category, tag, need, writer, issue, search,
-    nlpCategory, dateFrom, dateTo,
     sortBy = 'published_at', order = 'desc',
     page = 1, limit = 50,
   } = req.query;
@@ -56,24 +83,7 @@ router.get('/', (req, res) => {
   const sortCol = validSorts[sortBy] || 'c.published_at';
   const sortDir = order === 'asc' ? 'ASC' : 'DESC';
 
-  let where = [];
-  let params = [];
-
-  if (type) { where.push('c.content_type = ?'); params.push(type); }
-  if (section) { where.push('c.section = ?'); params.push(section); }
-  if (need) { where.push('c.user_need = ?'); params.push(need); }
-  if (writer) { where.push('c.writer = ?'); params.push(writer); }
-  if (dateFrom) { where.push('c.published_at >= ?'); params.push(dateFrom); }
-  if (dateTo) { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
-  if (category) { where.push("c.categories LIKE ?"); params.push(`%"slug":"${category}"%`); }
-  if (tag) { where.push("c.tags LIKE ?"); params.push(`%"slug":"${tag}"%`); }
-  if (issue) { where.push("c.url LIKE ?"); params.push(`%/publications/${issue}/%`); }
-  if (search) { where.push('(c.title LIKE ? OR c.url LIKE ?)'); params.push(`%${search}%`, `%${search}%`); }
-  if (nlpCategory) {
-    where.push('EXISTS (SELECT 1 FROM content_categories cc WHERE cc.wp_id = c.wp_id AND cc.category LIKE ?)');
-    params.push(`${nlpCategory}%`);
-  }
-
+  const { where, params } = buildContentWhere(req.query);
   const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
   const rows = db.prepare(`
@@ -124,6 +134,60 @@ router.get('/', (req, res) => {
     data: rows,
     pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
   });
+});
+
+// GET /api/content/summary
+// Current-period totals for whatever filters the Content tab has active,
+// plus — when the date filter resolves to a concrete range — the same
+// totals for the immediately-preceding period of equal length. Summary
+// totals only, not per-row: the Content tab lists individual articles,
+// where a "vs. previous period" comparison doesn't mean anything for a
+// single piece (per the user's own confirmed choice for this tab).
+router.get('/summary', (req, res) => {
+  const db = getDb();
+  const { dateFrom, dateTo } = req.query;
+
+  function totalsFor(where, params) {
+    const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+    const row = db.prepare(`
+      SELECT
+        COUNT(*) AS article_count,
+        SUM(a.true_value) AS total_true_value,
+        -- Excludes true_value = 0 (excluded-from-scoring or not enough
+        -- traffic yet) — same convention as Overview's KPI card, Insights,
+        -- and the Writers/Sections tabs.
+        AVG(CASE WHEN a.true_value > 0 THEN a.true_value END) AS avg_true_value
+      FROM content c
+      LEFT JOIN (
+        SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
+      ) lx ON c.wp_id = lx.wp_id
+      LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
+      ${whereClause}
+    `).get(...params);
+    return {
+      article_count: row.article_count || 0,
+      total_true_value: row.total_true_value || 0,
+      avg_true_value: row.avg_true_value || 0,
+    };
+  }
+
+  const { where, params } = buildContentWhere(req.query);
+  const current = totalsFor(where, params);
+
+  const previous_period = previousPeriodRange(dateFrom, dateTo);
+  let previous = null;
+  let changes = null;
+  if (previous_period) {
+    const prev = buildContentWhere(req.query, previous_period);
+    previous = totalsFor(prev.where, prev.params);
+    changes = {
+      article_count: pctChange(current.article_count, previous.article_count),
+      total_true_value: pctChange(current.total_true_value, previous.total_true_value),
+      avg_true_value: pctChange(current.avg_true_value, previous.avg_true_value),
+    };
+  }
+
+  res.json({ ...current, changes, previous, previous_period });
 });
 
 // GET /api/content/types
