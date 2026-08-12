@@ -5,6 +5,7 @@ import TrueValueBar from '../components/TrueValueBar.jsx';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 import SearchableSelect from '../components/SearchableSelect.jsx';
 import { ChangeBadge } from '../components/KPICard.jsx';
+import { useComparisons } from '../context/ComparisonContext.jsx';
 
 const PUB_DISPLAY = { 'd-magazine': 'D Magazine', 'd-home': 'D Home', 'd-ceo': 'D CEO' };
 
@@ -48,6 +49,7 @@ function SortArrow({ col, sortBy, order }) {
 const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
 
 export default function ContentTable({ onSelect }) {
+  const { showComparisons } = useComparisons();
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 1 });
   const [summary, setSummary] = useState(null);
@@ -309,7 +311,7 @@ export default function ContentTable({ onSelect }) {
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, color: 'var(--text-primary)' }}>{summary.avg_true_value.toFixed(1)}</span>
             <ChangeBadge change={summary.changes?.avg_true_value} />
           </div>
-          {summary.previous_period && (
+          {showComparisons && summary.previous_period && (
             <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
               vs. previous period: <strong style={{ color: 'var(--text-secondary)' }}>{summary.previous_period.from}</strong> to{' '}
               <strong style={{ color: 'var(--text-secondary)' }}>{summary.previous_period.to}</strong>

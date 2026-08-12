@@ -8,6 +8,7 @@ import KPICard from '../components/KPICard.jsx';
 import ScatterPlot from '../components/ScatterPlot.jsx';
 import { NEED_META } from '../components/NeedBadge.jsx';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
+import { useComparisons } from '../context/ComparisonContext.jsx';
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -32,6 +33,7 @@ const NeedTooltip = ({ active, payload }) => {
 const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
 
 export default function Overview() {
+  const { showComparisons } = useComparisons();
   const [summary, setSummary] = useState(null);
   const [byNeed, setByNeed] = useState([]);
   const [scatter, setScatter] = useState([]);
@@ -116,7 +118,7 @@ export default function Overview() {
           which is otherwise invisible. Only appears when the current date
           filter actually resolves to a concrete range ("All time" has no
           meaningful "previous period" to compare against). */}
-      {summary?.previous_period && (
+      {showComparisons && summary?.previous_period && (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -12 }}>
           <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges below compare
           to the previous period: <strong style={{ color: 'var(--text-secondary)' }}>{summary.previous_period.from}</strong> to{' '}

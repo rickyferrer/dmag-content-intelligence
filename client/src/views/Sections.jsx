@@ -3,6 +3,7 @@ import { api } from '../api/index.js';
 import TrueValueBar from '../components/TrueValueBar.jsx';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 import { ChangeBadge } from '../components/KPICard.jsx';
+import { useComparisons } from '../context/ComparisonContext.jsx';
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -48,6 +49,7 @@ const COLS = [
 ];
 
 export default function Sections() {
+  const { showComparisons } = useComparisons();
   const [data, setData] = useState([]);
   const [previousPeriod, setPreviousPeriod] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -121,7 +123,7 @@ export default function Sections() {
         )}
       </div>
 
-      {previousPeriod && (
+      {showComparisons && previousPeriod && (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -12 }}>
           <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges below compare
           to the previous period: <strong style={{ color: 'var(--text-secondary)' }}>{previousPeriod.from}</strong> to{' '}

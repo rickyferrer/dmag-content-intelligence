@@ -6,6 +6,7 @@ import {
 import { api } from '../api/index.js';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 import { ChangeBadge } from '../components/KPICard.jsx';
+import { useComparisons } from '../context/ComparisonContext.jsx';
 
 function fmt(n) {
   if (!n) return '—';
@@ -144,6 +145,7 @@ function ChannelScatter({ channels }) {
 }
 
 export default function Sources() {
+  const { showComparisons } = useComparisons();
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
@@ -295,7 +297,7 @@ export default function Sources() {
         </div>
       </div>
 
-      {result?.previous_period && (
+      {showComparisons && result?.previous_period && (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -12 }}>
           <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges on the
           Volume columns compare to the previous period: <strong style={{ color: 'var(--text-secondary)' }}>{result.previous_period.from}</strong> to{' '}

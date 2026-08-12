@@ -1,6 +1,12 @@
 import React from 'react';
+import { useComparisons } from '../context/ComparisonContext.jsx';
 
+// Central gate for period-over-period display: every comparison badge in
+// the app renders through this one component, so the global toggle only
+// needs to be checked here rather than at every call site.
 export function ChangeBadge({ change }) {
+  const { showComparisons } = useComparisons();
+  if (!showComparisons) return null;
   if (change === null || change === undefined) return null;
   const isPos = change >= 0;
   const color = isPos ? '#4caf86' : '#e05c5c';

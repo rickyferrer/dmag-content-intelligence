@@ -10,6 +10,8 @@ import Writers from './views/Writers.jsx';
 import Vulnerability from './views/Vulnerability.jsx';
 import Insights from './views/Insights.jsx';
 import Settings from './views/Settings.jsx';
+import { ComparisonProvider } from './context/ComparisonContext.jsx';
+import ComparisonToggle from './components/ComparisonToggle.jsx';
 
 const NAV = [
   { id: 'overview',      label: 'Overview' },
@@ -33,6 +35,7 @@ export default function App() {
   };
 
   return (
+    <ComparisonProvider>
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {/* Top bar */}
       <header style={{
@@ -81,6 +84,10 @@ export default function App() {
             </button>
           ))}
         </nav>
+
+        <div style={{ marginLeft: 'auto' }}>
+          <ComparisonToggle />
+        </div>
       </header>
 
       {/* Main content */}
@@ -124,5 +131,6 @@ export default function App() {
         />
       )}
     </div>
+    </ComparisonProvider>
   );
 }
