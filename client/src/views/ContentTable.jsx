@@ -56,12 +56,12 @@ export default function ContentTable({ onSelect }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [types, setTypes] = useState([]);
-  const [taxonomies, setTaxonomies] = useState({ sections: [], categories: [], tags: [], nlpCategories: [] });
+  const [taxonomies, setTaxonomies] = useState({ sections: [], categories: [], tags: [], nlpCategories: [], voices: [] });
   const [writers, setWriters] = useState([]);
 
   const [issues, setIssues] = useState([]);
   const [filters, setFilters] = useState({
-    type: '', section: '', category: '', nlpCategory: '', tag: '', need: '', writer: '', issue: '', search: '',
+    type: '', section: '', category: '', nlpCategory: '', tag: '', need: '', writer: '', issue: '', search: '', voice: '',
     datePreset: DEFAULT_PRESET, dateFrom: initFrom, dateTo: initTo,
     sortBy: 'true_value', order: 'desc', page: 1, limit: 50,
   });
@@ -130,7 +130,7 @@ export default function ContentTable({ onSelect }) {
     setSearchInput('');
     const next = {
       ...filterRef.current,
-      type: '', section: '', category: '', nlpCategory: '', tag: '', need: '', writer: '', issue: '', search: '',
+      type: '', section: '', category: '', nlpCategory: '', tag: '', need: '', writer: '', issue: '', search: '', voice: '',
       datePreset: DEFAULT_PRESET, dateFrom: initFrom, dateTo: initTo,
       page: 1,
     };
@@ -171,6 +171,7 @@ export default function ContentTable({ onSelect }) {
   const sectionOptions = taxonomies.sections.slice(0, 50).map(s => ({ value: s.section, label: `${s.section} (${s.count})` }));
   const categoryOptions = taxonomies.categories.slice(0, 100).map(c => ({ value: c.slug, label: `${c.name} (${c.count})` }));
   const nlpCategoryOptions = taxonomies.nlpCategories.map(c => ({ value: c.path, label: `${c.label} (${c.count})` }));
+  const voiceOptions = taxonomies.voices.map(v => ({ value: v.voice, label: `${v.label} (${v.count})` }));
   const tagOptions = taxonomies.tags.map(t => ({ value: t.slug, label: `${t.name} (${t.count})` }));
   const needOptions = USER_NEEDS.map(n => ({ value: n, label: n.replace(/_/g, ' ') }));
   const writerOptions = writers.map(w => ({ value: w.writer, label: `${w.writer} (${w.count})` }));
@@ -197,6 +198,10 @@ export default function ContentTable({ onSelect }) {
     activeFilters.push({ key: 'tag', label: `Tag: ${tag?.name || filters.tag}` });
   }
   if (filters.need) activeFilters.push({ key: 'need', label: `Need: ${filters.need.replace(/_/g, ' ')}` });
+  if (filters.voice) {
+    const v = taxonomies.voices.find(x => x.voice === filters.voice);
+    activeFilters.push({ key: 'voice', label: `Voice: ${v?.label || filters.voice}` });
+  }
   if (filters.writer) activeFilters.push({ key: 'writer', label: `Writer: ${filters.writer}` });
   if (filters.issue) {
     const opt = issueOptions.find(o => o.value === filters.issue);
@@ -233,6 +238,11 @@ export default function ContentTable({ onSelect }) {
         )}
         <SearchableSelect value={filters.tag} onChange={v => setFilter('tag', v)} options={tagOptions} placeholder="All Tags" minWidth={160} />
         <SearchableSelect value={filters.need} onChange={v => setFilter('need', v)} options={needOptions} placeholder="All User Needs" />
+        {taxonomies.voices.length > 0 && (
+          <span title="Voice — the tone/register of a piece (e.g. Witty, Snarky, Insider); an article can carry several">
+            <SearchableSelect value={filters.voice} onChange={v => setFilter('voice', v)} options={voiceOptions} placeholder="All Voices" />
+          </span>
+        )}
         <SearchableSelect value={filters.writer} onChange={v => setFilter('writer', v)} options={writerOptions} placeholder="All Writers" minWidth={180} />
         {issues.length > 0 && (
           <SearchableSelect value={filters.issue} onChange={v => setFilter('issue', v)} options={issueOptions} placeholder="All Issues" minWidth={190} />

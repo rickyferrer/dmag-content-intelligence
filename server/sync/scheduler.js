@@ -3,6 +3,7 @@ import { syncWordPress } from './wordpress.js';
 import { syncGA4 } from './ga4.js';
 import { syncMarfeel } from './marfeel.js';
 import { classifyUnclassified } from '../classify/userNeeds.js';
+import { classifyVoicesUnclassified } from '../classify/voice.js';
 import { classifyCategoriesUnclassified } from './nlp.js';
 import { getDb, setSyncState, getSettings } from '../db.js';
 import { getScoreParams, valueToScore } from '../utils/trueValue.js';
@@ -13,6 +14,7 @@ let syncRunning = false;
 let analyticsRunning = false;
 let classifyRunning = false;
 let categoryClassifyRunning = false;
+let voiceClassifyRunning = false;
 
 // Score all content on a 0-100 scale using the shared strategic-efficiency model
 // (see utils/trueValue.js): per-reader conversion/quality rates vs. benchmarks,
@@ -506,6 +508,24 @@ export async function runCategoryClassification() {
   }
 }
 
+// Only classifies NEW/edited content (a small batch — see classify/voice.js).
+// Backfilling the existing library is a separate, manually-run script since
+// each classification is a billed Claude call at this repo's content volume.
+export async function runVoiceClassification() {
+  if (voiceClassifyRunning) {
+    console.log('[Scheduler] Voice classification already running — skipping');
+    return;
+  }
+  voiceClassifyRunning = true;
+  try {
+    await classifyVoicesUnclassified();
+  } catch (err) {
+    console.error('[Scheduler] Voice classification error:', err.message);
+  } finally {
+    voiceClassifyRunning = false;
+  }
+}
+
 export function initScheduler() {
   // Full sync once a day at 6:00am Central — content, then analytics
   // (GA4/Marfeel/GSC), then classification, run sequentially in that order
@@ -516,6 +536,7 @@ export function initScheduler() {
     await runAnalyticsSync();
     await runClassification();
     await runCategoryClassification();
+    await runVoiceClassification();
   }, { timezone: 'America/Chicago' });
 
   console.log('[Scheduler] Cron jobs initialized — daily full sync at 6:00am Central');

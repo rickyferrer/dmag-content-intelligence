@@ -239,6 +239,23 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_content_categories_wp ON content_categories(wp_id);
     CREATE INDEX IF NOT EXISTS idx_content_categories_cat ON content_categories(category);
+
+    -- Editorial "Voice" taxonomy (requested by the VP of Audience
+    -- Development) — a fixed 15-value set describing the tone/register of a
+    -- piece (Witty, Snarky, Insider, ...), classified by Claude. One row per
+    -- (article, voice): unlike user_need, an article can genuinely carry
+    -- several voices at once (a FrontBurner post can be both Snarky and
+    -- Insider), so this follows content_categories' multi-row shape rather
+    -- than user_need's single primary/secondary columns on content itself.
+    CREATE TABLE IF NOT EXISTS content_voices (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      wp_id       INTEGER NOT NULL,
+      voice       TEXT NOT NULL,
+      confidence  REAL,
+      snapshot_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_content_voices_wp ON content_voices(wp_id);
+    CREATE INDEX IF NOT EXISTS idx_content_voices_voice ON content_voices(voice);
   `);
 
   // Schema migrations — safe to run on every startup
@@ -247,6 +264,7 @@ function initSchema() {
   try { db.exec('ALTER TABLE content ADD COLUMN excluded_from_scoring INTEGER DEFAULT 0'); } catch {}
   try { db.exec('ALTER TABLE site_daily_metrics ADD COLUMN newsletter_signups INTEGER DEFAULT 0'); } catch {}
   try { db.exec('ALTER TABLE content ADD COLUMN nlp_classified_at TEXT'); } catch {}
+  try { db.exec('ALTER TABLE content ADD COLUMN voice_classified_at TEXT'); } catch {}
 
   // Seed default scoring weights if not present.
   // The Content Value score blends per-reader conversion/quality rates, weighted by

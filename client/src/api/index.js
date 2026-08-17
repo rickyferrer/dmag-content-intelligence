@@ -22,6 +22,7 @@ export const api = {
   getContentSummary: (params = {}) => apiFetch('/content/summary?' + new URLSearchParams(params)),
   reclassify: (id) => apiFetch(`/content/${id}/reclassify`, { method: 'POST' }),
   reclassifyCategories: (id) => apiFetch(`/content/${id}/reclassify-categories`, { method: 'POST' }),
+  reclassifyVoice: (id) => apiFetch(`/content/${id}/reclassify-voice`, { method: 'POST' }),
 
   // Analytics
   getSummary: (params = {}) => apiFetch('/analytics/summary?' + new URLSearchParams(params)),

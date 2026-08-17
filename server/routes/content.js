@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb, getSettings } from '../db.js';
 import { classifySingle } from '../classify/userNeeds.js';
 import { classifyCategoriesSingle } from '../sync/nlp.js';
+import { classifyVoiceSingle, VOICE_TAXONOMY } from '../classify/voice.js';
 import { getValueBreakdown } from '../utils/trueValue.js';
 import { pctChange, previousPeriodRange } from '../utils/period.js';
 
@@ -22,7 +23,7 @@ const router = Router();
 // {from, to} pair) lets /summary reuse every other active filter while
 // substituting a shifted date range for its previous-period query.
 function buildContentWhere(query, dateOverride) {
-  const { type, section, category, tag, need, writer, issue, search, nlpCategory } = query;
+  const { type, section, category, tag, need, writer, issue, search, nlpCategory, voice } = query;
   const dateFrom = dateOverride ? dateOverride.from : query.dateFrom;
   const dateTo = dateOverride ? dateOverride.to : query.dateTo;
 
@@ -41,6 +42,10 @@ function buildContentWhere(query, dateOverride) {
   if (nlpCategory) {
     where.push('EXISTS (SELECT 1 FROM content_categories cc WHERE cc.wp_id = c.wp_id AND cc.category LIKE ?)');
     params.push(`${nlpCategory}%`);
+  }
+  if (voice) {
+    where.push('EXISTS (SELECT 1 FROM content_voices cv WHERE cv.wp_id = c.wp_id AND cv.voice = ?)');
+    params.push(voice);
   }
   return { where, params };
 }
@@ -257,11 +262,19 @@ router.get('/taxonomies', (req, res) => {
     .map(([path, ids]) => ({ path, label: path.replace(/^\//, ''), count: ids.size }))
     .sort((a, b) => b.count - a.count);
 
+  // Editorial Voice tags — DISTINCT wp_id per voice, same reasoning as the
+  // NLP categories above (an article can carry several voices at once).
+  const voiceRows = db.prepare('SELECT voice, COUNT(DISTINCT wp_id) as count FROM content_voices GROUP BY voice').all();
+  const voices = voiceRows
+    .map(r => ({ voice: r.voice, label: VOICE_TAXONOMY[r.voice]?.label || r.voice, count: r.count }))
+    .sort((a, b) => b.count - a.count);
+
   res.json({
     sections,
     categories: [...catMap.values()].sort((a, b) => b.count - a.count).slice(0, 100),
     tags: [...tagMap.values()].sort((a, b) => b.count - a.count).slice(0, 200),
     nlpCategories,
+    voices,
   });
 });
 
@@ -305,6 +318,10 @@ router.get('/:id', (req, res) => {
     'SELECT category, confidence FROM content_categories WHERE wp_id = ? ORDER BY confidence DESC'
   ).all(wpId);
 
+  const voices = db.prepare(
+    'SELECT voice, confidence FROM content_voices WHERE wp_id = ? ORDER BY confidence DESC'
+  ).all(wpId);
+
   // One-time historical import (see import-historical-newsletter-signups.mjs)
   // — weekly, not the rolling-30-day mf_newsletter_signups value above, so
   // kept as its own field rather than merged into `history`.
@@ -316,7 +333,7 @@ router.get('/:id', (req, res) => {
     ORDER BY week_start ASC
   `).all(wpId);
 
-  res.json({ ...item, history, sources, categories, trueValueBreakdown: breakdown, newsletterHistory });
+  res.json({ ...item, history, sources, categories, voices, trueValueBreakdown: breakdown, newsletterHistory });
 });
 
 // POST /api/content/:id/reclassify
@@ -335,6 +352,17 @@ router.post('/:id/reclassify-categories', async (req, res) => {
   const wpId = parseInt(req.params.id);
   try {
     const result = await classifyCategoriesSingle(wpId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/content/:id/reclassify-voice
+router.post('/:id/reclassify-voice', async (req, res) => {
+  const wpId = parseInt(req.params.id);
+  try {
+    const result = await classifyVoiceSingle(wpId);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

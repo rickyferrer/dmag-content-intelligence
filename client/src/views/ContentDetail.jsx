@@ -24,6 +24,7 @@ export default function ContentDetail({ wpId, onClose }) {
   const [loading, setLoading] = useState(true);
   const [reclassifying, setReclassifying] = useState(false);
   const [reclassifyingCategories, setReclassifyingCategories] = useState(false);
+  const [reclassifyingVoice, setReclassifyingVoice] = useState(false);
 
   useEffect(() => {
     if (!wpId) return;
@@ -57,6 +58,19 @@ export default function ContentDetail({ wpId, onClose }) {
       alert('Topic classification error: ' + err.message);
     } finally {
       setReclassifyingCategories(false);
+    }
+  };
+
+  const handleReclassifyVoice = async () => {
+    setReclassifyingVoice(true);
+    try {
+      await api.reclassifyVoice(wpId);
+      const updated = await api.getContentItem(wpId);
+      setItem(updated);
+    } catch (err) {
+      alert('Voice classification error: ' + err.message);
+    } finally {
+      setReclassifyingVoice(false);
     }
   };
 
@@ -131,6 +145,18 @@ export default function ContentDetail({ wpId, onClose }) {
               }}
             >
               {reclassifyingCategories ? 'Classifying...' : 'Re-classify Topics'}
+            </button>
+            <button
+              onClick={handleReclassifyVoice}
+              disabled={reclassifyingVoice}
+              title="Reclassify into the editorial Voice taxonomy (tone/register — Witty, Snarky, Insider, etc.)"
+              style={{
+                fontSize: 13, padding: '5px 10px', background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)', borderRadius: 4,
+                color: 'var(--text-secondary)', opacity: reclassifyingVoice ? 0.6 : 1,
+              }}
+            >
+              {reclassifyingVoice ? 'Classifying...' : 'Re-classify Voice'}
             </button>
           </div>
 
@@ -233,6 +259,26 @@ export default function ContentDetail({ wpId, onClose }) {
                       <div style={{ height: '100%', borderRadius: 2, background: 'var(--accent-gold)', opacity: 0.7, width: `${(c.confidence || 0) * 100}%` }} />
                     </div>
                     <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 32, textAlign: 'right' }}>{((c.confidence || 0) * 100).toFixed(0)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Content Voice — editorial tone/register taxonomy, an article can carry several */}
+          {item.voices?.length > 0 && (
+            <div>
+              <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                Content Voice
+              </h3>
+              <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '4px 0' }}>
+                {item.voices.map(v => (
+                  <div key={v.voice} style={{ padding: '8px 14px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, textTransform: 'capitalize' }}>{v.voice}</span>
+                    <div style={{ width: 60, height: 4, background: 'var(--border)', borderRadius: 2 }}>
+                      <div style={{ height: '100%', borderRadius: 2, background: 'var(--accent-gold)', opacity: 0.7, width: `${(v.confidence || 0) * 100}%` }} />
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 32, textAlign: 'right' }}>{((v.confidence || 0) * 100).toFixed(0)}%</span>
                   </div>
                 ))}
               </div>
