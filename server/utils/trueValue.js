@@ -1,12 +1,15 @@
 // Single source of truth for the Content Value model.
 //
 // Mixed philosophy:
-//   - Subscribe clicks and newsletter signups use RAW COUNTS — an article that
-//     drives 5 subscriptions is better than one that drives 2, regardless of
-//     how many readers it took. These are output metrics.
-//   - Loyal share, in-market (DFW) share, engagement time, and ad RPM use
-//     PER-READER RATES — these are quality signals where efficiency matters
-//     regardless of scale.
+//   - Subscribe clicks, newsletter signups, and loyal readers use RAW COUNTS
+//     — an article that draws 150 loyal readers is better than one that
+//     draws 50, regardless of how big its total audience was. These are
+//     output/reach metrics: absolute scale is the point, not deflating a
+//     big-reach piece just because its loyal readers are a smaller SHARE of
+//     a much bigger crowd.
+//   - In-market (DFW) share, engagement time, and ad RPM use PER-READER
+//     RATES — these are quality signals where efficiency matters regardless
+//     of scale.
 //
 // A confidence factor shrinks scores for very low-traffic articles so a single
 // signup from 50 readers doesn't dominate over proven high-volume articles.
@@ -21,7 +24,7 @@
 const BENCHMARKS = {
   subCount:      5,     // subscribe clicks in 30 days (5 = excellent for one article)
   newsCount:     5,     // newsletter signups in 30 days
-  loyalShare:    0.39,  // loyal users ÷ total users             (p90 ≈ 0.39)
+  loyalCount:    125,   // loyal (repeat) readers in 30 days     (p90 ≈ 123)
   inmarketShare: 0.51,  // DFW-area ("in-market") users ÷ total users (p90 ≈ 0.51)
   engSeconds:    375,   // avg engagement seconds                (p90 ≈ 374)
   adRpm:         140,   // ad revenue per 1,000 readers ($)      (p90 ≈ 139)
@@ -55,16 +58,17 @@ function signals(snap) {
 const cap100 = x => Math.max(0, Math.min(100, x));
 
 // Per-dimension 0-100 sub-scores.
-// Conversion signals (sub, newsletter) use raw counts — more is better.
-// Quality signals (loyal, inmarket, engagement, ad) use per-reader rates —
+// Reach signals (sub, newsletter, loyal) use raw counts — more is better,
+// regardless of total audience size.
+// Quality signals (inmarket, engagement, ad) use per-reader rates —
 // efficiency matters, not raw volume.
 export function dimensionScores(snap) {
   const s = signals(snap);
   const per1k = s.users > 0 ? 1000 / s.users : 0;
   return {
-    subscription: cap100(s.sub        / BENCHMARKS.subCount  * 100),
-    newsletter:   cap100(s.newsletter / BENCHMARKS.newsCount * 100),
-    loyal:        cap100((s.users > 0 ? s.loyalUsers    / s.users : 0) / BENCHMARKS.loyalShare    * 100),
+    subscription: cap100(s.sub        / BENCHMARKS.subCount   * 100),
+    newsletter:   cap100(s.newsletter / BENCHMARKS.newsCount  * 100),
+    loyal:        cap100(s.loyalUsers / BENCHMARKS.loyalCount * 100),
     inmarket:     cap100((s.users > 0 ? s.inmarketUsers / s.users : 0) / BENCHMARKS.inmarketShare * 100),
     engagement:   cap100(s.engagement / BENCHMARKS.engSeconds * 100),
     ad:           cap100((s.ad * per1k) / BENCHMARKS.adRpm * 100),
