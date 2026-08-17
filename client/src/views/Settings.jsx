@@ -3,7 +3,8 @@ import { api } from '../api/index.js';
 
 const WEIGHT_META = {
   score_w_subscription: { label: "Subscribe Clicks",       min: 0, max: 100, step: 1, desc: "Total subscribe clicks (raw count). 5 clicks = full score. More clicks = higher score." },
-  score_w_loyal:        { label: "Loyal In-Market Reach",  min: 0, max: 100, step: 1, desc: "Share of audience that is loyal, DFW-area readers (rate - quality signal)." },
+  score_w_loyal:        { label: "Loyal Readers",          min: 0, max: 100, step: 1, desc: "Share of audience that are loyal (repeat, 3+ sessions/30 days) readers — independent of location (rate - quality signal)." },
+  score_w_inmarket:     { label: "In-Market (DFW) Readers",min: 0, max: 100, step: 1, desc: "Share of audience located in the DFW area — independent of loyalty (rate - quality signal)." },
   score_w_newsletter:   { label: "Newsletter Signups",     min: 0, max: 100, step: 1, desc: "Total newsletter signups (raw count). 5 signups = full score. More signups = higher score." },
   score_w_engagement:   { label: "Engagement",             min: 0, max: 100, step: 1, desc: "Avg reading time (rate - quality signal, not total time)." },
   score_w_ad_revenue:   { label: "Ad Revenue",             min: 0, max: 100, step: 1, desc: "Ad revenue per 1,000 readers. Kept small so the score isn’t just pageviews." },

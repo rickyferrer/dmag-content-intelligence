@@ -165,7 +165,8 @@ export default function ContentDetail({ wpId, onClose }) {
             const bd = item.trueValueBreakdown;
             const DIMS = [
               { key: 'subscription', label: 'Subscriptions' },
-              { key: 'loyal',        label: 'Loyal In-Market' },
+              { key: 'loyal',        label: 'Loyal Readers' },
+              { key: 'inmarket',     label: 'In-Market (DFW) Readers' },
               { key: 'newsletter',   label: 'Newsletter' },
               { key: 'engagement',   label: 'Engagement' },
               { key: 'ad',           label: 'Ad Revenue' },

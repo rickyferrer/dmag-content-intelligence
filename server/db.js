@@ -266,12 +266,30 @@ function initSchema() {
   try { db.exec('ALTER TABLE content ADD COLUMN nlp_classified_at TEXT'); } catch {}
   try { db.exec('ALTER TABLE content ADD COLUMN voice_classified_at TEXT'); } catch {}
 
+  // One-time split of the old combined "loyal in-market" weight into two
+  // independent weights (score_w_loyal, score_w_inmarket) — see
+  // utils/trueValue.js. Runs exactly once per install: if score_w_inmarket
+  // doesn't exist yet, this predates the split, so seed it (10) and — only
+  // if score_w_loyal is still sitting at its pre-split default of 25 (i.e.
+  // nobody has customized it) — reduce it to 15, preserving the same
+  // combined 25% strategic weight this pair had before. An admin-customized
+  // score_w_loyal is left untouched either way.
+  const hasInmarketWeight = db.prepare("SELECT 1 FROM settings WHERE key = 'score_w_inmarket'").get();
+  if (!hasInmarketWeight) {
+    const currentLoyal = db.prepare("SELECT value FROM settings WHERE key = 'score_w_loyal'").get();
+    if (!currentLoyal || currentLoyal.value === '25') {
+      db.prepare("INSERT INTO settings (key, value) VALUES ('score_w_loyal', '15') ON CONFLICT(key) DO UPDATE SET value = '15'").run();
+    }
+    db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('score_w_inmarket', '10')").run();
+  }
+
   // Seed default scoring weights if not present.
   // The Content Value score blends per-reader conversion/quality rates, weighted by
   // strategic priority. Subscriptions matter most; ad revenue (≈ traffic) is minor.
   const weights = {
     score_w_subscription: '40',  // subscribe-click rate per reader (the goal)
-    score_w_loyal:        '25',  // loyal in-market share of audience
+    score_w_loyal:        '15',  // share of audience that is loyal (repeat) readers
+    score_w_inmarket:     '10',  // share of audience that is in-market (DFW-area) readers
     score_w_newsletter:   '15',  // newsletter signup rate per reader
     score_w_engagement:   '15',  // reading depth / attention
     score_w_ad_revenue:   '5',   // ad revenue per reader (minor — avoids "just pageviews")

@@ -30,7 +30,7 @@ export function scoreContent(db) {
       a.id,
       c.excluded_from_scoring AS excluded,
       a.ga4_users, a.ga4_pageviews, a.ga4_subscribe_clicks, a.mf_newsletter_signups,
-      a.ga4_loyal_inmarket_pv, a.ga4_avg_engagement_time, a.ga4_ad_revenue
+      a.ga4_loyal_users, a.ga4_inmarket_pageviews, a.ga4_avg_engagement_time, a.ga4_ad_revenue
     FROM analytics_snapshots a
     JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest

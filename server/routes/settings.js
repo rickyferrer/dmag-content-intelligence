@@ -19,6 +19,7 @@ router.put('/', (req, res) => {
   const allowed = [
     'score_w_subscription',
     'score_w_loyal',
+    'score_w_inmarket',
     'score_w_newsletter',
     'score_w_engagement',
     'score_w_ad_revenue',
