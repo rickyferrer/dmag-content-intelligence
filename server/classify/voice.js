@@ -43,6 +43,11 @@ const BATCH_DELAY_MS = 1000;
 // conscious, manually-run decision (see server/scripts/backfill-voices.mjs).
 const CRON_LIMIT = 50;
 
+// Confidence floor below which a returned voice is dropped, same role as
+// sync/nlp.js's MIN_CONFIDENCE — a backstop against low-conviction picks,
+// independent of whatever the model's own selectivity does.
+const MIN_CONFIDENCE = 0.6;
+
 function buildPrompt(article) {
   const taxonomyLines = VALID_VOICES
     .map(key => `* ${key}: ${VOICE_TAXONOMY[key].description} (e.g. ${VOICE_TAXONOMY[key].examples})`)
@@ -50,7 +55,7 @@ function buildPrompt(article) {
 
   return `You are an editorial analyst for a city magazine, classifying the VOICE of an article — its tone and register, independent of its topic or what need it serves the reader.
 
-Identify every voice from this taxonomy that clearly applies (usually 1-4; don't force a fit):
+Score every voice in this taxonomy independently, on its own merits. Do not rank them against each other and do not aim for any particular count — there is no target. A short breaking-news brief might genuinely have exactly one clear voice; a rich feature might genuinely carry five or more. Only include a voice if a thoughtful editor would immediately recognize it in THIS specific piece — never include one just to round out the list, and never omit one that's genuinely present just to keep the list short.
 
 ${taxonomyLines}
 
@@ -80,7 +85,8 @@ async function classifyVoiceBatch(articles) {
       const parsed = JSON.parse(jsonMatch[0]);
       const voices = (Array.isArray(parsed.voices) ? parsed.voices : [])
         .filter(v => VALID_VOICES.includes(v.voice))
-        .map(v => ({ voice: v.voice, confidence: Math.min(1, Math.max(0, parseFloat(v.confidence) || 0)) }));
+        .map(v => ({ voice: v.voice, confidence: Math.min(1, Math.max(0, parseFloat(v.confidence) || 0)) }))
+        .filter(v => v.confidence >= MIN_CONFIDENCE);
 
       results.push({
         wp_id: article.wp_id,
