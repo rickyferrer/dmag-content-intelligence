@@ -132,6 +132,12 @@ export default function Overview() {
         <KPICard label="Avg Content Value" value={summary?.avg_true_value != null ? Math.round(summary.avg_true_value).toString() : '—'} gold change={summary?.changes?.avg_true_value} />
         <KPICard label="Total Users" value={fmt(summary?.total_users)} change={summary?.changes?.total_users} />
         <KPICard label="Loyal Users" value={fmt(summary?.total_loyal_users)} change={summary?.changes?.total_loyal_users} />
+        <KPICard
+          label="In-Market %"
+          value={summary?.inmarket_pct != null ? summary.inmarket_pct.toFixed(1) + '%' : '—'}
+          change={summary?.changes?.inmarket_pct}
+          sub="Share of readers located in the DFW area"
+        />
         <KPICard label="Subscribe Clicks" value={fmt(summary?.total_subscribe_clicks)} change={summary?.changes?.total_subscribe_clicks} />
         <KPICard
           label="Newsletter Signups"

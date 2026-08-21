@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
-import { fetchUsersForRange, fetchLoyalUsersForRange } from '../sync/ga4.js';
+import { fetchUsersForRange, fetchLoyalUsersForRange, fetchInMarketUsersForRange } from '../sync/ga4.js';
 import { computeTrendRisk } from '../utils/gscTrend.js';
 import { pctChange, previousPeriodRange } from '../utils/period.js';
 
@@ -48,6 +48,7 @@ function computeContentSummary(db, dateFrom, dateTo, section, type, asOf = null)
       SUM(a.ga4_pageviews) as total_pageviews,
       SUM(a.ga4_users) as total_users,
       SUM(a.ga4_loyal_users) as total_loyal_users,
+      SUM(a.ga4_inmarket_pageviews) as total_inmarket_users,
       SUM(COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) as total_subscribe_clicks,
       SUM(a.ga4_ad_revenue) as total_ad_revenue,
       SUM(COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) as total_newsletter_signups,
@@ -77,6 +78,7 @@ function computeContentSummary(db, dateFrom, dateTo, section, type, asOf = null)
     total_pageviews: latest.total_pageviews || 0,
     total_users: latest.total_users || 0,
     total_loyal_users: latest.total_loyal_users || 0,
+    total_inmarket_users: latest.total_inmarket_users || 0,
     total_subscribe_clicks: latest.total_subscribe_clicks || 0,
     total_ad_revenue: latest.total_ad_revenue || 0,
     total_newsletter_signups: latest.total_newsletter_signups || 0,
@@ -119,14 +121,16 @@ async function computeTrafficSummary(db, dateFrom, dateTo) {
     ${filter}
   `).get(...params);
 
-  const [total_users, rawLoyalUsers] = await Promise.all([
+  const [total_users, rawLoyalUsers, rawInmarketUsers] = await Promise.all([
     fetchUsersForRange(dateFrom, dateTo),
     fetchLoyalUsersForRange(dateFrom, dateTo),
+    fetchInMarketUsersForRange(dateFrom, dateTo),
   ]);
 
   return {
     total_users,
     total_loyal_users: Math.min(rawLoyalUsers, total_users), // cap, same rationale as the per-article sync
+    total_inmarket_users: Math.min(rawInmarketUsers, total_users), // same cap rationale
     total_pageviews: row.total_pageviews || 0,
     total_subscribe_clicks: row.total_subscribe_clicks || 0,
     total_ad_revenue: row.total_ad_revenue || 0,
@@ -216,11 +220,17 @@ router.get('/summary', async (req, res) => {
       total_pageviews: useSiteWide ? trafficCurrent.total_pageviews : contentCurrent.total_pageviews,
       total_users: useSiteWide ? trafficCurrent.total_users : contentCurrent.total_users,
       total_loyal_users: useSiteWide ? trafficCurrent.total_loyal_users : contentCurrent.total_loyal_users,
+      total_inmarket_users: useSiteWide ? trafficCurrent.total_inmarket_users : contentCurrent.total_inmarket_users,
       total_subscribe_clicks: useSiteWide ? trafficCurrent.total_subscribe_clicks : contentCurrent.total_subscribe_clicks,
       total_ad_revenue: useSiteWide ? trafficCurrent.total_ad_revenue : contentCurrent.total_ad_revenue,
       total_newsletter_signups: useSiteWide ? trafficCurrent.total_newsletter_signups : contentCurrent.total_newsletter_signups,
       avg_engagement_time: useSiteWide ? trafficCurrent.avg_engagement_time : contentCurrent.avg_engagement_time,
     };
+    // Displayed as a rate (In-Market %), not a raw count like total_loyal_users
+    // — so its "change" badge should reflect the rate moving, not the
+    // headcount moving (a rate can hold steady even while both numbers grow).
+    // See where `changes.inmarket_pct` is computed the same way below.
+    current.inmarket_pct = current.total_users > 0 ? (current.total_inmarket_users / current.total_users) * 100 : 0;
 
     // Only compute a comparison when there's an explicit range to derive a
     // duration from — "all time" has no meaningful "N days ago".
@@ -259,6 +269,8 @@ router.get('/summary', async (req, res) => {
         // whatever range was requested, no historical-depth gating needed.
         changes.total_users = pctChange(current.total_users, trafficPrevious.total_users);
         changes.total_loyal_users = pctChange(current.total_loyal_users, trafficPrevious.total_loyal_users);
+        const trafficPreviousPct = trafficPrevious.total_users > 0 ? (trafficPrevious.total_inmarket_users / trafficPrevious.total_users) * 100 : 0;
+        changes.inmarket_pct = pctChange(current.inmarket_pct, trafficPreviousPct);
 
         // Pageviews/subscribe_clicks/ad_revenue/newsletter still come from the
         // pre-aggregated daily table, so still need the depth check.
@@ -275,6 +287,8 @@ router.get('/summary', async (req, res) => {
         changes.total_users = pctChange(current.total_users, contentPrevious.total_users);
         changes.total_newsletter_signups = pctChange(current.total_newsletter_signups, contentPrevious.total_newsletter_signups);
         changes.total_loyal_users = pctChange(current.total_loyal_users, contentPrevious.total_loyal_users);
+        const contentPreviousPct = contentPrevious.total_users > 0 ? (contentPrevious.total_inmarket_users / contentPrevious.total_users) * 100 : 0;
+        changes.inmarket_pct = pctChange(current.inmarket_pct, contentPreviousPct);
         changes.total_subscribe_clicks = pctChange(current.total_subscribe_clicks, contentPrevious.total_subscribe_clicks);
         changes.total_ad_revenue = pctChange(current.total_ad_revenue, contentPrevious.total_ad_revenue);
       }

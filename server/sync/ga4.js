@@ -330,6 +330,30 @@ export async function fetchLoyalUsersForRange(dateFrom, dateTo) {
   return Math.round(row?.activeUsers || 0);
 }
 
+// Returns the raw DFW ("in-market") active-user count for the range — same
+// cap-at-call-site convention as fetchLoyalUsersForRange. GA4 has no
+// built-in "in a list of cities" filter, so this fetches every city for the
+// range and sums the DFW-matching ones client-side, same as syncGA4()'s
+// per-article Query 2 above (just without the pagePath breakdown).
+export async function fetchInMarketUsersForRange(dateFrom, dateTo) {
+  const dateRanges = dateFrom && dateTo
+    ? [{ startDate: dateFrom, endDate: dateTo }]
+    : [{ startDate: '2020-01-01', endDate: 'today' }]; // "all time" fallback — GA4 didn't exist before this, so it's safe for any real property
+
+  const data = await ga4Request(':runReport', {
+    dateRanges,
+    dimensions: [{ name: 'city' }],
+    metrics: [{ name: 'activeUsers' }],
+    limit: 10000,
+  });
+
+  let total = 0;
+  for (const row of parseRows(data)) {
+    if (isDFW(row.city)) total += Math.round(row.activeUsers || 0);
+  }
+  return total;
+}
+
 // One-off historical backfill of per-article subscribe_click events, keyed
 // by page + day. Unlike Marfeel's newsletter-signup endpoint (no lookback
 // at all, see marfeel.js), GA4's Data API supports arbitrary historical date
