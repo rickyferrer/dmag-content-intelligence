@@ -17,7 +17,7 @@ const COLUMNS = [
   { label: 'Section',       key: 'section' },
   { label: 'Published',     key: 'published_at' },
   { label: 'User Need',     key: 'need' },
-  { label: 'Est. Value',    key: 'lifetime_value', info: "This article's full track record — Sub Clicks and Newsletter here count everything it's ever driven (historical + recent), not just the last ~30 days. Sections/Writers/Publications/User Needs show a different, rolling-30-day version of Content Value on purpose, so those stay a read on CURRENT performance." },
+  { label: 'Lifetime Value', key: 'lifetime_value', info: "This article's full track record — Sub Clicks and Newsletter here count everything it's ever driven (historical + recent), not just the last ~30 days. Sections/Writers/Publications/User Needs show a different, rolling-30-day version of Content Value on purpose, so those stay a read on CURRENT performance." },
   { label: 'Users',         key: 'users' },
   { label: 'Loyal Users',   key: 'loyal_users' },
   { label: 'In-Market %',   key: 'inmarket' },
