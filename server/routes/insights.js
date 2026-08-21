@@ -55,15 +55,23 @@ const SCHEMA_PROMPT = `You are an analyst answering questions about D Magazine's
   wp_id, snapshot_at, ga4_pageviews, ga4_users, ga4_loyal_users, ga4_inmarket_pageviews,
   ga4_loyal_inmarket_pv, ga4_avg_engagement_time, ga4_sessions, ga4_subscribe_clicks,
   ga4_email_signups, ga4_ad_revenue, mf_unique_users, mf_pageviews, mf_loyal_users,
-  mf_scroll_depth, mf_recirculation_rate, mf_newsletter_signups, true_value
-  - true_value is the article's "Content Value" score, 0-100 — the dashboard's core strategic
-    content-value metric. It blends subscribe clicks (raw count), loyal readers ga4_loyal_users
-    (raw count — absolute reach, not a share of total users), in-market/DFW-reader share
-    (ga4_inmarket_pageviews÷ga4_users — a rate; independent of loyalty, not the intersection
-    ga4_loyal_inmarket_pv), newsletter signups (raw count), engagement time, and ad revenue per
-    reader, weighted by strategic priority and shrunk by a traffic-confidence factor. true_value
-    of 0 usually means excluded_from_scoring or not enough traffic yet — filter true_value > 0
-    for "best content" questions.
+  mf_scroll_depth, mf_recirculation_rate, mf_newsletter_signups, true_value, lifetime_value
+  - Two different "Content Value" 0-100 scores are stored here, sharing the same model
+    (subscribe clicks, loyal readers ga4_loyal_users [raw count — absolute reach, not a share of
+    total users], in-market/DFW-reader share [ga4_inmarket_pageviews÷ga4_users — a rate,
+    independent of loyalty, not the intersection ga4_loyal_inmarket_pv], newsletter signups,
+    engagement time, ad revenue per reader — weighted by strategic priority, shrunk by a
+    traffic-confidence factor) but DIFFERENT time windows for Subscribe Clicks/Newsletter:
+    - true_value: rolling ~30 days only. This is what every grouped view (by-section, by-writer,
+      by-need, Overview, AI Vulnerability) sums/averages — use this for any question about
+      sections, writers, user needs, publications, or site-wide performance.
+    - lifetime_value: Subscribe Clicks/Newsletter include the full historical-backfill total, not
+      just the trailing 30 days (Users/Loyal/In-Market/Engagement/Ad-Revenue have no historical
+      archive at the article level, so those stay rolling-only in both scores — GA4 simply
+      doesn't give us more). Use this for "how has this specific article performed" /
+      "what's our best content ever" questions — it's the score the Content tab sorts/filters by.
+    Both are 0 for the same reasons: excluded_from_scoring or not enough traffic yet — filter
+    > 0 for "best content" questions, matching whichever column the question is actually about.
   - ALWAYS join to only the latest snapshot per article:
     JOIN (SELECT wp_id, MAX(snapshot_at) latest FROM analytics_snapshots GROUP BY wp_id) lx
       ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest

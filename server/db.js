@@ -265,6 +265,13 @@ function initSchema() {
   try { db.exec('ALTER TABLE site_daily_metrics ADD COLUMN newsletter_signups INTEGER DEFAULT 0'); } catch {}
   try { db.exec('ALTER TABLE content ADD COLUMN nlp_classified_at TEXT'); } catch {}
   try { db.exec('ALTER TABLE content ADD COLUMN voice_classified_at TEXT'); } catch {}
+  // "Lifetime Content Value" — see utils/trueValue.js's shapeForLifetime().
+  // Deliberately a separate column from true_value, not a replacement: this
+  // one factors in an article's full historical newsletter/subscribe-click
+  // record, not just the trailing 30 days, and is only ever shown/sorted on
+  // for individual articles (Content tab, article detail) — true_value keeps
+  // feeding every grouped rollup (Sections, Writers, User Needs, etc.).
+  try { db.exec('ALTER TABLE analytics_snapshots ADD COLUMN lifetime_value REAL'); } catch {}
 
   // One-time split of the old combined "loyal in-market" weight into two
   // independent weights (score_w_loyal, score_w_inmarket) — see

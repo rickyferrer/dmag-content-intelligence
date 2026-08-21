@@ -17,7 +17,7 @@ const COLUMNS = [
   { label: 'Section',       key: 'section' },
   { label: 'Published',     key: 'published_at' },
   { label: 'User Need',     key: 'need' },
-  { label: 'Est. Value',    key: 'true_value' },
+  { label: 'Est. Value',    key: 'lifetime_value', info: "This article's full track record — Sub Clicks and Newsletter here count everything it's ever driven (historical + recent), not just the last ~30 days. Sections/Writers/Publications/User Needs show a different, rolling-30-day version of Content Value on purpose, so those stay a read on CURRENT performance." },
   { label: 'Users',         key: 'users' },
   { label: 'Loyal Users',   key: 'loyal_users' },
   { label: 'In-Market %',   key: 'inmarket' },
@@ -63,7 +63,7 @@ export default function ContentTable({ onSelect }) {
   const [filters, setFilters] = useState({
     type: '', section: '', category: '', nlpCategory: '', tag: '', need: '', writer: '', issue: '', search: '', voice: '',
     datePreset: DEFAULT_PRESET, dateFrom: initFrom, dateTo: initTo,
-    sortBy: 'true_value', order: 'desc', page: 1, limit: 50,
+    sortBy: 'lifetime_value', order: 'desc', page: 1, limit: 50,
   });
   const [searchInput, setSearchInput] = useState('');
 
@@ -314,13 +314,13 @@ export default function ContentTable({ onSelect }) {
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total Content Value</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, color: 'var(--accent-gold)' }}>{Math.round(summary.total_true_value).toLocaleString()}</span>
-            <ChangeBadge change={summary.changes?.total_true_value} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, color: 'var(--accent-gold)' }}>{Math.round(summary.total_lifetime_value).toLocaleString()}</span>
+            <ChangeBadge change={summary.changes?.total_lifetime_value} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Avg Content Value</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, color: 'var(--text-primary)' }}>{summary.avg_true_value.toFixed(1)}</span>
-            <ChangeBadge change={summary.changes?.avg_true_value} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, color: 'var(--text-primary)' }}>{summary.avg_lifetime_value.toFixed(1)}</span>
+            <ChangeBadge change={summary.changes?.avg_lifetime_value} />
           </div>
           {showComparisons && summary.previous_period && (
             <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
@@ -377,7 +377,7 @@ export default function ContentTable({ onSelect }) {
                   <NeedBadge need={row.user_need} />
                 </td>
                 <td style={{ padding: '9px 12px', minWidth: 120 }}>
-                  <TrueValueBar value={row.true_value} max={100} />
+                  <TrueValueBar value={row.lifetime_value} max={100} />
                 </td>
                 <td style={{ padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {fmt(row.ga4_users)}

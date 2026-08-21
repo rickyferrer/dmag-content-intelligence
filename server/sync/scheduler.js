@@ -6,7 +6,7 @@ import { classifyUnclassified } from '../classify/userNeeds.js';
 import { classifyVoicesUnclassified } from '../classify/voice.js';
 import { classifyCategoriesUnclassified } from './nlp.js';
 import { getDb, setSyncState, getSettings } from '../db.js';
-import { getScoreParams, valueToScore } from '../utils/trueValue.js';
+import { getScoreParams, valueToScore, shapeForLifetime } from '../utils/trueValue.js';
 import { syncGA4Sources, syncGA4DailyTotals } from './ga4.js';
 import { syncGSC, syncGSCTrend } from './gsc.js';
 
@@ -20,8 +20,17 @@ let voiceClassifyRunning = false;
 // (see utils/trueValue.js): per-reader conversion/quality rates vs. benchmarks,
 // weighted by strategic priority, shrunk by a traffic-confidence factor.
 //
-// Excluded items (homepage, section fronts) are set to 0 so they never appear as
-// top content.
+// Computes TWO scores per article:
+//   - true_value: rolling ~30-day performance only. Feeds every grouped
+//     rollup (Sections, Writers, User Needs, Publications, Overview,
+//     Insights, AI Vulnerability) — kept intentionally "current period" per
+//     the VP of Audience Development's call to keep those views rolling.
+//   - lifetime_value: same model, but Subscribe Clicks/Newsletter factor in
+//     the full historical-backfill + rolling total (see shapeForLifetime()).
+//     Only ever shown for individual articles (Content tab, article detail).
+//
+// Excluded items (homepage, section fronts) are set to 0 on both so they
+// never appear as top content.
 export function scoreContent(db) {
   const p = getScoreParams(getSettings());
 
@@ -30,23 +39,41 @@ export function scoreContent(db) {
       a.id,
       c.excluded_from_scoring AS excluded,
       a.ga4_users, a.ga4_pageviews, a.ga4_subscribe_clicks, a.mf_newsletter_signups,
-      a.ga4_loyal_users, a.ga4_inmarket_pageviews, a.ga4_avg_engagement_time, a.ga4_ad_revenue
+      a.ga4_loyal_users, a.ga4_inmarket_pageviews, a.ga4_avg_engagement_time, a.ga4_ad_revenue,
+      (COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS subscribe_clicks_total,
+      (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS newsletter_signups_total
     FROM analytics_snapshots a
     JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest
       FROM analytics_snapshots GROUP BY wp_id
     ) lx ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
     JOIN content c ON c.wp_id = a.wp_id
+    LEFT JOIN (
+      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
+      FROM historical_newsletter_signups
+      WHERE week_start < date('now', '-30 days')
+      GROUP BY wp_id
+    ) h ON h.wp_id = c.wp_id
+    LEFT JOIN (
+      SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
+      FROM historical_subscribe_clicks
+      WHERE date < date('now', '-30 days')
+      GROUP BY wp_id
+    ) hs ON hs.wp_id = c.wp_id
   `).all();
 
   if (rows.length === 0) return;
 
-  const update = db.prepare('UPDATE analytics_snapshots SET true_value = ? WHERE id = ?');
+  const update = db.prepare('UPDATE analytics_snapshots SET true_value = ?, lifetime_value = ? WHERE id = ?');
   let scored = 0;
   db.transaction(() => {
     for (const row of rows) {
-      if (row.excluded) { update.run(0, row.id); continue; }
-      update.run(valueToScore(row, p), row.id);
+      if (row.excluded) { update.run(0, 0, row.id); continue; }
+      const lifetimeSnap = shapeForLifetime(row, {
+        subscribeClicksTotal: row.subscribe_clicks_total,
+        newsletterSignupsTotal: row.newsletter_signups_total,
+      });
+      update.run(valueToScore(row, p), valueToScore(lifetimeSnap, p), row.id);
       scored++;
     }
   })();

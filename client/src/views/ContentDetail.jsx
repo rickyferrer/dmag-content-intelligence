@@ -160,9 +160,14 @@ export default function ContentDetail({ wpId, onClose }) {
             </button>
           </div>
 
-          {/* Content Value Breakdown */}
-          {item.trueValueBreakdown && (() => {
-            const bd = item.trueValueBreakdown;
+          {/* Content Value Breakdown — lifetime version: Subscribe Clicks and
+              Newsletter factor in this article's FULL historical record, not
+              just the trailing ~30 days, since this panel is about judging
+              one specific piece's track record. Sections/Writers/User Needs/
+              Publications use a different, rolling-only version of this same
+              score on purpose — see item.true_value below for that number. */}
+          {item.lifetimeValueBreakdown && (() => {
+            const bd = item.lifetimeValueBreakdown;
             const DIMS = [
               { key: 'subscription', label: 'Subscriptions' },
               { key: 'loyal',        label: 'Loyal Readers' },
@@ -173,7 +178,10 @@ export default function ContentDetail({ wpId, onClose }) {
             ];
             return (
               <div>
-                <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Content Value Breakdown</h3>
+                <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Content Value Breakdown</h3>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+                  Lifetime — Sub Clicks/Newsletter count this article's full history, not just the last ~30 days.
+                </p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
                   <div style={{ fontSize: 37, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-gold)', lineHeight: 1 }}>
                     {bd.score}
@@ -200,6 +208,12 @@ export default function ContentDetail({ wpId, onClose }) {
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
                   Weighted blend = {bd.composite}/100, × {(bd.confidence * 100).toFixed(0)}% traffic confidence = {bd.score}.
                 </div>
+                {item.true_value != null && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                    Rolling (last ~30 days) Content Value — the number Sections/Writers/User Needs total up — is{' '}
+                    <strong style={{ color: 'var(--text-secondary)' }}>{item.true_value}</strong>.
+                  </div>
+                )}
               </div>
             );
           })()}

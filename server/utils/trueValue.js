@@ -113,3 +113,32 @@ export function getValueBreakdown(snap, settings) {
     weights: { subscription: p.wSub, loyal: p.wLoyal, inmarket: p.wInmarket, newsletter: p.wNews, engagement: p.wEng, ad: p.wAd },
   };
 }
+
+// "Lifetime Content Value" — same model, but Subscribe Clicks and Newsletter
+// are fed their combined historical-backfill + rolling totals instead of
+// just the trailing ~30 days, so an older article's full track record counts
+// instead of only what it's done recently. This is the ONLY thing that
+// differs: Users/Loyal/In-Market/Engagement/Ad-Revenue have no historical
+// per-day archive at the article level, so GA4 only ever gives us a rolling
+// 30-day snapshot for those regardless — there's no "lifetime" version of
+// them to compute.
+//
+// Deliberately a SEPARATE score from true_value/dimensionScores() above,
+// not a replacement — true_value stays rolling-only and keeps feeding every
+// grouped view (Sections, Writers, User Needs, Publications, Overview,
+// Insights, AI Vulnerability), which the VP of Audience Development wants
+// to keep reflecting current performance. This lifetime version is only for
+// judging individual articles (the Content tab and article detail panel),
+// where "how has this piece actually resonated with readers" is the point —
+// see server/routes/content.js.
+//
+// `totals` is { subscribeClicksTotal, newsletterSignupsTotal } — the same
+// historical+live merge already computed for display everywhere else in the
+// app (search this codebase for the "non-overlap merge" pattern).
+export function shapeForLifetime(snap, totals) {
+  return {
+    ...snap,
+    ga4_subscribe_clicks:  totals.subscribeClicksTotal  ?? snap.ga4_subscribe_clicks,
+    mf_newsletter_signups: totals.newsletterSignupsTotal ?? snap.mf_newsletter_signups,
+  };
+}

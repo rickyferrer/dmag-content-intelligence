@@ -3,7 +3,7 @@ import { getDb, getSettings } from '../db.js';
 import { classifySingle } from '../classify/userNeeds.js';
 import { classifyCategoriesSingle } from '../sync/nlp.js';
 import { classifyVoiceSingle, VOICE_TAXONOMY } from '../classify/voice.js';
-import { getValueBreakdown } from '../utils/trueValue.js';
+import { getValueBreakdown, shapeForLifetime } from '../utils/trueValue.js';
 import { pctChange, previousPeriodRange } from '../utils/period.js';
 
 // A Google content-category path looks like "/Food & Drink/Restaurants" —
@@ -54,7 +54,7 @@ function buildContentWhere(query, dateOverride) {
 router.get('/', (req, res) => {
   const db = getDb();
   const {
-    sortBy = 'published_at', order = 'desc',
+    sortBy = 'lifetime_value', order = 'desc',
     page = 1, limit = 50,
   } = req.query;
 
@@ -69,6 +69,7 @@ router.get('/', (req, res) => {
   const SUBCLICKS_TOTAL_EXPR = "(COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0))";
 
   const validSorts = {
+    lifetime_value: 'a.lifetime_value',
     true_value: 'a.true_value',
     pageviews: 'a.ga4_pageviews',
     users: 'a.ga4_users',
@@ -101,7 +102,7 @@ router.get('/', (req, res) => {
       a.ga4_avg_engagement_time, a.ga4_sessions,
       a.ga4_subscribe_clicks, a.ga4_email_signups, a.ga4_ad_revenue,
       a.mf_unique_users, a.mf_pageviews, a.mf_loyal_users,
-      a.mf_scroll_depth, a.mf_newsletter_signups, a.true_value, a.snapshot_at,
+      a.mf_scroll_depth, a.mf_newsletter_signups, a.true_value, a.lifetime_value, a.snapshot_at,
       ${NEWSLETTER_TOTAL_EXPR} AS newsletter_signups_total,
       ${SUBCLICKS_TOTAL_EXPR} AS subscribe_clicks_total
     FROM content c
@@ -148,6 +149,11 @@ router.get('/', (req, res) => {
 // totals only, not per-row: the Content tab lists individual articles,
 // where a "vs. previous period" comparison doesn't mean anything for a
 // single piece (per the user's own confirmed choice for this tab).
+//
+// Uses lifetime_value, not true_value — this endpoint only ever powers the
+// Content tab, which is specifically about individual articles' full
+// track record (see utils/trueValue.js's shapeForLifetime() for why that's
+// a different number from the rolling true_value every grouped view uses).
 router.get('/summary', (req, res) => {
   const db = getDb();
   const { dateFrom, dateTo } = req.query;
@@ -157,11 +163,11 @@ router.get('/summary', (req, res) => {
     const row = db.prepare(`
       SELECT
         COUNT(*) AS article_count,
-        SUM(a.true_value) AS total_true_value,
-        -- Excludes true_value = 0 (excluded-from-scoring or not enough
+        SUM(a.lifetime_value) AS total_lifetime_value,
+        -- Excludes lifetime_value = 0 (excluded-from-scoring or not enough
         -- traffic yet) — same convention as Overview's KPI card, Insights,
-        -- and the Writers/Sections tabs.
-        AVG(CASE WHEN a.true_value > 0 THEN a.true_value END) AS avg_true_value
+        -- and the Writers/Sections tabs use for true_value.
+        AVG(CASE WHEN a.lifetime_value > 0 THEN a.lifetime_value END) AS avg_lifetime_value
       FROM content c
       LEFT JOIN (
         SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
@@ -171,8 +177,8 @@ router.get('/summary', (req, res) => {
     `).get(...params);
     return {
       article_count: row.article_count || 0,
-      total_true_value: row.total_true_value || 0,
-      avg_true_value: row.avg_true_value || 0,
+      total_lifetime_value: row.total_lifetime_value || 0,
+      avg_lifetime_value: row.avg_lifetime_value || 0,
     };
   }
 
@@ -187,8 +193,8 @@ router.get('/summary', (req, res) => {
     previous = totalsFor(prev.where, prev.params);
     changes = {
       article_count: pctChange(current.article_count, previous.article_count),
-      total_true_value: pctChange(current.total_true_value, previous.total_true_value),
-      avg_true_value: pctChange(current.avg_true_value, previous.avg_true_value),
+      total_lifetime_value: pctChange(current.total_lifetime_value, previous.total_lifetime_value),
+      avg_lifetime_value: pctChange(current.avg_lifetime_value, previous.avg_lifetime_value),
     };
   }
 
@@ -289,12 +295,27 @@ router.get('/:id', (req, res) => {
       a.ga4_avg_engagement_time, a.ga4_sessions, a.ga4_subscribe_clicks,
       a.ga4_email_signups, a.ga4_ad_revenue, a.mf_unique_users,
       a.mf_pageviews, a.mf_loyal_users, a.mf_scroll_depth,
-      a.mf_recirculation_rate, a.mf_newsletter_signups, a.true_value, a.snapshot_at
+      a.mf_recirculation_rate, a.mf_newsletter_signups, a.true_value,
+      a.lifetime_value, a.snapshot_at,
+      (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS newsletter_signups_total,
+      (COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS subscribe_clicks_total
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots GROUP BY wp_id
     ) latest_snap ON c.wp_id = latest_snap.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = latest_snap.wp_id AND a.snapshot_at = latest_snap.latest
+    LEFT JOIN (
+      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
+      FROM historical_newsletter_signups
+      WHERE week_start < date('now', '-30 days')
+      GROUP BY wp_id
+    ) h ON h.wp_id = c.wp_id
+    LEFT JOIN (
+      SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
+      FROM historical_subscribe_clicks
+      WHERE date < date('now', '-30 days')
+      GROUP BY wp_id
+    ) hs ON hs.wp_id = c.wp_id
     WHERE c.wp_id = ?
   `).get(wpId);
 
@@ -312,7 +333,21 @@ router.get('/:id', (req, res) => {
     ORDER BY pageviews DESC
   `).all(wpId, wpId);
 
-  const breakdown = getValueBreakdown(item, getSettings());
+  const settings = getSettings();
+  const breakdown = getValueBreakdown(item, settings);
+
+  // Lifetime breakdown — same model, Subscribe Clicks/Newsletter fed their
+  // full historical+rolling totals instead of rolling-only. See
+  // utils/trueValue.js's shapeForLifetime() for why this differs from
+  // `breakdown` above (which mirrors the rolling true_value every grouped
+  // view — Sections, Writers, etc. — uses).
+  const lifetimeBreakdown = getValueBreakdown(
+    shapeForLifetime(item, {
+      subscribeClicksTotal: item.subscribe_clicks_total,
+      newsletterSignupsTotal: item.newsletter_signups_total,
+    }),
+    settings
+  );
 
   const categories = db.prepare(
     'SELECT category, confidence FROM content_categories WHERE wp_id = ? ORDER BY confidence DESC'
@@ -333,7 +368,7 @@ router.get('/:id', (req, res) => {
     ORDER BY week_start ASC
   `).all(wpId);
 
-  res.json({ ...item, history, sources, categories, voices, trueValueBreakdown: breakdown, newsletterHistory });
+  res.json({ ...item, history, sources, categories, voices, trueValueBreakdown: breakdown, lifetimeValueBreakdown: lifetimeBreakdown, newsletterHistory });
 });
 
 // POST /api/content/:id/reclassify
