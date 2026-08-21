@@ -75,6 +75,12 @@ const SCHEMA_PROMPT = `You are an analyst answering questions about D Magazine's
   - ALWAYS join to only the latest snapshot per article:
     JOIN (SELECT wp_id, MAX(snapshot_at) latest FROM analytics_snapshots GROUP BY wp_id) lx
       ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
+  - Every ad_revenue/ga4_ad_revenue column in this database (here, source_performance,
+    site_daily_metrics) is a NOTIONAL figure — ad impressions × a flat $10 assumed CPM — not
+    GA4's real tracked ad revenue, per a deliberate call from the executive team to isolate
+    traffic's ad-supported value from real-world CPM noise. It runs meaningfully lower than real
+    revenue would (roughly half, in recent data) — if asked, say it's a potential-value estimate,
+    not actual revenue collected.
 
 **content_sources** — per-article traffic source breakdown (Google, Facebook, direct, dark social, etc.), from Marfeel. Same latest-snapshot pattern as above (table name in the join changes).
 

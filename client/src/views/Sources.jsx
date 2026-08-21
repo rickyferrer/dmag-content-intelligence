@@ -50,7 +50,8 @@ const ESTIMATED_COLS = new Set(['users', 'newsletter_signups', 'loyal_pct', 'inm
 // channel-level data instead (always trailing 30 days, no historical floor
 // of its own — see the Efficiency-columns note above), so it doesn't get
 // this note.
-const COLUMN_NOTES = { newsletter_signups: NEWSLETTER_NOTE };
+const AD_REVENUE_NOTE = 'Potential value — ad impressions × $10 CPM, not real tracked revenue.';
+const COLUMN_NOTES = { newsletter_signups: NEWSLETTER_NOTE, ga4_rev_per_1k: AD_REVENUE_NOTE };
 
 function getSortValue(row, key) {
   switch (key) {
@@ -108,7 +109,7 @@ function ChannelScatter({ channels }) {
         <div style={{ color: d.color, fontWeight: 600, marginBottom: 4 }}>{d.label}</div>
         <div style={{ color: 'var(--text-secondary)' }}>Traffic: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{fmt(d.pageviews)}</span></div>
         <div style={{ color: 'var(--text-secondary)' }}>Opportunity: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{d.ga4.opportunity_per_1k.toFixed(2)}/1k</span></div>
-        <div style={{ color: 'var(--text-secondary)' }}>Ad Revenue: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>${Math.round(d.ga4.ad_revenue).toLocaleString()}</span></div>
+        <div style={{ color: 'var(--text-secondary)' }}>Potential Ad Revenue: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>${Math.round(d.ga4.ad_revenue).toLocaleString()}</span></div>
         {d.ga4.low_confidence && <div style={{ color: '#c0392b', marginTop: 4 }}>Low confidence — small GA4 sample</div>}
       </div>
     );
@@ -367,7 +368,7 @@ export default function Sources() {
                   title={[ESTIMATED_COLS.has(col.key) ? volumeNote : null, COLUMN_NOTES[col.key]].filter(Boolean).join(' ') || undefined}
                   style={{ fontSize: 11, fontWeight: 600, color: sort.key === col.key ? 'var(--accent-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
                 >
-                  {col.label}{ESTIMATED_COLS.has(col.key) ? '*' : ''} <span style={{ opacity: sort.key === col.key ? 1 : 0.25 }}>{sort.key === col.key ? (sort.dir === 'desc' ? '↓' : '↑') : '↕'}</span>
+                  {col.label}{(ESTIMATED_COLS.has(col.key) || COLUMN_NOTES[col.key]) ? '*' : ''} <span style={{ opacity: sort.key === col.key ? 1 : 0.25 }}>{sort.key === col.key ? (sort.dir === 'desc' ? '↓' : '↑') : '↕'}</span>
                 </div>
               ))}
               <div />
@@ -453,7 +454,7 @@ export default function Sources() {
               <div>
                 <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--text-primary)', margin: 0 }}>Opportunity Map</h3>
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                  Traffic vs. conversion efficiency. Bubble size = ad revenue, color = channel. Dashed/faint bubbles are low-confidence (small GA4 sample).
+                  Traffic vs. conversion efficiency. Bubble size = potential ad revenue (impressions × $10 CPM, not real tracked revenue), color = channel. Dashed/faint bubbles are low-confidence (small GA4 sample).
                 </p>
               </div>
               <button

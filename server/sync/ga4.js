@@ -12,6 +12,20 @@ const DFW_CITIES = [
   'Lewisville', 'Carrollton', 'Allen', 'Mesquite', 'Grand Prairie',
 ];
 
+// Per the executive team: "Ad Revenue" everywhere in this app is now a
+// NOTIONAL figure — ad impressions × an assumed flat CPM — not GA4's actual
+// tracked ad revenue (totalRevenue/totalAdRevenue). This deliberately trades
+// real-world accuracy for a number that isolates traffic's ad-supported
+// VALUE from real-world CPM noise (seasonality, buyer demand, viewability),
+// which is what a flat-CPM model is for. It runs meaningfully lower than
+// real revenue for this property (~$28K vs. ~$44K over a recent 30-day
+// window) — that gap is expected, not a bug, and not something to reconcile.
+// Override without a redeploy via AD_CPM if the assumed rate ever changes.
+const AD_CPM = parseFloat(process.env.AD_CPM || '10');
+function adRevenueFromImpressions(impressions) {
+  return (impressions || 0) * AD_CPM / 1000;
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 let cachedAccessToken = null;
@@ -149,7 +163,7 @@ export async function syncGA4() {
         { name: 'activeUsers' },
         { name: 'averageSessionDuration' },
         { name: 'sessions' },
-        { name: 'totalRevenue' },
+        { name: 'publisherAdImpressions' },
       ],
       limit: 10000,
     });
@@ -163,7 +177,7 @@ export async function syncGA4() {
         ga4_users: Math.round(row.activeUsers || 0),
         ga4_avg_engagement_time: row.averageSessionDuration || 0,
         ga4_sessions: Math.round(row.sessions || 0),
-        ga4_ad_revenue: row.totalRevenue || 0,
+        ga4_ad_revenue: adRevenueFromImpressions(row.publisherAdImpressions),
         ga4_loyal_users: 0,
         ga4_inmarket_pageviews: 0,
         ga4_loyal_inmarket_pv: 0,
@@ -408,7 +422,7 @@ export async function syncGA4DailyTotals(lookbackDays = 400) {
       { name: 'screenPageViews' },
       { name: 'sessions' },
       { name: 'averageSessionDuration' },
-      { name: 'totalRevenue' },
+      { name: 'publisherAdImpressions' },
     ],
     limit: 1000,
   });
@@ -421,7 +435,7 @@ export async function syncGA4DailyTotals(lookbackDays = 400) {
       pageviews: Math.round(row.screenPageViews || 0),
       sessions: Math.round(row.sessions || 0),
       avg_engagement_time: row.averageSessionDuration || 0,
-      ad_revenue: row.totalRevenue || 0,
+      ad_revenue: adRevenueFromImpressions(row.publisherAdImpressions),
       loyal_users: 0,
       subscribe_clicks: 0,
     });
@@ -484,7 +498,7 @@ export async function syncGA4Sources() {
       metrics: [
         { name: 'activeUsers' },
         { name: 'averageSessionDuration' },
-        { name: 'totalRevenue' },
+        { name: 'publisherAdImpressions' },
         { name: 'sessions' },
       ],
       limit: 50,
@@ -497,7 +511,7 @@ export async function syncGA4Sources() {
         users:               Math.round(row.activeUsers || 0),
         sessions:            Math.round(row.sessions || 0),
         avg_engagement_time: row.averageSessionDuration || 0,
-        ad_revenue:          row.totalRevenue || 0,
+        ad_revenue:          adRevenueFromImpressions(row.publisherAdImpressions),
         subscribe_clicks:    0,
       });
     }

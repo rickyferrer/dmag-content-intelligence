@@ -27,7 +27,15 @@ const BENCHMARKS = {
   loyalCount:    125,   // loyal (repeat) readers in 30 days     (p90 ≈ 123)
   inmarketShare: 0.51,  // DFW-area ("in-market") users ÷ total users (p90 ≈ 0.51)
   engSeconds:    375,   // avg engagement seconds                (p90 ≈ 374)
-  adRpm:         140,   // ad revenue per 1,000 readers ($)      (p90 ≈ 139)
+  // Ad revenue per 1,000 readers ($) — NOTIONAL, not real revenue: ad
+  // impressions × a flat assumed CPM (see sync/ga4.js's AD_CPM), per the
+  // executive team's call to isolate traffic's ad-supported value from
+  // real-world CPM noise. Recalibrated for that switch (p90 ≈ 71, roughly
+  // half the old real-revenue-based benchmark of 140) — if AD_CPM ever
+  // changes, this benchmark scales linearly with it and should be
+  // recalibrated too, or every article's Ad Revenue dimension score will
+  // silently shift.
+  adRpm:         71,
 };
 
 export function getScoreParams(settings = {}) {

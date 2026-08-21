@@ -145,7 +145,12 @@ export default function Overview() {
           change={summary?.changes?.total_newsletter_signups}
           sub="Tracking began Jul 21, 2026 — longer ranges won't grow until real history catches up"
         />
-        <KPICard label="Ad Revenue (30d)" value={summary?.total_ad_revenue != null ? '$' + summary.total_ad_revenue.toFixed(0) : '—'} change={summary?.changes?.total_ad_revenue} />
+        <KPICard
+          label="Ad Revenue (30d)"
+          value={summary?.total_ad_revenue != null ? '$' + summary.total_ad_revenue.toFixed(0) : '—'}
+          change={summary?.changes?.total_ad_revenue}
+          sub="Potential value — ad impressions × $10 CPM, not real tracked revenue"
+        />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>

@@ -7,7 +7,7 @@ const WEIGHT_META = {
   score_w_inmarket:     { label: "In-Market (DFW) Readers",min: 0, max: 100, step: 1, desc: "Share of audience located in the DFW area — independent of loyalty (rate - quality signal)." },
   score_w_newsletter:   { label: "Newsletter Signups",     min: 0, max: 100, step: 1, desc: "Total newsletter signups (raw count). 5 signups = full score. More signups = higher score." },
   score_w_engagement:   { label: "Engagement",             min: 0, max: 100, step: 1, desc: "Avg reading time (rate - quality signal, not total time)." },
-  score_w_ad_revenue:   { label: "Ad Revenue",             min: 0, max: 100, step: 1, desc: "Ad revenue per 1,000 readers. Kept small so the score isn’t just pageviews." },
+  score_w_ad_revenue:   { label: "Ad Revenue",             min: 0, max: 100, step: 1, desc: "Potential ad revenue per 1,000 readers — ad impressions × $10 CPM, not real tracked revenue. Kept small so the score isn’t just pageviews." },
   score_confidence_k:   { label: "Confidence Threshold",   min: 0, max: 1000,step: 25,desc: "Readers needed before an article earns full score. Prevents a 1-signup article from 50 readers beating a 3-signup article from 5,000." },
 };
 

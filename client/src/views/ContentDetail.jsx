@@ -10,10 +10,10 @@ function fmt(n) {
   return String(Math.round(n));
 }
 
-function StatRow({ label, value, accent }) {
+function StatRow({ label, value, accent, title }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{label}</span>
+    <div title={title} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border-subtle)', cursor: title ? 'help' : 'default' }}>
+      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{label}{title ? '*' : ''}</span>
       <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: accent ? 'var(--accent-gold)' : 'var(--text-primary)' }}>{value}</span>
     </div>
   );
@@ -174,7 +174,7 @@ export default function ContentDetail({ wpId, onClose }) {
               { key: 'inmarket',     label: 'In-Market (DFW) Readers' },
               { key: 'newsletter',   label: 'Newsletter' },
               { key: 'engagement',   label: 'Engagement' },
-              { key: 'ad',           label: 'Ad Revenue' },
+              { key: 'ad',           label: 'Ad Revenue', info: 'Potential value — ad impressions × $10 CPM, not real tracked revenue' },
             ];
             return (
               <div>
@@ -189,13 +189,13 @@ export default function ContentDetail({ wpId, onClose }) {
                   <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>/ 100</div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {DIMS.map(({ key, label }) => {
+                  {DIMS.map(({ key, label, info }) => {
                     const sub = Math.round(bd.dimensions[key] || 0);
                     const w = bd.weights[key] || 0;
                     return (
-                      <div key={key}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>{label} <span style={{ color: 'var(--text-muted)' }}>· {w}% weight</span></span>
+                      <div key={key} title={info}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3, cursor: info ? 'help' : 'default' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>{label}{info ? '*' : ''} <span style={{ color: 'var(--text-muted)' }}>· {w}% weight</span></span>
                           <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{sub}</span>
                         </div>
                         <div style={{ height: 4, background: 'var(--bg-elevated)', borderRadius: 2 }}>
@@ -231,7 +231,7 @@ export default function ContentDetail({ wpId, onClose }) {
               <StatRow label="Sessions" value={fmt(item.ga4_sessions)} />
               <StatRow label="Subscribe Clicks" value={fmt(item.ga4_subscribe_clicks)} />
               <StatRow label="Newsletter Signups" value={fmt(item.mf_newsletter_signups)} />
-              <StatRow label="Ad Revenue" value={item.ga4_ad_revenue != null ? '$' + item.ga4_ad_revenue.toFixed(2) : '—'} />
+              <StatRow label="Ad Revenue" value={item.ga4_ad_revenue != null ? '$' + item.ga4_ad_revenue.toFixed(2) : '—'} title="Potential value — ad impressions × $10 CPM, not real tracked revenue" />
               <StatRow label="Marfeel Unique Users" value={fmt(item.mf_unique_users)} />
               <StatRow label="Marfeel Loyal Users" value={fmt(item.mf_loyal_users)} />
               <StatRow label="Scroll Depth" value={item.mf_scroll_depth != null ? item.mf_scroll_depth.toFixed(0) + '%' : '—'} />
