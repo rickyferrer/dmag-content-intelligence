@@ -24,7 +24,12 @@
 const BENCHMARKS = {
   subCount:      5,     // subscribe clicks in 30 days (5 = excellent for one article)
   newsCount:     5,     // newsletter signups in 30 days
-  loyalCount:    125,   // loyal (repeat) readers in 30 days     (p90 ≈ 123)
+  // Loyal (repeat) readers in 30 days. Originally 125 (p90 across a stale
+  // dataset at the time), but that let a modestly-good story (~150 loyal
+  // readers) max out the dimension at 100 with no room above it — the real
+  // best-ever story pulls ~1,400 loyal readers, an order of magnitude more.
+  // Raised so 100 means genuinely exceptional, not just "decent."
+  loyalCount:    1400,
   inmarketShare: 0.51,  // DFW-area ("in-market") users ÷ total users (p90 ≈ 0.51)
   engSeconds:    375,   // avg engagement seconds                (p90 ≈ 374)
   // Ad revenue per 1,000 readers ($) — NOTIONAL, not real revenue: ad

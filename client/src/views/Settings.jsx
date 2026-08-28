@@ -3,7 +3,7 @@ import { api } from '../api/index.js';
 
 const WEIGHT_META = {
   score_w_subscription: { label: "Subscribe Clicks",       min: 0, max: 100, step: 1, desc: "Total subscribe clicks (raw count). 5 clicks = full score. More clicks = higher score." },
-  score_w_loyal:        { label: "Loyal Readers",          min: 0, max: 100, step: 1, desc: "Total loyal (repeat, 3+ sessions/30 days) readers (raw count). 125 readers = full score. More loyal readers = higher score, regardless of total audience size." },
+  score_w_loyal:        { label: "Loyal Readers",          min: 0, max: 100, step: 1, desc: "Total loyal (repeat, 3+ sessions/30 days) readers (raw count). 1,400 readers = full score — set near the best story we've seen, so a full score means genuinely exceptional. More loyal readers = higher score, regardless of total audience size." },
   score_w_inmarket:     { label: "In-Market (DFW) Readers",min: 0, max: 100, step: 1, desc: "Share of audience located in the DFW area — independent of loyalty (rate - quality signal)." },
   score_w_newsletter:   { label: "Newsletter Signups",     min: 0, max: 100, step: 1, desc: "Total newsletter signups (raw count). 5 signups = full score. More signups = higher score." },
   score_w_engagement:   { label: "Engagement",             min: 0, max: 100, step: 1, desc: "Avg reading time (rate - quality signal, not total time)." },
