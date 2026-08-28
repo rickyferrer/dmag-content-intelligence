@@ -31,7 +31,12 @@ const BENCHMARKS = {
   // Raised so 100 means genuinely exceptional, not just "decent."
   loyalCount:    1400,
   inmarketShare: 0.51,  // DFW-area ("in-market") users ÷ total users (p90 ≈ 0.51)
-  engSeconds:    375,   // avg engagement seconds                (p90 ≈ 374)
+  // Avg engagement seconds. Originally 375 (an old p90), but by the time real
+  // data caught up almost 7% of articles were maxing this dimension, with the
+  // real p99 at ~812s and the max running to ~10,950s (29x the benchmark) —
+  // the same "too easy to max out" pattern as the old Loyal Readers
+  // benchmark. Raised to p99 so 100 is a genuinely rare, top-tier result.
+  engSeconds:    800,
   // Ad revenue per 1,000 readers ($) — NOTIONAL, not real revenue: ad
   // impressions × a flat assumed CPM (see sync/ga4.js's AD_CPM), per the
   // executive team's call to isolate traffic's ad-supported value from

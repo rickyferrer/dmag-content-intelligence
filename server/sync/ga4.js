@@ -226,12 +226,18 @@ export async function syncGA4() {
       }
     }
 
-    // Cap loyal_users at total users — GA4's audience dimension is property-level
-    // and can return more "loyal visitors to this URL" than total users for that URL
-    // (especially on recurring articles with a stable URL that build up audience visits
-    // across multiple publications). Loyal is always a subset of total.
+    // Cap loyal_users AND inmarket_pageviews (DFW users) at total users — GA4's
+    // audience/geo dimensions are property-level and can return more "loyal" or
+    // "DFW" visitors to a URL than that URL's own total users (especially on
+    // recurring articles with a stable URL that build up audience visits across
+    // multiple publications). Both are always a subset of total. Only loyal was
+    // capped here originally; DFW users being uncapped let a handful of articles
+    // report an in-market SHARE over 100% (as high as 150x observed), which both
+    // corrupted the In-Market scoring dimension and inflated the displayed
+    // In-Market % on the Content tab / Overview / article detail.
     for (const [, m] of allMetrics) {
       m.ga4_loyal_users = Math.min(m.ga4_loyal_users, m.ga4_users);
+      m.ga4_inmarket_pageviews = Math.min(m.ga4_inmarket_pageviews, m.ga4_users);
     }
 
     // Approximate loyal in-market: loyal_users × (inmarket_users / total_users)
