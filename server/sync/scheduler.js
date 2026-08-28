@@ -7,6 +7,7 @@ import { classifyVoicesUnclassified } from '../classify/voice.js';
 import { classifyCategoriesUnclassified } from './nlp.js';
 import { getDb, setSyncState, getSettings } from '../db.js';
 import { getScoreParams, valueToScore, shapeForLifetime } from '../utils/trueValue.js';
+import { runBenchmarkCheck } from '../utils/benchmarkCheck.js';
 import { syncGA4Sources, syncGA4DailyTotals } from './ga4.js';
 import { syncGSC, syncGSCTrend } from './gsc.js';
 
@@ -553,6 +554,27 @@ export async function runVoiceClassification() {
   }
 }
 
+const BENCHMARK_CHECK_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Runs the Content Value benchmark recalibration check (utils/benchmarkCheck.js)
+// only if 30+ days have passed since the last one (or it's never run) — a
+// true rolling 30-day cadence, piggybacked on the existing daily cron rather
+// than its own cron schedule, since node-cron is calendar-based and has no
+// native "every N days" expression. `force` bypasses the gate for the manual
+// "Run Check Now" trigger (see routes/settings.js).
+export function runBenchmarkCheckIfDue(force = false) {
+  const db = getDb();
+  if (!force) {
+    const last = db.prepare("SELECT value FROM sync_state WHERE key = 'last_benchmark_check'").get();
+    if (last?.value && Date.now() - new Date(last.value).getTime() < BENCHMARK_CHECK_INTERVAL_MS) {
+      return null; // not due yet
+    }
+  }
+  const flagged = runBenchmarkCheck(db, getSettings());
+  console.log(`[Scheduler] Benchmark check complete — ${flagged.length} dimension(s) flagged for review`);
+  return flagged;
+}
+
 export function initScheduler() {
   // Full sync once a day at 6:00am Central — content, then analytics
   // (GA4/Marfeel/GSC), then classification, run sequentially in that order
@@ -564,6 +586,11 @@ export function initScheduler() {
     await runClassification();
     await runCategoryClassification();
     await runVoiceClassification();
+    try {
+      runBenchmarkCheckIfDue();
+    } catch (err) {
+      console.error('[Scheduler] Benchmark check error:', err.message);
+    }
   }, { timezone: 'America/Chicago' });
 
   console.log('[Scheduler] Cron jobs initialized — daily full sync at 6:00am Central');

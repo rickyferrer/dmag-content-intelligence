@@ -21,7 +21,13 @@
 // than one article's low score on one silently dragging down the other.
 
 // Benchmarks: the count/rate that earns a score of 100 on each dimension.
-const BENCHMARKS = {
+// These are DEFAULTS/fallbacks — the live values are DB-backed settings
+// (benchmark_* keys, read via getScoreParams below) so the 30-day
+// recalibration check (see utils/benchmarkCheck.js) can propose new values
+// without a code deploy. Keep these in sync with whatever's actually live
+// when a recalibration is applied, so a fresh install starts from the
+// current best understanding, not a stale historical one.
+export const DEFAULT_BENCHMARKS = {
   subCount:      5,     // subscribe clicks in 30 days (5 = excellent for one article)
   newsCount:     5,     // newsletter signups in 30 days
   // Loyal (repeat) readers in 30 days. Originally 125 (p90 across a stale
@@ -48,6 +54,27 @@ const BENCHMARKS = {
   adRpm:         71,
 };
 
+// Metadata for each benchmark — shared by the recalibration check
+// (utils/benchmarkCheck.js, for rounding a computed percentile into a sane
+// proposed value) and the Settings UI (label/unit for display). `settingKey`
+// is the DB-backed settings row this benchmark reads from.
+export const BENCHMARK_META = {
+  subCount:      { settingKey: 'benchmark_sub_count',      label: 'Subscribe Clicks',      unit: 'count', round: 1 },
+  newsCount:     { settingKey: 'benchmark_news_count',      label: 'Newsletter Signups',    unit: 'count', round: 1 },
+  loyalCount:    { settingKey: 'benchmark_loyal_count',     label: 'Loyal Readers',         unit: 'count', round: 10 },
+  inmarketShare: { settingKey: 'benchmark_inmarket_share',  label: 'In-Market Share',       unit: 'share', round: 0.01 },
+  engSeconds:    { settingKey: 'benchmark_eng_seconds',     label: 'Engagement Seconds',    unit: 'seconds', round: 10 },
+  adRpm:         { settingKey: 'benchmark_ad_rpm',          label: 'Ad Revenue per 1,000',  unit: 'dollars', round: 1 },
+};
+
+export function getBenchmarks(settings = {}) {
+  const b = {};
+  for (const [key, meta] of Object.entries(BENCHMARK_META)) {
+    b[key] = parseFloat(settings[meta.settingKey] ?? DEFAULT_BENCHMARKS[key]);
+  }
+  return b;
+}
+
 export function getScoreParams(settings = {}) {
   return {
     wSub:      parseFloat(settings.score_w_subscription ?? 40),
@@ -57,6 +84,7 @@ export function getScoreParams(settings = {}) {
     wEng:      parseFloat(settings.score_w_engagement    ?? 15),
     wAd:       parseFloat(settings.score_w_ad_revenue    ?? 5),
     confK:     Math.max(0, parseFloat(settings.score_confidence_k ?? 100)),
+    benchmarks: getBenchmarks(settings),
   };
 }
 
@@ -80,16 +108,20 @@ const cap100 = x => Math.max(0, Math.min(100, x));
 // regardless of total audience size.
 // Quality signals (inmarket, engagement, ad) use per-reader rates —
 // efficiency matters, not raw volume.
-export function dimensionScores(snap) {
+// `benchmarks` defaults to DEFAULT_BENCHMARKS but every real call site
+// passes the DB-backed values from getScoreParams()/getBenchmarks() so a
+// recalibration (see utils/benchmarkCheck.js) takes effect without a
+// code deploy.
+export function dimensionScores(snap, benchmarks = DEFAULT_BENCHMARKS) {
   const s = signals(snap);
   const per1k = s.users > 0 ? 1000 / s.users : 0;
   return {
-    subscription: cap100(s.sub        / BENCHMARKS.subCount   * 100),
-    newsletter:   cap100(s.newsletter / BENCHMARKS.newsCount  * 100),
-    loyal:        cap100(s.loyalUsers / BENCHMARKS.loyalCount * 100),
-    inmarket:     cap100((s.users > 0 ? s.inmarketUsers / s.users : 0) / BENCHMARKS.inmarketShare * 100),
-    engagement:   cap100(s.engagement / BENCHMARKS.engSeconds * 100),
-    ad:           cap100((s.ad * per1k) / BENCHMARKS.adRpm * 100),
+    subscription: cap100(s.sub        / benchmarks.subCount   * 100),
+    newsletter:   cap100(s.newsletter / benchmarks.newsCount  * 100),
+    loyal:        cap100(s.loyalUsers / benchmarks.loyalCount * 100),
+    inmarket:     cap100((s.users > 0 ? s.inmarketUsers / s.users : 0) / benchmarks.inmarketShare * 100),
+    engagement:   cap100(s.engagement / benchmarks.engSeconds * 100),
+    ad:           cap100((s.ad * per1k) / benchmarks.adRpm * 100),
   };
 }
 
@@ -114,13 +146,13 @@ function compositeScore(d, p) {
 }
 
 export function valueToScore(snap, p) {
-  return Math.round(compositeScore(dimensionScores(snap), p) * confidence(snap, p.confK));
+  return Math.round(compositeScore(dimensionScores(snap, p.benchmarks), p) * confidence(snap, p.confK));
 }
 
 // Full breakdown for the detail panel — reconciles exactly with the table score.
 export function getValueBreakdown(snap, settings) {
   const p = getScoreParams(settings);
-  const d = dimensionScores(snap);
+  const d = dimensionScores(snap, p.benchmarks);
   const conf = confidence(snap, p.confK);
   const composite = compositeScore(d, p);
   return {

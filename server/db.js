@@ -256,6 +256,29 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_content_voices_wp ON content_voices(wp_id);
     CREATE INDEX IF NOT EXISTS idx_content_voices_voice ON content_voices(voice);
+
+    -- Rolling 30-day Content Value benchmark recalibration (see
+    -- utils/benchmarkCheck.js) — flags a dimension when too much real content
+    -- is maxing out its benchmark (proposing a higher value) or too little
+    -- ever reaches it (proposing a lower one). One row per FLAGGED dimension
+    -- per check run — a healthy dimension writes nothing, so an empty table
+    -- since the last check means "nothing to review," not "never checked"
+    -- (see sync_state's last_benchmark_check for that). Never auto-applied —
+    -- applied_at/applied_by are set only when an admin clicks Apply.
+    CREATE TABLE IF NOT EXISTS benchmark_checks (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      checked_at        TEXT DEFAULT CURRENT_TIMESTAMP,
+      benchmark_key     TEXT NOT NULL,
+      direction         TEXT NOT NULL,  -- 'too_soft' | 'too_hard'
+      current_value     REAL,
+      recommended_value REAL,
+      capping_pct       REAL,
+      sample_size       INTEGER,
+      dismissed         INTEGER DEFAULT 0,
+      applied_at        TEXT,
+      applied_by        TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_benchmark_checks_checked_at ON benchmark_checks(checked_at);
   `);
 
   // Schema migrations — safe to run on every startup
@@ -307,6 +330,25 @@ function initSchema() {
     INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)
   `);
   for (const [key, value] of Object.entries(weights)) {
+    upsertSetting.run(key, value);
+  }
+
+  // Seed default scoring benchmarks (the count/rate that earns a 100 on each
+  // dimension) if not present — moved from hardcoded constants into settings
+  // so the 30-day recalibration check (utils/benchmarkCheck.js) can propose
+  // new values that take effect without a code deploy. Values here must
+  // match utils/trueValue.js's DEFAULT_BENCHMARKS — that module can't be
+  // imported here (avoids a circular import risk), so keep them in sync by
+  // hand if either changes.
+  const benchmarks = {
+    benchmark_sub_count:     '5',    // subscribe clicks in 30 days
+    benchmark_news_count:    '5',    // newsletter signups in 30 days
+    benchmark_loyal_count:   '1400', // loyal (repeat) readers in 30 days
+    benchmark_inmarket_share:'0.51', // DFW-area users ÷ total users
+    benchmark_eng_seconds:   '800',  // avg engagement seconds
+    benchmark_ad_rpm:        '71',   // (notional) ad revenue per 1,000 readers
+  };
+  for (const [key, value] of Object.entries(benchmarks)) {
     upsertSetting.run(key, value);
   }
 }

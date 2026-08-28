@@ -53,4 +53,8 @@ export const api = {
   getExclusions: () => apiFetch('/settings/exclusions'),
   setExclusions: (urls) => apiFetch('/settings/exclusions', { method: 'POST', body: JSON.stringify({ urls }) }),
   getAuditLog: () => apiFetch('/settings/audit-log'),
+  getBenchmarkChecks: () => apiFetch('/settings/benchmark-checks'),
+  runBenchmarkCheck: () => apiFetch('/settings/benchmark-checks/run', { method: 'POST' }),
+  applyBenchmarkCheck: (id) => apiFetch(`/settings/benchmark-checks/${id}/apply`, { method: 'POST' }),
+  dismissBenchmarkCheck: (id) => apiFetch(`/settings/benchmark-checks/${id}/dismiss`, { method: 'POST' }),
 };

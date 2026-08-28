@@ -1,6 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
 
+// Mirrors server/utils/trueValue.js's BENCHMARK_META labels/units — kept
+// here too since there's no API endpoint that just returns metadata.
+const BENCHMARK_LABELS = {
+  subCount:      { label: 'Subscribe Clicks',   unit: '' },
+  newsCount:     { label: 'Newsletter Signups', unit: '' },
+  loyalCount:    { label: 'Loyal Readers',      unit: '' },
+  inmarketShare: { label: 'In-Market Share',    unit: '%', scale: 100 },
+  engSeconds:    { label: 'Engagement Seconds', unit: 's' },
+  adRpm:         { label: 'Ad Revenue / 1,000', unit: '$' },
+};
+
+function fmtBenchmarkValue(key, value) {
+  if (value == null) return '—';
+  const meta = BENCHMARK_LABELS[key] || {};
+  const n = meta.scale ? value * meta.scale : value;
+  const rounded = Number.isInteger(n) ? n : n.toFixed(meta.scale ? 0 : 2);
+  return meta.unit === '$' ? `$${rounded}` : `${rounded}${meta.unit}`;
+}
+
 const WEIGHT_META = {
   score_w_subscription: { label: "Subscribe Clicks",       min: 0, max: 100, step: 1, desc: "Total subscribe clicks (raw count). 5 clicks = full score. More clicks = higher score." },
   score_w_loyal:        { label: "Loyal Readers",          min: 0, max: 100, step: 1, desc: "Total loyal (repeat, 3+ sessions/30 days) readers (raw count). 1,400 readers = full score — set near the best story we've seen, so a full score means genuinely exceptional. More loyal readers = higher score, regardless of total audience size." },
@@ -26,8 +45,12 @@ export default function Settings() {
   const [savingExclusions, setSavingExclusions] = useState(false);
   const [cleanupConfirmText, setCleanupConfirmText] = useState('');
   const [auditLog, setAuditLog] = useState([]);
+  const [benchmarkChecks, setBenchmarkChecks] = useState({ pending: [], last_checked: null });
+  const [runningCheck, setRunningCheck] = useState(false);
+  const [benchmarkBusyId, setBenchmarkBusyId] = useState(null);
 
   const loadAuditLog = () => api.getAuditLog().then(setAuditLog).catch(console.error);
+  const loadBenchmarkChecks = () => api.getBenchmarkChecks().then(setBenchmarkChecks).catch(console.error);
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch(console.error);
@@ -36,6 +59,7 @@ export default function Settings() {
       .then(rows => setExclusionText(rows.map(r => r.url).join('\n')))
       .catch(console.error);
     loadAuditLog();
+    loadBenchmarkChecks();
   }, []);
 
   const handleChange = (key, val) => {
@@ -67,6 +91,44 @@ export default function Settings() {
     } catch (err) {
       alert('Recalculation error: ' + err.message);
       setRecalculating(false);
+    }
+  };
+
+  const handleRunBenchmarkCheck = async () => {
+    setRunningCheck(true);
+    try {
+      await api.runBenchmarkCheck();
+      await loadBenchmarkChecks();
+    } catch (err) {
+      alert('Benchmark check error: ' + err.message);
+    } finally {
+      setRunningCheck(false);
+    }
+  };
+
+  const handleApplyBenchmark = async (id) => {
+    setBenchmarkBusyId(id);
+    try {
+      const res = await api.applyBenchmarkCheck(id);
+      setSettings(res.settings);
+      await loadBenchmarkChecks();
+      loadAuditLog();
+    } catch (err) {
+      alert('Apply error: ' + err.message);
+    } finally {
+      setBenchmarkBusyId(null);
+    }
+  };
+
+  const handleDismissBenchmark = async (id) => {
+    setBenchmarkBusyId(id);
+    try {
+      await api.dismissBenchmarkCheck(id);
+      await loadBenchmarkChecks();
+    } catch (err) {
+      alert('Dismiss error: ' + err.message);
+    } finally {
+      setBenchmarkBusyId(null);
     }
   };
 
@@ -232,6 +294,102 @@ export default function Settings() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Benchmark Recalibration */}
+      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, gridColumn: '1 / -1' }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 4, color: 'var(--text-primary)' }}>
+          Benchmark Recalibration
+        </h3>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+          Every 30 days, checks whether real content is maxing out a Content Value benchmark far
+          more often than it should (too soft — 100 stops meaning "exceptional"), or almost never
+          reaching one that's fallen well below the real best-ever result (too hard). Never applies
+          a change automatically — review and apply each recommendation below, then hit{' '}
+          <strong>Recalculate All Scores</strong> to bring existing scores up to date.
+        </p>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            Last checked: {benchmarkChecks.last_checked ? benchmarkChecks.last_checked.slice(0, 19).replace('T', ' ') : 'never'}
+          </span>
+          <button
+            onClick={handleRunBenchmarkCheck}
+            disabled={runningCheck}
+            style={{
+              padding: '6px 14px', borderRadius: 4, fontSize: 13,
+              background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
+              opacity: runningCheck ? 0.6 : 1,
+            }}
+          >
+            {runningCheck ? 'Checking…' : 'Run Check Now'}
+          </button>
+        </div>
+
+        {benchmarkChecks.pending.length === 0 ? (
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            Nothing flagged — every benchmark is within a healthy range.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {benchmarkChecks.pending.map(row => {
+              const meta = BENCHMARK_LABELS[row.benchmark_key] || {};
+              const isSoft = row.direction === 'too_soft';
+              const badgeColor = isSoft ? '#c0392b' : '#2474bb';
+              return (
+                <div key={row.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+                  padding: '12px 14px', background: 'var(--bg-elevated)', borderRadius: 6,
+                  border: `1px solid ${badgeColor}30`,
+                }}>
+                  <div style={{ minWidth: 160 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>{meta.label || row.benchmark_key}</div>
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, color: badgeColor, background: badgeColor + '18',
+                      padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.04em',
+                    }}>
+                      {isSoft ? 'Too Soft' : 'Too Hard'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    {isSoft
+                      ? <>Capping <strong style={{ color: 'var(--text-primary)' }}>{row.capping_pct.toFixed(1)}%</strong> of {row.sample_size.toLocaleString()} articles at 100</>
+                      : <>Never reached across {row.sample_size.toLocaleString()} articles</>}
+                  </div>
+                  <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{fmtBenchmarkValue(row.benchmark_key, row.current_value)}</span>
+                    <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>→</span>
+                    <span style={{ color: 'var(--accent-gold)' }}>{fmtBenchmarkValue(row.benchmark_key, row.recommended_value)}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={() => handleApplyBenchmark(row.id)}
+                      disabled={benchmarkBusyId === row.id}
+                      style={{
+                        padding: '5px 12px', borderRadius: 4, fontSize: 12, fontWeight: 500,
+                        background: 'var(--accent-gold)', border: 'none', color: '#0f0f0f',
+                        opacity: benchmarkBusyId === row.id ? 0.6 : 1,
+                      }}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      onClick={() => handleDismissBenchmark(row.id)}
+                      disabled={benchmarkBusyId === row.id}
+                      style={{
+                        padding: '5px 12px', borderRadius: 4, fontSize: 12,
+                        background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)',
+                        opacity: benchmarkBusyId === row.id ? 0.6 : 1,
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Scoring Exclusions */}

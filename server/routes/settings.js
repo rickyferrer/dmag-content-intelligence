@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getSettings, updateSettings, getDb, logAudit, getAuditLog } from '../db.js';
-import { scoreContent, pruneSnapshots } from '../sync/scheduler.js';
+import { scoreContent, pruneSnapshots, runBenchmarkCheckIfDue } from '../sync/scheduler.js';
+import { BENCHMARK_META } from '../utils/trueValue.js';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.put('/', (req, res) => {
     'score_w_engagement',
     'score_w_ad_revenue',
     'score_confidence_k',
+    ...Object.values(BENCHMARK_META).map(m => m.settingKey),
   ];
 
   const updates = {};
@@ -61,6 +63,71 @@ router.post('/recalculate', (req, res) => {
       console.error('[Settings] Recalculation error:', err.message);
     }
   });
+});
+
+// GET /api/settings/benchmark-checks
+// Pending (not dismissed, not applied) Content Value benchmark recommendations
+// from the last 30-day recalibration check — see utils/benchmarkCheck.js.
+// Also reports when the check itself last ran (sync_state), independent of
+// whether it found anything to flag.
+router.get('/benchmark-checks', (req, res) => {
+  const db = getDb();
+  const pending = db.prepare(`
+    SELECT * FROM benchmark_checks
+    WHERE dismissed = 0 AND applied_at IS NULL
+    ORDER BY checked_at DESC
+  `).all();
+  const lastChecked = db.prepare("SELECT value FROM sync_state WHERE key = 'last_benchmark_check'").get();
+  res.json({ pending, last_checked: lastChecked?.value || null });
+});
+
+// POST /api/settings/benchmark-checks/run — manual trigger, bypasses the
+// 30-day gate (same "run it now instead of waiting" role as Recalculate All
+// Scores has for scoreContent()).
+router.post('/benchmark-checks/run', (req, res) => {
+  logAudit(actorOf(req), 'run_benchmark_check', {});
+  try {
+    const flagged = runBenchmarkCheckIfDue(true);
+    res.json({ flagged });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/settings/benchmark-checks/:id/apply — writes the recommended
+// value into the live setting and marks this recommendation applied. Does
+// NOT re-run Recalculate All Scores automatically — same reasoning as every
+// other settings change here, the admin should see the settings update
+// succeed before kicking off a full rescore.
+router.post('/benchmark-checks/:id/apply', (req, res) => {
+  const db = getDb();
+  const id = parseInt(req.params.id);
+  const row = db.prepare('SELECT * FROM benchmark_checks WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  if (row.applied_at) return res.status(400).json({ error: 'Already applied' });
+
+  const meta = BENCHMARK_META[row.benchmark_key];
+  if (!meta) return res.status(400).json({ error: `Unknown benchmark_key: ${row.benchmark_key}` });
+
+  updateSettings({ [meta.settingKey]: row.recommended_value });
+  db.prepare('UPDATE benchmark_checks SET applied_at = datetime(\'now\'), applied_by = ? WHERE id = ?')
+    .run(actorOf(req), id);
+  logAudit(actorOf(req), 'apply_benchmark_recommendation', {
+    benchmark_key: row.benchmark_key, from: row.current_value, to: row.recommended_value,
+  });
+  res.json({ success: true, settings: getSettings() });
+});
+
+// POST /api/settings/benchmark-checks/:id/dismiss — reviewed, deliberately
+// not applying it (e.g. the change looked like a one-off spike, not a real
+// shift). Distinct from apply: nothing about the live settings changes.
+router.post('/benchmark-checks/:id/dismiss', (req, res) => {
+  const db = getDb();
+  const id = parseInt(req.params.id);
+  const result = db.prepare('UPDATE benchmark_checks SET dismissed = 1 WHERE id = ? AND applied_at IS NULL').run(id);
+  if (result.changes === 0) return res.status(404).json({ error: 'Not found or already applied' });
+  logAudit(actorOf(req), 'dismiss_benchmark_recommendation', { id });
+  res.json({ success: true });
 });
 
 // GET /api/settings/exclusions — list all excluded content items
