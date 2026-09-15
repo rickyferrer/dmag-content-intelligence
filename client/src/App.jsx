@@ -6,6 +6,7 @@ import UserNeedsAnalysis from './views/UserNeedsAnalysis.jsx';
 import Sections from './views/Sections.jsx';
 import Sources from './views/Sources.jsx';
 import Publications from './views/Publications.jsx';
+import PublicationDetail from './views/PublicationDetail.jsx';
 import Writers from './views/Writers.jsx';
 import Vulnerability from './views/Vulnerability.jsx';
 import Insights from './views/Insights.jsx';
@@ -29,6 +30,7 @@ const NAV = [
 export default function App() {
   const [view, setView] = useState('overview');
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedIssue, setSelectedIssue] = useState(null);
 
   const handleSelect = (id) => {
     setSelectedId(id);
@@ -68,7 +70,7 @@ export default function App() {
           {NAV.map(item => (
             <button
               key={item.id}
-              onClick={() => { setView(item.id); setSelectedId(null); }}
+              onClick={() => { setView(item.id); setSelectedId(null); setSelectedIssue(null); }}
               style={{
                 padding: '5px 14px',
                 border: 'none',
@@ -96,7 +98,7 @@ export default function App() {
         padding: '24px 28px',
         width: '100%',
         minWidth: 0,
-        marginRight: selectedId ? 480 : 0,
+        marginRight: (selectedId || selectedIssue) ? 480 : 0,
         transition: 'margin-right 0.2s ease',
         boxSizing: 'border-box',
       }}>
@@ -115,7 +117,7 @@ export default function App() {
         {view === 'content'   && <ContentTable onSelect={handleSelect} />}
         {view === 'sections'  && <Sections />}
         {view === 'sources'       && <Sources />}
-        {view === 'publications'  && <Publications />}
+        {view === 'publications'  && <Publications onSelect={setSelectedIssue} />}
         {view === 'writers'        && <Writers />}
         {view === 'needs'          && <UserNeedsAnalysis />}
         {view === 'vulnerability'  && <Vulnerability />}
@@ -128,6 +130,14 @@ export default function App() {
         <ContentDetail
           wpId={selectedId}
           onClose={() => setSelectedId(null)}
+        />
+      )}
+
+      {/* Detail panel (publications view) */}
+      {view === 'publications' && selectedIssue && (
+        <PublicationDetail
+          issue={selectedIssue}
+          onClose={() => setSelectedIssue(null)}
         />
       )}
     </div>

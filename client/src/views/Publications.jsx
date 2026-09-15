@@ -27,7 +27,7 @@ function capitalize(s) {
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-export default function Publications() {
+export default function Publications({ onSelect }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pubFilter, setPubFilter] = useState('');
@@ -145,7 +145,8 @@ export default function Publications() {
                 const pubName = PUB_DISPLAY[row.publication] || row.publication;
                 return (
                   <tr key={`${row.publication}|${row.year}|${row.month}`}
-                    style={{ borderBottom: '1px solid var(--border-subtle)' }}
+                    onClick={() => onSelect?.(row)}
+                    style={{ borderBottom: '1px solid var(--border-subtle)', cursor: onSelect ? 'pointer' : 'default' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                     onMouseLeave={e => e.currentTarget.style.background = ''}
                   >
@@ -203,6 +204,7 @@ export default function Publications() {
                       {row.top_article ? (
                         <div>
                           <a href={row.top_article.url} target="_blank" rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
                             style={{ fontSize: 13, color: pubColor, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {row.top_article.title}
                           </a>
