@@ -127,7 +127,7 @@ export default function Overview() {
       )}
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gap: 16 }}>
         <KPICard label="Total Content Items" value={fmt(summary?.total_content)} />
         <KPICard label="Avg Content Value" value={summary?.avg_true_value != null ? Math.round(summary.avg_true_value).toString() : '—'} gold change={summary?.changes?.avg_true_value} />
         <KPICard label="Total Users" value={fmt(summary?.total_users)} change={summary?.changes?.total_users} />
