@@ -1,11 +1,7 @@
 // One-off backfill: populate content.writer for existing rows from acf.writers.
 // Safe to re-run. Usage: node server/scripts/backfill-writers.mjs
-import Database from 'better-sqlite3';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { getDb } from '../db.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '..', '..', 'content.db');
 const WP_BASE = 'https://www.dmagazine.com/wp-json/wp/v2';
 const UA = 'SEO DMAG Crawl';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -17,7 +13,7 @@ function decode(s) {
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)));
 }
 
-const db = new Database(DB_PATH);
+const db = getDb();
 const rows = db.prepare("SELECT wp_id, content_type FROM content WHERE writer IS NULL OR writer=''").all();
 console.log(`Backfilling writers for ${rows.length} content items...`);
 
