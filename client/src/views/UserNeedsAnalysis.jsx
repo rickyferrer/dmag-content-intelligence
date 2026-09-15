@@ -3,6 +3,8 @@ import { api } from '../api/index.js';
 import { NEED_META, NeedInfoIcon } from '../components/NeedBadge.jsx';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 
+const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
+
 const ALL_NEEDS = [
   'update_me', 'educate_me', 'give_perspective', 'divert_me',
   'inspire_me', 'help_me', 'connect_me', 'keep_me_engaged',
@@ -18,7 +20,7 @@ function fmt(n) {
 export default function UserNeedsAnalysis() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ from: '', to: '', preset: 'all' });
+  const [filters, setFilters] = useState({ from: initFrom, to: initTo, preset: DEFAULT_PRESET });
 
   const load = ({ from, to }) => {
     setLoading(true);
@@ -31,7 +33,7 @@ export default function UserNeedsAnalysis() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load({ from: '', to: '' }); }, []);
+  useEffect(() => { load({ from: initFrom, to: initTo }); }, []);
 
   const dataMap = Object.fromEntries(data.map(d => [d.user_need, d]));
 
