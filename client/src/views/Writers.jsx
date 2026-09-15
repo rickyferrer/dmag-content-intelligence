@@ -29,7 +29,7 @@ const COLS = [
 
 const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
 
-export default function Writers() {
+export default function Writers({ onSelect }) {
   const { showComparisons } = useComparisons();
   const [data, setData] = useState([]);
   const [previousPeriod, setPreviousPeriod] = useState(null);
@@ -144,7 +144,8 @@ export default function Writers() {
             <tbody>
               {sorted.map((row, i) => (
                 <tr key={row.writer}
-                  style={{ borderBottom: '1px solid var(--border-subtle)' }}
+                  onClick={() => onSelect?.({ writer: row, dateFrom: filters.from, dateTo: filters.to })}
+                  style={{ borderBottom: '1px solid var(--border-subtle)', cursor: onSelect ? 'pointer' : 'default' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                   onMouseLeave={e => e.currentTarget.style.background = ''}
                 >
@@ -221,6 +222,7 @@ export default function Writers() {
                     {row.top_article ? (
                       <div>
                         <a href={row.top_article.url} target="_blank" rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
                           style={{ fontSize: 13, color: 'var(--accent-gold)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {row.top_article.title}
                         </a>

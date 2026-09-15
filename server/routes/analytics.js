@@ -306,7 +306,7 @@ router.get('/summary', async (req, res) => {
 // GET /api/analytics/by-need
 router.get('/by-need', (req, res) => {
   const db = getDb();
-  const { dateFrom, dateTo, section, type } = req.query;
+  const { dateFrom, dateTo, section, type, writer } = req.query;
 
   const dateWhere = ['c.user_need IS NOT NULL'];
   const dateParams = [];
@@ -314,6 +314,7 @@ router.get('/by-need', (req, res) => {
   if (dateTo)    { dateWhere.push('c.published_at <= ?'); dateParams.push(dateTo + 'T23:59:59'); }
   if (section)   { dateWhere.push('c.section = ?'); dateParams.push(section); }
   if (type)      { dateWhere.push('c.content_type = ?'); dateParams.push(type); }
+  if (writer)    { dateWhere.push('c.writer = ?'); dateParams.push(writer); }
   const where = 'WHERE ' + dateWhere.join(' AND ');
 
   const rows = db.prepare(`

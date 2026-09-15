@@ -8,6 +8,7 @@ import Sources from './views/Sources.jsx';
 import Publications from './views/Publications.jsx';
 import PublicationDetail from './views/PublicationDetail.jsx';
 import Writers from './views/Writers.jsx';
+import WriterDetail from './views/WriterDetail.jsx';
 import Vulnerability from './views/Vulnerability.jsx';
 import Insights from './views/Insights.jsx';
 import Settings from './views/Settings.jsx';
@@ -40,6 +41,7 @@ export default function App() {
   const [view, setView] = useState('overview');
   const [selectedId, setSelectedId] = useState(null);
   const [selectedIssue, setSelectedIssue] = useState(null);
+  const [selectedWriter, setSelectedWriter] = useState(null);
   const [staleSyncs, setStaleSyncs] = useState([]);
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
@@ -100,7 +102,7 @@ export default function App() {
           {NAV.map(item => (
             <button
               key={item.id}
-              onClick={() => { setView(item.id); setSelectedId(null); setSelectedIssue(null); }}
+              onClick={() => { setView(item.id); setSelectedId(null); setSelectedIssue(null); setSelectedWriter(null); }}
               style={{
                 padding: '5px 14px',
                 border: 'none',
@@ -163,7 +165,7 @@ export default function App() {
         padding: '24px 28px',
         width: '100%',
         minWidth: 0,
-        marginRight: (selectedId || selectedIssue) ? 480 : 0,
+        marginRight: (selectedId || selectedIssue || selectedWriter) ? 480 : 0,
         transition: 'margin-right 0.2s ease',
         boxSizing: 'border-box',
       }}>
@@ -183,7 +185,7 @@ export default function App() {
         {view === 'sections'  && <Sections />}
         {view === 'sources'       && <Sources />}
         {view === 'publications'  && <Publications onSelect={setSelectedIssue} />}
-        {view === 'writers'        && <Writers />}
+        {view === 'writers'        && <Writers onSelect={setSelectedWriter} />}
         {view === 'needs'          && <UserNeedsAnalysis />}
         {view === 'vulnerability'  && <Vulnerability />}
         {view === 'insights'       && <Insights />}
@@ -203,6 +205,16 @@ export default function App() {
         <PublicationDetail
           issue={selectedIssue}
           onClose={() => setSelectedIssue(null)}
+        />
+      )}
+
+      {/* Detail panel (writers view) */}
+      {view === 'writers' && selectedWriter && (
+        <WriterDetail
+          writer={selectedWriter.writer}
+          dateFrom={selectedWriter.dateFrom}
+          dateTo={selectedWriter.dateTo}
+          onClose={() => setSelectedWriter(null)}
         />
       )}
     </div>
