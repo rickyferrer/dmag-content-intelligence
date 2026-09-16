@@ -169,11 +169,11 @@ export default function Overview() {
           <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 16, color: 'var(--text-primary)' }}>
             Content by User Need
           </h3>
-          <ResponsiveContainer width="100%" height={240}>
+          <ResponsiveContainer width="100%" height={320}>
             <BarChart data={barData} layout="vertical" margin={{ left: 10, right: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
               <XAxis type="number" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} stroke="var(--border)" />
-              <YAxis dataKey="name" type="category" width={90} tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} stroke="var(--border)" />
+              <YAxis dataKey="name" type="category" width={90} interval={0} tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} stroke="var(--border)" />
               <Tooltip content={<NeedTooltip />} />
               <Bar dataKey="total_true_value" radius={[0, 3, 3, 0]} isAnimationActive={false}>
                 {barData.map((d, i) => (
