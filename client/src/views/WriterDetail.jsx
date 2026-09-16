@@ -147,7 +147,7 @@ export default function WriterDetail({ writer, dateFrom, dateTo, onClose }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <NeedBadge need={a.user_need} />
                     <span style={{ fontSize: 12, color: 'var(--accent-gold)', fontFamily: 'var(--font-mono)' }}>
-                      CV {a.lifetime_value != null ? Math.round(a.lifetime_value) : '—'}
+                      LTV {a.lifetime_value != null ? Math.round(a.lifetime_value) : '—'}
                     </span>
                   </div>
                 </a>

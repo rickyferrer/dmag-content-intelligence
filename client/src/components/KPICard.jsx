@@ -27,12 +27,12 @@ export default function KPICard({ label, value, sub, gold = false, change }) {
       background: 'var(--bg-surface)',
       border: '1px solid var(--border)',
       borderRadius: 8,
-      padding: '20px 24px',
+      padding: '12px 8px',
       display: 'flex',
       flexDirection: 'column',
       gap: 4,
     }}>
-      <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+      <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={label}>
         {label}
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
