@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, LineChart, Line,
+  ResponsiveContainer,
 } from 'recharts';
 import { api } from '../api/index.js';
 import KPICard from '../components/KPICard.jsx';
@@ -37,7 +37,6 @@ export default function Overview() {
   const [summary, setSummary] = useState(null);
   const [byNeed, setByNeed] = useState([]);
   const [scatter, setScatter] = useState([]);
-  const [trend, setTrend] = useState([]);
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
   const [sections, setSections] = useState([]);
@@ -54,12 +53,10 @@ export default function Overview() {
       api.getSummary(params),
       api.getByNeed(params),
       api.getScatter(params),
-      api.getTrend(30),
-    ]).then(([s, bn, sc, tr]) => {
+    ]).then(([s, bn, sc]) => {
       setSummary(s);
       setByNeed(bn);
       setScatter(sc);
-      setTrend(tr);
     }).catch(console.error).finally(() => setLoading(false));
   };
 
@@ -187,29 +184,6 @@ export default function Overview() {
           <ScatterPlot data={scatter} />
         </div>
       </div>
-
-      {/* Trend Line */}
-      {trend.length > 0 && (
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
-          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 16, color: 'var(--text-primary)' }}>
-            Content Value Trend (30 days)
-          </h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={trend} margin={{ left: 0, right: 20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="date" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} stroke="var(--border)" />
-              <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} stroke="var(--border)" />
-              <Tooltip
-                contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
-                labelStyle={{ color: 'var(--text-secondary)' }}
-                itemStyle={{ color: 'var(--accent-gold)' }}
-              />
-              <Line type="monotone" dataKey="avg_true_value" stroke="var(--accent-gold)"
-                strokeWidth={2} dot={false} name="Avg Content Value" isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
     </div>
   );
 }
