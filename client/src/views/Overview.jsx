@@ -40,15 +40,16 @@ export default function Overview() {
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
   const [sections, setSections] = useState([]);
-  const [filters, setFilters] = useState({ from: initFrom, to: initTo, section: '', type: '', preset: DEFAULT_PRESET });
+  const [filters, setFilters] = useState({ from: initFrom, to: initTo, section: '', type: '', userNeed: '', preset: DEFAULT_PRESET });
 
-  const load = ({ from, to, section, type }) => {
+  const load = ({ from, to, section, type, userNeed }) => {
     setLoading(true);
     const params = {};
     if (from) params.dateFrom = from;
     if (to) params.dateTo = to;
     if (section) params.section = section;
     if (type) params.type = type;
+    if (userNeed) params.userNeed = userNeed;
     Promise.all([
       api.getSummary(params),
       api.getByNeed(params),
@@ -61,7 +62,7 @@ export default function Overview() {
   };
 
   useEffect(() => {
-    load({ from: initFrom, to: initTo, section: '', type: '' });
+    load({ from: initFrom, to: initTo, section: '', type: '', userNeed: '' });
     api.getContentTypes().then(setTypes).catch(console.error);
     api.getTaxonomies().then(t => setSections(t.sections || [])).catch(console.error);
   }, []);
@@ -105,6 +106,13 @@ export default function Overview() {
           <option value="">All Types</option>
           {types.map(t => (
             <option key={t.content_type} value={t.content_type}>{t.content_type} ({t.count})</option>
+          ))}
+        </select>
+
+        <select value={filters.userNeed} onChange={e => setFilter('userNeed', e.target.value)}>
+          <option value="">All User Needs</option>
+          {Object.entries(NEED_META).map(([key, meta]) => (
+            <option key={key} value={key}>{meta.label}</option>
           ))}
         </select>
 

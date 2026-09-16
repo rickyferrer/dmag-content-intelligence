@@ -17,13 +17,14 @@ const router = Router();
 // rolling trailing-30-day window as of sync time (see sync/ga4.js), so
 // comparing "today's snapshot" to "the snapshot from ~30 days ago" for the
 // SAME set of articles gives a real trend.
-function computeContentSummary(db, dateFrom, dateTo, section, type, asOf = null) {
+function computeContentSummary(db, dateFrom, dateTo, section, type, userNeed, asOf = null) {
   const dateWhere = [];
   const dateParams = [];
   if (dateFrom)  { dateWhere.push('c.published_at >= ?'); dateParams.push(dateFrom); }
   if (dateTo)    { dateWhere.push('c.published_at <= ?'); dateParams.push(dateTo + 'T23:59:59'); }
   if (section)   { dateWhere.push('c.section = ?'); dateParams.push(section); }
   if (type)      { dateWhere.push('c.content_type = ?'); dateParams.push(type); }
+  if (userNeed)  { dateWhere.push('c.user_need = ?'); dateParams.push(userNeed); }
   const dateFilter = dateWhere.length ? 'WHERE ' + dateWhere.join(' AND ') : '';
 
   const total = db.prepare(`SELECT COUNT(*) as count FROM content c ${dateFilter}`).get(...dateParams);
@@ -208,10 +209,10 @@ function attachChanges(rows, groupKey, prevRows) {
 router.get('/summary', async (req, res) => {
   try {
     const db = getDb();
-    const { dateFrom, dateTo, section, type } = req.query;
+    const { dateFrom, dateTo, section, type, userNeed } = req.query;
 
-    const contentCurrent = computeContentSummary(db, dateFrom, dateTo, section, type);
-    const useSiteWide = !section && !type;
+    const contentCurrent = computeContentSummary(db, dateFrom, dateTo, section, type, userNeed);
+    const useSiteWide = !section && !type && !userNeed;
     const trafficCurrent = useSiteWide ? await computeTrafficSummary(db, dateFrom, dateTo) : null;
 
     const current = {
@@ -252,7 +253,7 @@ router.get('/summary', async (req, res) => {
       // Content-side previous period (avg_true_value, newsletter signups):
       // same cohort of articles, snapshot from ~N days ago.
       const asOf = new Date(Date.now() - durationDays * 24 * 60 * 60 * 1000).toISOString();
-      const contentPrevious = computeContentSummary(db, dateFrom, dateTo, section, type, asOf);
+      const contentPrevious = computeContentSummary(db, dateFrom, dateTo, section, type, userNeed, asOf);
       const contentCoverage = contentCurrent.total_content > 0
         ? contentPrevious.matched_count / contentCurrent.total_content
         : 0;
@@ -306,7 +307,7 @@ router.get('/summary', async (req, res) => {
 // GET /api/analytics/by-need
 router.get('/by-need', (req, res) => {
   const db = getDb();
-  const { dateFrom, dateTo, section, type, writer } = req.query;
+  const { dateFrom, dateTo, section, type, writer, userNeed } = req.query;
 
   const dateWhere = ['c.user_need IS NOT NULL'];
   const dateParams = [];
@@ -315,6 +316,7 @@ router.get('/by-need', (req, res) => {
   if (section)   { dateWhere.push('c.section = ?'); dateParams.push(section); }
   if (type)      { dateWhere.push('c.content_type = ?'); dateParams.push(type); }
   if (writer)    { dateWhere.push('c.writer = ?'); dateParams.push(writer); }
+  if (userNeed)  { dateWhere.push('c.user_need = ?'); dateParams.push(userNeed); }
   const where = 'WHERE ' + dateWhere.join(' AND ');
 
   const rows = db.prepare(`
@@ -379,7 +381,7 @@ router.get('/by-need', (req, res) => {
 // GET /api/analytics/scatter
 router.get('/scatter', (req, res) => {
   const db = getDb();
-  const { dateFrom, dateTo, section, type } = req.query;
+  const { dateFrom, dateTo, section, type, userNeed } = req.query;
 
   const where = ['c.user_need IS NOT NULL'];
   const params = [];
@@ -387,6 +389,7 @@ router.get('/scatter', (req, res) => {
   if (dateTo)   { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
   if (section)  { where.push('c.section = ?');       params.push(section); }
   if (type)     { where.push('c.content_type = ?');  params.push(type); }
+  if (userNeed) { where.push('c.user_need = ?');     params.push(userNeed); }
 
   const rows = db.prepare(`
     SELECT
