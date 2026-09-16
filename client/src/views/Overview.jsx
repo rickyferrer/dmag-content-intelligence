@@ -50,9 +50,14 @@ export default function Overview() {
     if (section) params.section = section;
     if (type) params.type = type;
     if (userNeed) params.userNeed = userNeed;
+    // Content by User Need always shows the full breakdown across all
+    // needs — the userNeed filter would otherwise collapse it to a single
+    // bar, which defeats the point of a by-need comparison chart.
+    const byNeedParams = { ...params };
+    delete byNeedParams.userNeed;
     Promise.all([
       api.getSummary(params),
-      api.getByNeed(params),
+      api.getByNeed(byNeedParams),
       api.getScatter(params),
     ]).then(([s, bn, sc]) => {
       setSummary(s);
