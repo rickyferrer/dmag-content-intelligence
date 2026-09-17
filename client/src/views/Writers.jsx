@@ -82,7 +82,7 @@ export default function Writers({ onSelect }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Published:</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Published:</span>
         <DatePresets
           value={filters.preset}
           from={filters.from}
@@ -100,14 +100,14 @@ export default function Writers({ onSelect }) {
           ))}
         </select>
         {!loading && (
-          <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--text-muted)' }}>
+          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
             Top {data.length} writers
           </span>
         )}
       </div>
 
       {showComparisons && previousPeriod && (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -12 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -12 }}>
           <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges below compare
           to the previous period: <strong style={{ color: 'var(--text-secondary)' }}>{previousPeriod.from}</strong> to{' '}
           <strong style={{ color: 'var(--text-secondary)' }}>{previousPeriod.to}</strong>
@@ -130,7 +130,7 @@ export default function Writers({ onSelect }) {
                       onClick={sortable ? () => toggleSort(col.key) : undefined}
                       title={col.info}
                       style={{
-                        padding: '10px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600,
+                        padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600,
                         color: active ? 'var(--accent-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
                         whiteSpace: 'nowrap', cursor: sortable ? 'pointer' : 'default', userSelect: 'none',
                       }}
@@ -149,13 +149,13 @@ export default function Writers({ onSelect }) {
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                   onMouseLeave={e => e.currentTarget.style.background = ''}
                 >
-                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-muted)' }}>
+                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
                     {i + 1}
                   </td>
                   <td style={{ padding: '10px 12px', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                     {row.writer}
                   </td>
-                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                       {row.article_count}
                       <ChangeBadge change={row.changes?.article_count} />
@@ -170,49 +170,49 @@ export default function Writers({ onSelect }) {
                           background: 'var(--accent-gold)', opacity: 0.8,
                         }} />
                       </div>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)', minWidth: 42, textAlign: 'right' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-gold)', minWidth: 42, textAlign: 'right' }}>
                         {row.total_true_value != null ? Math.round(row.total_true_value) : '—'}
                       </span>
                       <ChangeBadge change={row.changes?.total_true_value} />
                     </div>
                   </td>
-                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                       {row.avg_true_value != null ? row.avg_true_value.toFixed(1) : '—'}
                       <ChangeBadge change={row.changes?.avg_true_value} />
                     </div>
                   </td>
-                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                       {fmt(row.total_users)}
                       <ChangeBadge change={row.changes?.total_users} />
                     </div>
                   </td>
-                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                       {fmt(row.total_loyal_users)}
                       <ChangeBadge change={row.changes?.total_loyal_users} />
                     </div>
                   </td>
-                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                       {fmt(row.total_pageviews)}
                       <ChangeBadge change={row.changes?.total_pageviews} />
                     </div>
                   </td>
-                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                       {fmt(row.total_subscribe_clicks)}
                       <ChangeBadge change={row.changes?.total_subscribe_clicks} />
                     </div>
                   </td>
-                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
+                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                       {fmt(row.total_newsletter_signups)}
                       <ChangeBadge change={row.changes?.total_newsletter_signups} />
                     </div>
                   </td>
-                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                       {row.avg_engagement_time != null ? row.avg_engagement_time.toFixed(0) + 's' : '—'}
                       <ChangeBadge change={row.changes?.avg_engagement_time} />
@@ -223,10 +223,10 @@ export default function Writers({ onSelect }) {
                       <div>
                         <a href={row.top_article.url} target="_blank" rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}
-                          style={{ fontSize: 13, color: 'var(--accent-gold)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          style={{ fontSize: 12, color: 'var(--accent-gold)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {row.top_article.title}
                         </a>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                           TV {row.top_article.true_value?.toFixed(1)}
                         </span>
                       </div>

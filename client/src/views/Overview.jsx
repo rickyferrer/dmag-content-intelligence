@@ -22,7 +22,7 @@ const NeedTooltip = ({ active, payload }) => {
   const d = payload[0]?.payload;
   const meta = NEED_META[d?.user_need] || { label: d?.user_need };
   return (
-    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 13 }}>
+    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
       <div style={{ color: meta.color, fontWeight: 600 }}>{meta.label}</div>
       <div style={{ color: 'var(--text-secondary)' }}>Total Content Value: <b style={{ color: 'var(--accent-gold)' }}>{Math.round(d.total_true_value)}</b></div>
       <div style={{ color: 'var(--text-secondary)' }}>Articles: <b style={{ color: 'var(--text-primary)' }}>{d.article_count}</b></div>
@@ -88,7 +88,7 @@ export default function Overview() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Published:</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Published:</span>
         <DatePresets
           value={filters.preset}
           from={filters.from}
@@ -121,7 +121,7 @@ export default function Overview() {
           ))}
         </select>
 
-        {loading && <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</span>}
+        {loading && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</span>}
       </div>
 
       {/* Comparison caption — the % badges below are relative to this window,
@@ -129,7 +129,7 @@ export default function Overview() {
           filter actually resolves to a concrete range ("All time" has no
           meaningful "previous period" to compare against). */}
       {showComparisons && summary?.previous_period && (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -12 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -12 }}>
           <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges below compare
           to the previous period: <strong style={{ color: 'var(--text-secondary)' }}>{summary.previous_period.from}</strong> to{' '}
           <strong style={{ color: 'var(--text-secondary)' }}>{summary.previous_period.to}</strong>
@@ -166,14 +166,14 @@ export default function Overview() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
         {/* Content by User Need */}
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
-          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 16, color: 'var(--text-primary)' }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, marginBottom: 16, color: 'var(--text-primary)' }}>
             Content by User Need
           </h3>
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={barData} layout="vertical" margin={{ left: 10, right: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-              <XAxis type="number" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} stroke="var(--border)" />
-              <YAxis dataKey="name" type="category" width={90} interval={0} tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} stroke="var(--border)" />
+              <XAxis type="number" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} stroke="var(--border)" />
+              <YAxis dataKey="name" type="category" width={90} interval={0} tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} stroke="var(--border)" />
               <Tooltip content={<NeedTooltip />} />
               <Bar dataKey="total_true_value" radius={[0, 3, 3, 0]} isAnimationActive={false}>
                 {barData.map((d, i) => (
@@ -188,10 +188,10 @@ export default function Overview() {
 
         {/* Scatter Plot */}
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
-          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, marginBottom: 4, color: 'var(--text-primary)' }}>
             Output vs. Content Value
           </h3>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>
             X = articles published · Y = avg Content Value · bubble size = total pageviews
           </p>
           <ScatterPlot data={scatter} />

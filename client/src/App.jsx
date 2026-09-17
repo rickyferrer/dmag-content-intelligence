@@ -90,7 +90,7 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img src="/logo/d-logo.png" alt="D Magazine" style={{ height: 32, width: 32, borderRadius: 4 }} />
           <span style={{
-            fontSize: 12,
+            fontSize: 11,
             color: 'var(--accent-gold)',
             fontWeight: 500,
             letterSpacing: '0.1em',
@@ -109,7 +109,7 @@ export default function App() {
                 padding: '5px 14px',
                 border: 'none',
                 borderRadius: 4,
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: view === item.id ? 500 : 400,
                 background: view === item.id ? 'var(--bg-elevated)' : 'transparent',
                 color: view === item.id ? 'var(--text-primary)' : 'var(--text-muted)',
@@ -132,7 +132,7 @@ export default function App() {
           background: '#4a2a0a',
           borderBottom: '1px solid #8a5a1a',
           color: '#ffd699',
-          fontSize: 13,
+          fontSize: 12,
           padding: '8px 24px',
           display: 'flex',
           alignItems: 'center',
@@ -146,14 +146,14 @@ export default function App() {
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexShrink: 0 }}>
             <button
               onClick={() => { setView('settings'); setSelectedId(null); }}
-              style={{ background: 'transparent', border: '1px solid #8a5a1a', color: '#ffd699', borderRadius: 4, padding: '3px 10px', fontSize: 12 }}
+              style={{ background: 'transparent', border: '1px solid #8a5a1a', color: '#ffd699', borderRadius: 4, padding: '3px 10px', fontSize: 11 }}
             >
               View Sync Status
             </button>
             <button
               onClick={() => setBannerDismissed(true)}
               aria-label="Dismiss"
-              style={{ background: 'transparent', border: 'none', color: '#ffd699', fontSize: 16, lineHeight: 1, padding: 0 }}
+              style={{ background: 'transparent', border: 'none', color: '#ffd699', fontSize: 14, lineHeight: 1, padding: 0 }}
             >
               ×
             </button>
@@ -174,7 +174,7 @@ export default function App() {
         <div style={{ marginBottom: 20 }}>
           <h1 style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 26,
+            fontSize: 23,
             color: 'var(--text-primary)',
             fontWeight: 400,
           }}>

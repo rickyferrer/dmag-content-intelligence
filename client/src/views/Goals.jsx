@@ -120,14 +120,14 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
       overflowY: 'auto', zIndex: 100, display: 'flex', flexDirection: 'column',
     }}>
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-primary)' }}>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-primary)' }}>
           {isEdit ? 'Edit Goal' : 'New Goal'}
         </h2>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1, padding: 4, cursor: 'pointer' }}>×</button>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 20, lineHeight: 1, padding: 4, cursor: 'pointer' }}>×</button>
       </div>
 
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
           Goal name
           <input
             type="text" value={form.name} onChange={e => set('name', e.target.value)}
@@ -136,7 +136,7 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
           />
         </label>
 
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
           Metric
           <select value={form.metric} onChange={e => set('metric', e.target.value)} style={{ padding: '7px 9px' }}>
             {catalog.metrics.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
@@ -144,7 +144,7 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
         </label>
 
         <div style={{ display: 'flex', gap: 10 }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--text-secondary)', flex: 1 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>
             Scope
             <select
               value={form.scope_type}
@@ -155,7 +155,7 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
             </select>
           </label>
           {needsScopeValue && (
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--text-secondary)', flex: 1.4 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: 'var(--text-secondary)', flex: 1.4 }}>
               {scopeMeta.label}
               <select value={form.scope_value} onChange={e => set('scope_value', e.target.value)} style={{ padding: '7px 9px' }}>
                 <option value="">Select…</option>
@@ -165,7 +165,7 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
           )}
         </div>
 
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
           Target
           <input
             type="number" min="0" step="any" value={form.target}
@@ -176,20 +176,20 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
         </label>
 
         <div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>Time period</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Time period</div>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-            <button type="button" onClick={() => applyPreset('month')} style={{ fontSize: 12, padding: '4px 9px' }}>This Month</button>
-            <button type="button" onClick={() => applyPreset('quarter')} style={{ fontSize: 12, padding: '4px 9px' }}>This Quarter</button>
-            <button type="button" onClick={() => applyPreset('year')} style={{ fontSize: 12, padding: '4px 9px' }}>This Year</button>
+            <button type="button" onClick={() => applyPreset('month')} style={{ fontSize: 11, padding: '4px 9px' }}>This Month</button>
+            <button type="button" onClick={() => applyPreset('quarter')} style={{ fontSize: 11, padding: '4px 9px' }}>This Quarter</button>
+            <button type="button" onClick={() => applyPreset('year')} style={{ fontSize: 11, padding: '4px 9px' }}>This Year</button>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="date" value={form.start_date} max={form.end_date} onChange={e => set('start_date', e.target.value)} />
-            <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>to</span>
+            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>to</span>
             <input type="date" value={form.end_date} min={form.start_date} onChange={e => set('end_date', e.target.value)} />
           </div>
         </div>
 
-        {error && <div style={{ color: '#e05c5c', fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: '#e05c5c', fontSize: 12 }}>{error}</div>}
       </div>
 
       <div style={{ padding: 20, borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'space-between' }}>
@@ -225,16 +225,16 @@ function GoalCard({ goal, catalog, onClick }) {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.3 }}>{goal.name}</div>
+        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.3 }}>{goal.name}</div>
         <span style={{
-          fontSize: 11, fontWeight: 600, color: status.color, background: status.color + '18',
+          fontSize: 10, fontWeight: 600, color: status.color, background: status.color + '18',
           padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap', flexShrink: 0,
         }}>
           {status.label}
         </span>
       </div>
 
-      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
         {metric.label} · {scope.label}{goal.scope_value ? ` (${goal.scope_value})` : ''}
       </div>
 
@@ -242,7 +242,7 @@ function GoalCard({ goal, catalog, onClick }) {
         <div style={{ height: 6, background: 'var(--bg-elevated)', borderRadius: 3, overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${pct}%`, background: status.color, transition: 'width 0.3s' }} />
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 13 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12 }}>
           <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
             {fmtValue(goal.progress.current, metric.unit)} <span style={{ color: 'var(--text-muted)' }}>/ {fmtValue(goal.progress.target, metric.unit)}</span>
           </span>
@@ -250,7 +250,7 @@ function GoalCard({ goal, catalog, onClick }) {
         </div>
       </div>
 
-      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
         {goal.progress.days_remaining > 0
           ? `${goal.progress.days_remaining} day${goal.progress.days_remaining === 1 ? '' : 's'} left · ${goal.start_date} – ${goal.end_date}`
           : `Ended ${goal.end_date}`}
@@ -281,12 +281,12 @@ export default function Goals() {
     ]).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading…</div>;
+  if (loading) return <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 560 }}>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 560 }}>
           Set a target for any metric, scope, and date range, and track how the site is pacing toward it.
         </p>
         <button
@@ -298,7 +298,7 @@ export default function Goals() {
       </div>
 
       {goals.length === 0 ? (
-        <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '40px 0', textAlign: 'center' }}>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '40px 0', textAlign: 'center' }}>
           No goals yet. Create one to start tracking pace.
         </div>
       ) : (

@@ -12,7 +12,7 @@ export default function ComparisonToggle() {
       title="Show +/-% comparison badges to the previous period"
       style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none',
+        fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none',
       }}
     >
       Comparisons

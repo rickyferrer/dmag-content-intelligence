@@ -13,8 +13,8 @@ function fmt(n) {
 function StatRow({ label, value, accent }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{label}</span>
-      <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: accent ? 'var(--accent-gold)' : 'var(--text-primary)' }}>{value}</span>
+      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</span>
+      <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: accent ? 'var(--accent-gold)' : 'var(--text-primary)' }}>{value}</span>
     </div>
   );
 }
@@ -72,17 +72,17 @@ export default function WriterDetail({ writer, dateFrom, dateTo, onClose }) {
       {/* Header */}
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ flex: 1 }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, lineHeight: 1.3, color: 'var(--text-primary)' }}>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, lineHeight: 1.3, color: 'var(--text-primary)' }}>
             {writer.writer}
           </h2>
         </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1, padding: 4, cursor: 'pointer' }}>×</button>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 20, lineHeight: 1, padding: 4, cursor: 'pointer' }}>×</button>
       </div>
 
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 24 }}>
         {/* Summary stats — same numbers as the table row, just easier to read */}
         <div>
-          <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+          <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
             Writer Summary
           </h3>
           <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '4px 0' }}>
@@ -100,13 +100,13 @@ export default function WriterDetail({ writer, dateFrom, dateTo, onClose }) {
 
         {/* User Needs breakdown */}
         <div>
-          <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+          <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
             Content by User Need
           </h3>
           {loading ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Loading…</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '20px 0', textAlign: 'center' }}>Loading…</div>
           ) : pieData.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>No articles found for this writer.</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '20px 0', textAlign: 'center' }}>No articles found for this writer.</div>
           ) : (
             <ResponsiveContainer width="100%" height={230}>
               <PieChart>
@@ -114,13 +114,13 @@ export default function WriterDetail({ writer, dateFrom, dateTo, onClose }) {
                   {pieData.map((d, i) => <Cell key={i} fill={d.color} stroke="var(--bg-elevated)" strokeWidth={2} />)}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
+                  contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12 }}
                   formatter={(value, name) => [`${value} article${value === 1 ? '' : 's'}`, name]}
                 />
                 <Legend
                   layout="vertical" align="right" verticalAlign="middle"
                   formatter={(value, entry) => (
-                    <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{value} ({entry.payload.count})</span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{value} ({entry.payload.count})</span>
                   )}
                 />
               </PieChart>
@@ -130,23 +130,23 @@ export default function WriterDetail({ writer, dateFrom, dateTo, onClose }) {
 
         {/* Article list */}
         <div>
-          <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+          <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
             Articles {!loading && `(${articles.length})`}
           </h3>
           {loading ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading…</div>
           ) : articles.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No articles found for this writer.</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No articles found for this writer.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {articles.map(a => (
                 <a key={a.wp_id} href={a.url} target="_blank" rel="noopener noreferrer"
                   style={{ display: 'block', padding: '10px 0', borderBottom: '1px solid var(--border-subtle)', textDecoration: 'none' }}
                 >
-                  <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 5, lineHeight: 1.4 }}>{a.title}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-primary)', marginBottom: 5, lineHeight: 1.4 }}>{a.title}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <NeedBadge need={a.user_need} />
-                    <span style={{ fontSize: 12, color: 'var(--accent-gold)', fontFamily: 'var(--font-mono)' }}>
+                    <span style={{ fontSize: 11, color: 'var(--accent-gold)', fontFamily: 'var(--font-mono)' }}>
                       LTV {a.lifetime_value != null ? Math.round(a.lifetime_value) : '—'}
                     </span>
                   </div>

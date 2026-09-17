@@ -13,8 +13,8 @@ function fmt(n) {
 function StatRow({ label, value, accent, title }) {
   return (
     <div title={title} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border-subtle)', cursor: title ? 'help' : 'default' }}>
-      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{label}{title ? '*' : ''}</span>
-      <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: accent ? 'var(--accent-gold)' : 'var(--text-primary)' }}>{value}</span>
+      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}{title ? '*' : ''}</span>
+      <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: accent ? 'var(--accent-gold)' : 'var(--text-primary)' }}>{value}</span>
     </div>
   );
 }
@@ -98,27 +98,27 @@ export default function ContentDetail({ wpId, onClose }) {
             <div style={{ color: 'var(--text-muted)' }}>Loading...</div>
           ) : (
             <>
-              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, lineHeight: 1.3, color: 'var(--text-primary)', marginBottom: 8 }}>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, lineHeight: 1.3, color: 'var(--text-primary)', marginBottom: 8 }}>
                 {item?.title}
               </h2>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <NeedBadge need={item?.user_need} size="lg" />
                 {item?.user_need_secondary && <NeedBadge need={item.user_need_secondary} />}
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                   Confidence: {item?.user_need_confidence != null ? (item.user_need_confidence * 100).toFixed(0) + '%' : '—'}
                 </span>
               </div>
             </>
           )}
         </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1, padding: 4 }}>×</button>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
       </div>
 
       {item && (
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Rationale */}
           {item.user_need_rationale && (
-            <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '12px 14px', fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, borderLeft: '3px solid var(--accent-gold-dim)' }}>
+            <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '12px 14px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, borderLeft: '3px solid var(--accent-gold-dim)' }}>
               {item.user_need_rationale}
             </div>
           )}
@@ -126,7 +126,7 @@ export default function ContentDetail({ wpId, onClose }) {
           {/* Links */}
           <div style={{ display: 'flex', gap: 8 }}>
             {item.url && (
-              <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, padding: '5px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-secondary)' }}>
+              <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, padding: '5px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-secondary)' }}>
                 View Article ↗
               </a>
             )}
@@ -134,7 +134,7 @@ export default function ContentDetail({ wpId, onClose }) {
               onClick={handleReclassify}
               disabled={reclassifying}
               style={{
-                fontSize: 13, padding: '5px 10px', background: 'var(--accent-gold-bg)',
+                fontSize: 12, padding: '5px 10px', background: 'var(--accent-gold-bg)',
                 border: '1px solid var(--accent-gold-dim)', borderRadius: 4,
                 color: 'var(--accent-gold)', opacity: reclassifying ? 0.6 : 1,
               }}
@@ -146,7 +146,7 @@ export default function ContentDetail({ wpId, onClose }) {
               disabled={reclassifyingCategories}
               title="Reclassify into Google's Natural Language content-category taxonomy"
               style={{
-                fontSize: 13, padding: '5px 10px', background: 'var(--bg-elevated)',
+                fontSize: 12, padding: '5px 10px', background: 'var(--bg-elevated)',
                 border: '1px solid var(--border)', borderRadius: 4,
                 color: 'var(--text-secondary)', opacity: reclassifyingCategories ? 0.6 : 1,
               }}
@@ -158,7 +158,7 @@ export default function ContentDetail({ wpId, onClose }) {
               disabled={reclassifyingVoice}
               title="Reclassify into the editorial Voice taxonomy (tone/register — Witty, Snarky, Insider, etc.)"
               style={{
-                fontSize: 13, padding: '5px 10px', background: 'var(--bg-elevated)',
+                fontSize: 12, padding: '5px 10px', background: 'var(--bg-elevated)',
                 border: '1px solid var(--border)', borderRadius: 4,
                 color: 'var(--text-secondary)', opacity: reclassifyingVoice ? 0.6 : 1,
               }}
@@ -185,15 +185,15 @@ export default function ContentDetail({ wpId, onClose }) {
             ];
             return (
               <div>
-                <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Content Value Breakdown</h3>
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+                <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Content Value Breakdown</h3>
+                <p style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>
                   Lifetime — Sub Clicks/Newsletter count this article's full history, not just the last ~30 days.
                 </p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
-                  <div style={{ fontSize: 37, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-gold)', lineHeight: 1 }}>
+                  <div style={{ fontSize: 33, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-gold)', lineHeight: 1 }}>
                     {bd.score}
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>/ 100</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>/ 100</div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {DIMS.map(({ key, label, info }) => {
@@ -201,7 +201,7 @@ export default function ContentDetail({ wpId, onClose }) {
                     const w = bd.weights[key] || 0;
                     return (
                       <div key={key} title={info}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3, cursor: info ? 'help' : 'default' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3, cursor: info ? 'help' : 'default' }}>
                           <span style={{ color: 'var(--text-secondary)' }}>{label}{info ? '*' : ''} <span style={{ color: 'var(--text-muted)' }}>· {w}% weight</span></span>
                           <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{sub}</span>
                         </div>
@@ -212,11 +212,11 @@ export default function ContentDetail({ wpId, onClose }) {
                     );
                   })}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
                   Weighted blend = {bd.composite}/100, × {(bd.confidence * 100).toFixed(0)}% traffic confidence = {bd.score}.
                 </div>
                 {item.true_value != null && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
                     Rolling (last ~30 days) Content Value — the number Sections/Writers/User Needs total up — is{' '}
                     <strong style={{ color: 'var(--text-secondary)' }}>{item.true_value}</strong>.
                   </div>
@@ -227,7 +227,7 @@ export default function ContentDetail({ wpId, onClose }) {
 
           {/* Analytics */}
           <div>
-            <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Analytics (30-day)</h3>
+            <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Analytics (30-day)</h3>
             <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '4px 0' }}>
               <StatRow label="Pageviews" value={fmt(item.ga4_pageviews)} />
               <StatRow label="Active Users" value={fmt(item.ga4_users)} />
@@ -248,18 +248,18 @@ export default function ContentDetail({ wpId, onClose }) {
           {/* Traffic Sources */}
           {item.sources?.length > 0 && (
             <div>
-              <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Traffic Sources</h3>
+              <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Traffic Sources</h3>
               <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '4px 0' }}>
                 {(() => {
                   const total = item.sources.reduce((s, r) => s + (r.pageviews || 0), 0);
                   return item.sources.map(row => (
                     <div key={row.source} style={{ padding: '8px 14px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 13, color: 'var(--text-secondary)', minWidth: 130 }}>{row.source}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 130 }}>{row.source}</span>
                       <div style={{ flex: 1, height: 4, background: 'var(--border)', borderRadius: 2 }}>
                         <div style={{ height: '100%', borderRadius: 2, background: 'var(--accent-gold)', opacity: 0.7, width: `${total > 0 ? (row.pageviews / total) * 100 : 0}%` }} />
                       </div>
-                      <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', minWidth: 48, textAlign: 'right' }}>{fmt(row.pageviews)}</span>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 38, textAlign: 'right' }}>{total > 0 ? ((row.pageviews / total) * 100).toFixed(0) + '%' : '—'}</span>
+                      <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', minWidth: 48, textAlign: 'right' }}>{fmt(row.pageviews)}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 38, textAlign: 'right' }}>{total > 0 ? ((row.pageviews / total) * 100).toFixed(0) + '%' : '—'}</span>
                     </div>
                   ));
                 })()}
@@ -270,17 +270,17 @@ export default function ContentDetail({ wpId, onClose }) {
           {/* Content Topics — Google Natural Language content categories */}
           {item.categories?.length > 0 && (
             <div>
-              <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+              <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
                 Content Topics
               </h3>
               <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '4px 0' }}>
                 {item.categories.map(c => (
                   <div key={c.category} style={{ padding: '8px 14px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1 }}>{c.category.replace(/^\//, '').replace(/\//g, ' › ')}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>{c.category.replace(/^\//, '').replace(/\//g, ' › ')}</span>
                     <div style={{ width: 60, height: 4, background: 'var(--border)', borderRadius: 2 }}>
                       <div style={{ height: '100%', borderRadius: 2, background: 'var(--accent-gold)', opacity: 0.7, width: `${(c.confidence || 0) * 100}%` }} />
                     </div>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 32, textAlign: 'right' }}>{((c.confidence || 0) * 100).toFixed(0)}%</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 32, textAlign: 'right' }}>{((c.confidence || 0) * 100).toFixed(0)}%</span>
                   </div>
                 ))}
               </div>
@@ -290,17 +290,17 @@ export default function ContentDetail({ wpId, onClose }) {
           {/* Content Voice — editorial tone/register taxonomy, an article can carry several */}
           {item.voices?.length > 0 && (
             <div>
-              <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+              <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
                 Content Voice
               </h3>
               <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '4px 0' }}>
                 {item.voices.map(v => (
                   <div key={v.voice} style={{ padding: '8px 14px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, textTransform: 'capitalize' }}>{v.voice}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, textTransform: 'capitalize' }}>{v.voice}</span>
                     <div style={{ width: 60, height: 4, background: 'var(--border)', borderRadius: 2 }}>
                       <div style={{ height: '100%', borderRadius: 2, background: 'var(--accent-gold)', opacity: 0.7, width: `${(v.confidence || 0) * 100}%` }} />
                     </div>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 32, textAlign: 'right' }}>{((v.confidence || 0) * 100).toFixed(0)}%</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 32, textAlign: 'right' }}>{((v.confidence || 0) * 100).toFixed(0)}%</span>
                   </div>
                 ))}
               </div>
@@ -310,14 +310,14 @@ export default function ContentDetail({ wpId, onClose }) {
           {/* History chart */}
           {item.history?.length > 1 && (
             <div>
-              <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Content Value History</h3>
+              <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Content Value History</h3>
               <ResponsiveContainer width="100%" height={160}>
                 <LineChart data={item.history} margin={{ left: 0, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="snapshot_at" tickFormatter={v => v?.slice(5, 10)} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} stroke="var(--border)" />
-                  <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} stroke="var(--border)" />
+                  <XAxis dataKey="snapshot_at" tickFormatter={v => v?.slice(5, 10)} tick={{ fill: 'var(--text-muted)', fontSize: 10 }} stroke="var(--border)" />
+                  <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} stroke="var(--border)" />
                   <Tooltip
-                    contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12 }}
+                    contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }}
                     labelStyle={{ color: 'var(--text-secondary)' }}
                   />
                   <Line type="monotone" dataKey="true_value" stroke="var(--accent-gold)" strokeWidth={2} dot={false} name="Content Value" />
@@ -337,20 +337,20 @@ export default function ContentDetail({ wpId, onClose }) {
             const lastWeek = item.newsletterHistory[item.newsletterHistory.length - 1].week_start;
             return (
               <div>
-                <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
                   Newsletter Signups History
                 </h3>
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+                <p style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>
                   {totalSignups} signups across {item.newsletterHistory.length} weeks ({firstWeek.slice(5)}–{lastWeek.slice(5)}),
                   from a one-time Marfeel export — not the rolling 30-day count above.
                 </p>
                 <ResponsiveContainer width="100%" height={140}>
                   <BarChart data={item.newsletterHistory} margin={{ left: 0, right: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="week_start" tickFormatter={v => v?.slice(5, 10)} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} stroke="var(--border)" />
-                    <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} stroke="var(--border)" allowDecimals={false} />
+                    <XAxis dataKey="week_start" tickFormatter={v => v?.slice(5, 10)} tick={{ fill: 'var(--text-muted)', fontSize: 10 }} stroke="var(--border)" />
+                    <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} stroke="var(--border)" allowDecimals={false} />
                     <Tooltip
-                      contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12 }}
+                      contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }}
                       labelStyle={{ color: 'var(--text-secondary)' }}
                     />
                     <Bar dataKey="total" fill="var(--accent-gold)" opacity={0.8} name="Signups" radius={[3, 3, 0, 0]} />
@@ -362,7 +362,7 @@ export default function ContentDetail({ wpId, onClose }) {
 
           {/* Metadata */}
           <div>
-            <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Metadata</h3>
+            <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Metadata</h3>
             <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '4px 0' }}>
               <StatRow label="Type" value={item.content_type} />
               <StatRow label="Section" value={item.section || '—'} />
