@@ -731,20 +731,10 @@ router.get('/source-performance', (req, res) => {
 });
 
 // Shared by /by-traffic-source and /channels: per-Marfeel-source volume
-// totals (pageviews, users, loyal/in-market, newsletter signups), across all
-// synced content — not scoped to when the underlying articles were
-// published, since this is about where CURRENT traffic comes from, not
-// which articles happen to have come out in some window. dateFrom/dateTo
-// are still accepted for /by-traffic-source callers that want that scoping;
-// /channels (the Sources tab) intentionally omits them.
-//
-// `asOf`, when set, pulls each article's most recent content_sources/
-// analytics_snapshots snapshot AT OR BEFORE that timestamp instead of the
-// latest overall — same reasoning as computeContentSummary's `asOf` above:
-// Marfeel's per-source pageviews are a rolling trailing-30-day window as of
-// sync time (see sync/marfeel.js's fetchSourceData), so comparing "today's
-// snapshot" to "the snapshot from ~30 days ago" gives a real trend instead
-// of comparing two overlapping windows.
+// totals (pageviews, users, loyal/in-market, newsletter signups), scoped to
+// articles published in [dateFrom, dateTo] (both optional — omitting both
+// means all synced content, not scoped to any publish window) and
+// optionally filtered by type.
 //
 // content_sources has one row per (article, source) — a real per-source
 // pageview split. analytics_snapshots has only one row per article — GA4
@@ -759,28 +749,19 @@ router.get('/source-performance', (req, res) => {
 // don't tell us the true per-source split), but one that conserves the
 // article's real total instead of multiplying it, and can never let a
 // channel's estimated users exceed the traffic that produced them.
-function fetchSourceRows(db, { dateFrom, dateTo, type, asOf } = {}) {
+function fetchSourceRows(db, { dateFrom, dateTo, type } = {}) {
   const where = ["cs.snapshot_at = lx.latest"];
   const params = [];
   if (dateFrom) { where.push('c.published_at >= ?'); params.push(dateFrom); }
   if (dateTo)   { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
   if (type)     { where.push('c.content_type = ?'); params.push(type); }
 
-  const snapshotCutoff = asOf ? 'WHERE snapshot_at <= ?' : '';
-  const snapshotParams = asOf ? [asOf] : [];
-
-  // Historical backfill (older than ~30 days before the reference point —
-  // "now" for the current snapshot, `asOf` for a prior comparison) + the
-  // live rolling value, same non-overlap pattern computeContentSummary uses.
-  const referenceTime = asOf ? new Date(asOf).getTime() : Date.now();
-  const historyCutoff = new Date(referenceTime - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
   const rows = db.prepare(`
     WITH article_totals AS (
       SELECT cs.wp_id, SUM(cs.pageviews) AS article_pageviews
       FROM content_sources cs
       JOIN (
-        SELECT wp_id, MAX(snapshot_at) AS latest FROM content_sources ${snapshotCutoff} GROUP BY wp_id
+        SELECT wp_id, MAX(snapshot_at) AS latest FROM content_sources GROUP BY wp_id
       ) lx ON cs.wp_id = lx.wp_id AND cs.snapshot_at = lx.latest
       GROUP BY cs.wp_id
     )
@@ -794,12 +775,12 @@ function fetchSourceRows(db, { dateFrom, dateTo, type, asOf } = {}) {
       SUM(CASE WHEN at.article_pageviews > 0 THEN (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) * cs.pageviews * 1.0 / at.article_pageviews ELSE 0 END) AS total_newsletter_signups
     FROM content_sources cs
     JOIN (
-      SELECT wp_id, MAX(snapshot_at) AS latest FROM content_sources ${snapshotCutoff} GROUP BY wp_id
+      SELECT wp_id, MAX(snapshot_at) AS latest FROM content_sources GROUP BY wp_id
     ) lx ON cs.wp_id = lx.wp_id
     JOIN content c ON c.wp_id = cs.wp_id
     JOIN article_totals at ON at.wp_id = cs.wp_id
     LEFT JOIN (
-      SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots ${snapshotCutoff} GROUP BY wp_id
+      SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
     ) lxa ON cs.wp_id = lxa.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lxa.wp_id AND a.snapshot_at = lxa.latest
     LEFT JOIN (
@@ -809,13 +790,13 @@ function fetchSourceRows(db, { dateFrom, dateTo, type, asOf } = {}) {
       -- rolling 30-day window.
       SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
       FROM historical_newsletter_signups
-      WHERE week_start < ?
+      WHERE week_start < date('now', '-30 days')
       GROUP BY wp_id
     ) h ON h.wp_id = cs.wp_id
     WHERE ${where.join(' AND ')}
     GROUP BY cs.source
     ORDER BY total_pageviews DESC
-  `).all(...snapshotParams, ...snapshotParams, ...snapshotParams, historyCutoff, ...params);
+  `).all(...params);
 
   // Round the now-fractional allocated metrics back to whole numbers for display.
   return rows.map(r => ({
@@ -886,15 +867,13 @@ const CUSTOM_CHANNELS = {
 };
 
 // Sums fetchSourceRows() output into per-channel totals for just the
-// metrics that are genuinely Marfeel-sourced, article-level (Traffic,
-// Users, Articles, Newsletter Signups) — used to diff the current
-// trailing-30-day snapshot against the one from ~30 days ago. Deliberately
-// excludes GA4 channel-level metrics (subscribe clicks, loyal %, in-market
-// %, revenue): GA4 is always its own trailing-30-day snapshot regardless of
-// when we ask, so comparing it against an `asOf`-shifted snapshot would
-// compare two overlapping or nonsensical windows — see GA4_UNAVAILABLE_NOTES
-// / the ga4.note text above for the same reasoning applied to the
-// Efficiency columns.
+// metrics that are genuinely date-scoped (Marfeel-sourced, article-level) —
+// used to diff a channel against its previous period. Deliberately excludes
+// GA4 channel-level metrics (subscribe clicks, loyal %, in-market %, revenue)
+// since GA4 is always a trailing-30-day snapshot regardless of the date
+// filter, so comparing it against a shifted "previous period" would compare
+// two overlapping or nonsensical windows — see GA4_UNAVAILABLE_NOTES/note
+// above for the same reasoning applied to the Efficiency columns.
 function buildChannelTotals(sourceRows) {
   const buckets = {};
   for (const key of Object.keys(CUSTOM_CHANNELS)) {
@@ -941,17 +920,18 @@ const GA4_UNAVAILABLE_NOTES = {
 };
 
 // GET /api/analytics/channels
-// The unified Sources view: custom (Marfeel-source-derived) volume metrics
-// across all synced content, merged with GA4 (channel-level, trailing-30-day)
-// conversion metrics, joined through an explicit, honest mapping between the
-// two taxonomies rather than a blended/approximated single metric set. Not
-// scoped by publish date — this answers "where does our traffic come from",
-// not "where did traffic for articles published in X come from".
+// The unified Sources view: custom (Marfeel-source-derived, date-scoped)
+// volume metrics merged with GA4 (channel-level, trailing-30-day) conversion
+// metrics, joined through an explicit, honest mapping between the two
+// taxonomies rather than a blended/approximated single metric set. Defaults
+// to the last 30 days on the client, but an explicit "All time" selection
+// (no dateFrom/dateTo) still answers "where does our traffic come from in
+// general" rather than "what did articles published in X drive".
 router.get('/channels', (req, res) => {
   const db = getDb();
-  const { type } = req.query;
+  const { dateFrom, dateTo, type } = req.query;
 
-  const sourceRows = fetchSourceRows(db, { type });
+  const sourceRows = fetchSourceRows(db, { dateFrom, dateTo, type });
 
   const buckets = {};
   for (const key of Object.keys(CUSTOM_CHANNELS)) {
@@ -1048,23 +1028,16 @@ router.get('/channels', (req, res) => {
 
   channels.sort((a, b) => b.pageviews - a.pageviews);
 
-  // Trailing-30-day comparison: the current (latest) rolling-30-day Volume
-  // totals vs. the same rolling-30-day metric as of the OLDEST snapshot
-  // content_sources still retains, independent of the Type filter's own
-  // scoping. Deliberately not a fixed "now minus 30 days" cutoff: the prune
-  // in scheduler.js keeps the 30 most recent *sync runs*, not 30 calendar
-  // days — if sync only recently started running reliably (or ran more than
-  // once a day for a stretch), the oldest retained snapshot can be much
-  // more recent than 30 days ago. A hardcoded cutoff would then find no
-  // snapshot at all and silently null out every comparison. Using whatever
-  // the oldest retained snapshot actually is always finds real data, and
-  // converges to a true ~30-day comparison once enough daily history has
-  // accumulated. See fetchSourceRows' `asOf` handling and buildChannelTotals
-  // above.
-  const snapshotRange = db.prepare('SELECT MIN(snapshot_at) AS oldest, MAX(snapshot_at) AS latest FROM content_sources').get();
-  const asOf = (snapshotRange?.oldest && snapshotRange.oldest < snapshotRange.latest) ? snapshotRange.oldest : null;
-  if (asOf) {
-    const prevSourceRows = fetchSourceRows(db, { type, asOf });
+  // Previous-period comparison — Volume columns only (Traffic, Users,
+  // Articles, Newsletter Signups). Efficiency columns and the "Subscribe
+  // Clicks" volume column are both GA4 channel-level data, always a
+  // trailing 30 days regardless of the date filter, so a shifted
+  // "previous period" wouldn't mean what it means everywhere else — see
+  // buildChannelTotals() above. No previous period when "All time" is
+  // selected (no dateFrom/dateTo) — same convention as every other tab.
+  const previous_period = previousPeriodRange(dateFrom, dateTo);
+  if (previous_period) {
+    const prevSourceRows = fetchSourceRows(db, { dateFrom: previous_period.from, dateTo: previous_period.to, type });
     const prevTotals = buildChannelTotals(prevSourceRows);
     for (const c of channels) {
       const prev = prevTotals[c.key];
@@ -1080,11 +1053,13 @@ router.get('/channels', (req, res) => {
   }
 
   res.json({
+    dateFrom: dateFrom || null,
+    dateTo: dateTo || null,
     type: type || null,
     ga4_snapshot_at: ga4Snapshot?.snapshot_at || null,
     channels,
     unmapped_ga4: unmapped,
-    compared_to: asOf,
+    previous_period,
     volume_metrics_note: 'Users, Loyal %, In-Market %, and Newsletter Signups are estimated per channel by splitting each article\'s total figures proportionally by pageview share across its traffic sources — GA4 and Marfeel report these per article, not broken down by individual source.',
   });
 });
