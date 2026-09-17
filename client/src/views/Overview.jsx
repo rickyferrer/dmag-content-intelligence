@@ -141,7 +141,12 @@ export default function Overview() {
         <KPICard label="Total Content Items" value={fmt(summary?.total_content)} />
         <KPICard label="Avg Content Value" value={summary?.avg_true_value != null ? Math.round(summary.avg_true_value).toString() : '—'} gold change={summary?.changes?.avg_true_value} />
         <KPICard label="Total Users" value={fmt(summary?.total_users)} change={summary?.changes?.total_users} />
-        <KPICard label="Loyal Users" value={fmt(summary?.total_loyal_users)} change={summary?.changes?.total_loyal_users} />
+        <KPICard
+          label="Loyal Users"
+          value={fmt(summary?.total_loyal_users)}
+          change={summary?.changes?.total_loyal_users}
+          sub="GA4's '3 or more sessions, last 30 days' audience"
+        />
         <KPICard
           label="In-Market %"
           value={summary?.inmarket_pct != null ? summary.inmarket_pct.toFixed(1) + '%' : '—'}
