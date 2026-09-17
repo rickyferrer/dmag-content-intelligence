@@ -25,7 +25,6 @@ function fmt(n) {
 const VOLUME_COLS = [
   { key: 'pageviews',           label: 'Traffic',            align: 'right' },
   { key: 'users',                label: 'Users',              align: 'right' },
-  { key: 'article_count',        label: 'Articles',           align: 'right' },
   { key: 'ga4_subscribe_clicks', label: 'Subscribe Clicks',   align: 'right' },
   { key: 'newsletter_signups',   label: 'Newsletter Signups', align: 'right' },
 ];
@@ -57,7 +56,6 @@ function getSortValue(row, key) {
     case 'channel':               return row.label;
     case 'pageviews':              return row.pageviews;
     case 'users':                  return row.users;
-    case 'article_count':          return row.article_count;
     case 'newsletter_signups':     return row.newsletter_signups;
     case 'loyal_pct':              return row.loyal_pct;
     case 'inmarket_pct':           return row.inmarket_pct;
@@ -216,7 +214,7 @@ export default function Sources() {
     s.key === key ? { key, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' }
   );
 
-  const gridCols = '200px repeat(5, 1fr) 32px';
+  const gridCols = `200px repeat(${cols.length}, 1fr) 32px`;
 
   const cellValue = (row, col) => {
     switch (col.key) {
@@ -235,13 +233,6 @@ export default function Sources() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
             {fmt(row.users)}
             <ChangeBadge change={row.changes?.users} />
-          </div>
-        );
-      case 'article_count':
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-            {fmt(row.article_count)}
-            <ChangeBadge change={row.changes?.article_count} />
           </div>
         );
       case 'newsletter_signups':
@@ -401,7 +392,6 @@ export default function Sources() {
                               <>
                                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.pageviews)} ({srcPct.toFixed(0)}%)</div>
                                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.users)}</div>
-                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.article_count)}</div>
                                 <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }} title="GA4 doesn't break subscribe clicks down by individual source, only by channel.">—</div>
                                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.newsletter_signups)}</div>
                               </>
