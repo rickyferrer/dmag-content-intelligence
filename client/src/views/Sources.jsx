@@ -116,7 +116,7 @@ function ChannelScatter({ channels }) {
   };
 
   return (
-    <ResponsiveContainer width="100%" height={320}>
+    <ResponsiveContainer width="100%" height={360}>
       <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
         <XAxis
@@ -132,7 +132,7 @@ function ChannelScatter({ channels }) {
         <YAxis
           dataKey={(d) => d.ga4.opportunity_per_1k}
           name="Conversion Efficiency"
-          label={{ value: 'Conversion Efficiency (Opportunity/1k)', angle: -90, position: 'insideLeft', fill: 'var(--text-muted)', fontSize: 11 }}
+          label={{ value: 'Conversion Efficiency (Opp/1k)', angle: -90, position: 'insideLeft', fill: 'var(--text-muted)', fontSize: 11 }}
           tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
           stroke="var(--border)"
         />
