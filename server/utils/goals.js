@@ -25,6 +25,20 @@
 // (days elapsed ÷ days total). It's a deliberate simplification — not every
 // metric truly accrues evenly — but it's transparent, easy to reason about,
 // and the same baseline any editor would sanity-check by hand.
+//
+// `users`/`loyal_users` are a third path, not covered by either case above:
+// they're DISTINCT-count metrics, so summing per-day rows (like the
+// siteDailyCol metrics) over-counts every repeat visitor once per day they
+// showed up — the exact mistake analytics.js's computeTrafficSummary and
+// sync/ga4.js's fetchLoyalUsersForRange go out of their way to avoid (see
+// their comments — a naive sum of daily loyal_users once read 2.4x the true
+// period-unique count). So a SITE-scoped users/loyal_users goal queries GA4
+// live with a single consolidated date range (liveRangeFetch below) instead
+// of summing a table. A SCOPED goal (section/writer/etc.) has no such live
+// per-scope breakdown available, so it falls back to the same per-article
+// analytics_snapshots SUM approximation every other scoped goal uses.
+
+import { fetchUsersForRange, fetchLoyalUsersForRange } from '../sync/ga4.js';
 
 export const METRICS = {
   pageviews:            { label: 'Pageviews',            unit: 'count',    cumulative: true,  siteDailyCol: 'pageviews' },
@@ -34,6 +48,8 @@ export const METRICS = {
   article_count:        { label: 'Articles Published',   unit: 'count',    cumulative: true,  siteDailyCol: null },
   total_content_value:  { label: 'Total Content Value',  unit: 'count',    cumulative: true,  siteDailyCol: null },
   avg_content_value:    { label: 'Avg Content Value',    unit: 'count',    cumulative: false, siteDailyCol: null },
+  users:                { label: 'Total Users',          unit: 'count',    cumulative: true,  siteDailyCol: null, liveRange: true },
+  loyal_users:          { label: 'Loyal Users',           unit: 'count',    cumulative: true,  siteDailyCol: null, liveRange: true },
 };
 
 export const SCOPES = {
@@ -61,8 +77,24 @@ function contentAggExpr(metric) {
     case 'subscribe_clicks':    return 'SUM(a.ga4_subscribe_clicks)';
     case 'newsletter_signups':  return 'SUM(a.mf_newsletter_signups)';
     case 'ad_revenue':          return 'SUM(a.ga4_ad_revenue)';
+    case 'users':                return 'SUM(a.ga4_users)';
+    case 'loyal_users':          return 'SUM(a.ga4_loyal_users)';
     default: throw new Error(`Unknown metric: ${metric}`);
   }
+}
+
+// Live GA4 range query for a site-scoped users/loyal_users goal — a true
+// period-unique count, not a sum of daily snapshots. loyal_users is capped
+// against total_users in the same range for the same reason sync/ga4.js's
+// callers already do: GA4's loyal-audience segment can occasionally report
+// more than the plain active-user count for a narrow/noisy range.
+async function fetchLiveRangeValue(metric, startDate, endDate) {
+  if (metric === 'users') return fetchUsersForRange(startDate, endDate);
+  const [users, loyal] = await Promise.all([
+    fetchUsersForRange(startDate, endDate),
+    fetchLoyalUsersForRange(startDate, endDate),
+  ]);
+  return Math.min(loyal, users);
 }
 
 function fetchContentValue(db, goal, endDate) {
@@ -85,8 +117,11 @@ function fetchContentValue(db, goal, endDate) {
   return row.v || 0;
 }
 
-function fetchCurrentValue(db, goal, endDate) {
+async function fetchCurrentValue(db, goal, endDate) {
   const metric = METRICS[goal.metric];
+  if (goal.scope_type === 'site' && metric.liveRange) {
+    return fetchLiveRangeValue(goal.metric, goal.start_date, endDate);
+  }
   if (goal.scope_type === 'site' && metric.siteDailyCol) {
     const row = db.prepare(`
       SELECT SUM(${metric.siteDailyCol}) AS v FROM site_daily_metrics WHERE date >= ? AND date <= ?
@@ -98,7 +133,7 @@ function fetchCurrentValue(db, goal, endDate) {
 
 // { current, target, pct_of_target, expected, status, days_elapsed,
 //   days_total, days_remaining, projected_final }
-export function computeGoalProgress(db, goal) {
+export async function computeGoalProgress(db, goal) {
   const now = today();
   const metric = METRICS[goal.metric];
   const daysTotal = Math.max(1, daysBetween(goal.start_date, goal.end_date) + 1);
@@ -106,7 +141,7 @@ export function computeGoalProgress(db, goal) {
   const rawElapsed = goal.start_date > effectiveEnd ? 0 : daysBetween(goal.start_date, effectiveEnd) + 1;
   const daysElapsed = Math.min(Math.max(rawElapsed, 0), daysTotal);
 
-  const current = daysElapsed > 0 ? fetchCurrentValue(db, goal, effectiveEnd) : 0;
+  const current = daysElapsed > 0 ? await fetchCurrentValue(db, goal, effectiveEnd) : 0;
   const expectedFraction = daysTotal > 0 ? daysElapsed / daysTotal : 0;
   const expected = metric.cumulative ? goal.target * expectedFraction : goal.target;
   const pctOfTarget = goal.target ? (current / goal.target) * 100 : 0;
@@ -143,7 +178,7 @@ export function computeGoalProgress(db, goal) {
 // Day-by-day { date, actual (cumulative), expected (cumulative) } series for
 // the detail-panel chart. Only meaningful for cumulative metrics — a rate
 // (avg_content_value) doesn't accumulate, so callers should skip charting it.
-export function computeGoalTrend(db, goal) {
+export async function computeGoalTrend(db, goal) {
   const metric = METRICS[goal.metric];
   if (!metric.cumulative) return [];
 
@@ -152,6 +187,26 @@ export function computeGoalTrend(db, goal) {
   if (goal.start_date > effectiveEnd) return [];
 
   const daysTotal = Math.max(1, daysBetween(goal.start_date, goal.end_date) + 1);
+
+  // A live-range metric (site-scoped users/loyal_users) can't be summed from
+  // daily increments — each point needs its own GA4 range query from
+  // start_date to that point. One call per day in the range would be slow
+  // and needlessly hammer the API, so this walks a handful of evenly-spaced
+  // checkpoints (at most 10) instead of every single day.
+  if (goal.scope_type === 'site' && metric.liveRange) {
+    const totalElapsedDays = daysBetween(goal.start_date, effectiveEnd) + 1;
+    const numPoints = Math.min(totalElapsedDays, 10);
+    const series = [];
+    for (let i = 1; i <= numPoints; i++) {
+      const dayIndex = Math.round((i / numPoints) * totalElapsedDays);
+      const checkpoint = new Date(goal.start_date + 'T00:00:00Z');
+      checkpoint.setUTCDate(checkpoint.getUTCDate() + dayIndex - 1);
+      const cpDate = isoDate(checkpoint);
+      const actual = await fetchLiveRangeValue(goal.metric, goal.start_date, cpDate);
+      series.push({ date: cpDate, actual, expected: goal.target * (dayIndex / daysTotal) });
+    }
+    return series;
+  }
 
   // Build a date -> daily increment map, then walk the range accumulating it.
   const increments = {};
@@ -172,6 +227,8 @@ export function computeGoalTrend(db, goal) {
       subscribe_clicks:     'a.ga4_subscribe_clicks',
       newsletter_signups:   'a.mf_newsletter_signups',
       ad_revenue:           'a.ga4_ad_revenue',
+      users:                'a.ga4_users',
+      loyal_users:          'a.ga4_loyal_users',
     };
     const where = ['c.published_at >= ?', 'c.published_at <= ?'];
     const params = [goal.start_date, effectiveEnd + 'T23:59:59'];

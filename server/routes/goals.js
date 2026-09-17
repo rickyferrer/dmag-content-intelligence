@@ -4,8 +4,11 @@ import { METRICS, SCOPES, computeGoalProgress, computeGoalTrend } from '../utils
 
 const router = Router();
 
-function withProgress(db, goal) {
-  return { ...goal, progress: computeGoalProgress(db, goal) };
+// users/loyal_users goals hit GA4 live (see utils/goals.js) — that call can
+// fail like any other external request, so this wraps it the same way
+// analytics.js's /summary does rather than letting it 500 the whole route.
+async function withProgress(db, goal) {
+  return { ...goal, progress: await computeGoalProgress(db, goal) };
 }
 
 function validateGoal(body) {
@@ -31,63 +34,89 @@ router.get('/metrics', (req, res) => {
 });
 
 // GET /api/goals
-router.get('/', (req, res) => {
-  const db = getDb();
-  const includeArchived = req.query.includeArchived === 'true';
-  const goals = listGoals(includeArchived).map(g => withProgress(db, g));
-  res.json(goals);
+router.get('/', async (req, res) => {
+  try {
+    const db = getDb();
+    const includeArchived = req.query.includeArchived === 'true';
+    const goals = await Promise.all(listGoals(includeArchived).map(g => withProgress(db, g)));
+    res.json(goals);
+  } catch (err) {
+    console.error('[Server] GET /api/goals error:', err.message);
+    res.status(500).json({ error: 'Failed to load goals', message: err.message });
+  }
 });
 
 // GET /api/goals/:id
-router.get('/:id', (req, res) => {
-  const db = getDb();
-  const goal = getGoal(req.params.id);
-  if (!goal) return res.status(404).json({ error: 'Goal not found' });
-  res.json({ ...withProgress(db, goal), trend: computeGoalTrend(db, goal) });
+router.get('/:id', async (req, res) => {
+  try {
+    const db = getDb();
+    const goal = getGoal(req.params.id);
+    if (!goal) return res.status(404).json({ error: 'Goal not found' });
+    const [withP, trend] = await Promise.all([withProgress(db, goal), computeGoalTrend(db, goal)]);
+    res.json({ ...withP, trend });
+  } catch (err) {
+    console.error('[Server] GET /api/goals/:id error:', err.message);
+    res.status(500).json({ error: 'Failed to load goal', message: err.message });
+  }
 });
 
 // POST /api/goals
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const err = validateGoal(req.body);
   if (err) return res.status(400).json({ error: err });
-  const scope = SCOPES[req.body.scope_type];
-  const goal = createGoal({
-    name: req.body.name.trim(),
-    metric: req.body.metric,
-    scope_type: req.body.scope_type,
-    scope_value: scope.column ? req.body.scope_value : null,
-    target: req.body.target,
-    start_date: req.body.start_date,
-    end_date: req.body.end_date,
-  });
-  res.status(201).json(withProgress(getDb(), goal));
+  try {
+    const scope = SCOPES[req.body.scope_type];
+    const goal = createGoal({
+      name: req.body.name.trim(),
+      metric: req.body.metric,
+      scope_type: req.body.scope_type,
+      scope_value: scope.column ? req.body.scope_value : null,
+      target: req.body.target,
+      start_date: req.body.start_date,
+      end_date: req.body.end_date,
+    });
+    res.status(201).json(await withProgress(getDb(), goal));
+  } catch (err2) {
+    console.error('[Server] POST /api/goals error:', err2.message);
+    res.status(500).json({ error: 'Failed to create goal', message: err2.message });
+  }
 });
 
 // PUT /api/goals/:id
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   const existing = getGoal(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Goal not found' });
   const err = validateGoal(req.body);
   if (err) return res.status(400).json({ error: err });
-  const scope = SCOPES[req.body.scope_type];
-  const goal = updateGoal(req.params.id, {
-    name: req.body.name.trim(),
-    metric: req.body.metric,
-    scope_type: req.body.scope_type,
-    scope_value: scope.column ? req.body.scope_value : null,
-    target: req.body.target,
-    start_date: req.body.start_date,
-    end_date: req.body.end_date,
-  });
-  res.json(withProgress(getDb(), goal));
+  try {
+    const scope = SCOPES[req.body.scope_type];
+    const goal = updateGoal(req.params.id, {
+      name: req.body.name.trim(),
+      metric: req.body.metric,
+      scope_type: req.body.scope_type,
+      scope_value: scope.column ? req.body.scope_value : null,
+      target: req.body.target,
+      start_date: req.body.start_date,
+      end_date: req.body.end_date,
+    });
+    res.json(await withProgress(getDb(), goal));
+  } catch (err2) {
+    console.error('[Server] PUT /api/goals/:id error:', err2.message);
+    res.status(500).json({ error: 'Failed to update goal', message: err2.message });
+  }
 });
 
 // POST /api/goals/:id/archive
-router.post('/:id/archive', (req, res) => {
+router.post('/:id/archive', async (req, res) => {
   const existing = getGoal(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Goal not found' });
-  const goal = setGoalArchived(req.params.id, req.body?.archived !== false);
-  res.json(withProgress(getDb(), goal));
+  try {
+    const goal = setGoalArchived(req.params.id, req.body?.archived !== false);
+    res.json(await withProgress(getDb(), goal));
+  } catch (err) {
+    console.error('[Server] POST /api/goals/:id/archive error:', err.message);
+    res.status(500).json({ error: 'Failed to archive goal', message: err.message });
+  }
 });
 
 // DELETE /api/goals/:id
