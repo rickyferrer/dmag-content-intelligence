@@ -138,33 +138,57 @@ export default function Overview() {
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gap: 16 }}>
-        <KPICard label="Total Content Items" value={fmt(summary?.total_content)} />
-        <KPICard label="Avg Content Value" value={summary?.avg_true_value != null ? Math.round(summary.avg_true_value).toString() : '—'} gold change={summary?.changes?.avg_true_value} />
-        <KPICard label="Total Users" value={fmt(summary?.total_users)} change={summary?.changes?.total_users} />
+        <KPICard
+          label="Total Content Items"
+          value={fmt(summary?.total_content)}
+          info="Count of WordPress-synced content (posts, pages, microposts) matching the current filters."
+        />
+        <KPICard
+          label="Avg Content Value"
+          value={summary?.avg_true_value != null ? Math.round(summary.avg_true_value).toString() : '—'}
+          gold
+          change={summary?.changes?.avg_true_value}
+          info="This app's own composite score per article — a weighted blend of subscribe-click rate, loyalty, in-market share, newsletter rate, engagement, and ad revenue per reader (weights configurable in Settings). Not pulled directly from GA4 or Marfeel."
+        />
+        <KPICard
+          label="Total Users"
+          value={fmt(summary?.total_users)}
+          change={summary?.changes?.total_users}
+          info="Distinct visitors — queried live from Google Analytics (GA4) for this date range, or summed from each article's latest synced GA4 snapshot when a Section/Type/User Need filter narrows the view."
+        />
         <KPICard
           label="Loyal Users"
           value={fmt(summary?.total_loyal_users)}
           change={summary?.changes?.total_loyal_users}
           sub="GA4's '3 or more sessions, last 30 days' audience"
+          info="Google Analytics' built-in '3 or more sessions, last 30 days' audience segment, capped so it can never exceed Total Users."
         />
         <KPICard
           label="In-Market %"
           value={summary?.inmarket_pct != null ? summary.inmarket_pct.toFixed(1) + '%' : '—'}
           change={summary?.changes?.inmarket_pct}
           sub="Share of readers located in the DFW area"
+          info="Share of Total Users whose Google Analytics location resolves to the Dallas-Fort Worth area, from GA4 geo data."
         />
-        <KPICard label="Subscribe Clicks" value={fmt(summary?.total_subscribe_clicks)} change={summary?.changes?.total_subscribe_clicks} />
+        <KPICard
+          label="Subscribe Clicks"
+          value={fmt(summary?.total_subscribe_clicks)}
+          change={summary?.changes?.total_subscribe_clicks}
+          info="GA4 'subscribe_click' event counts — a one-time historical backfill (older than ~30 days) plus the live rolling ~30-day GA4 count, merged so nothing double-counts."
+        />
         <KPICard
           label="Newsletter Signups"
           value={fmt(summary?.total_newsletter_signups)}
           change={summary?.changes?.total_newsletter_signups}
           sub="Tracking began Jul 21, 2026 — longer ranges won't grow until real history catches up"
+          info="Marfeel newsletter-signup events — a one-time historical CSV import plus the live rolling Marfeel count, merged so nothing double-counts."
         />
         <KPICard
           label="Ad Revenue (30d)"
           value={summary?.total_ad_revenue != null ? '$' + summary.total_ad_revenue.toFixed(0) : '—'}
           change={summary?.changes?.total_ad_revenue}
           sub="Potential value — ad impressions × $10 CPM, not real tracked revenue"
+          info="Estimated, not real revenue — GA4 ad impressions (trailing 30 days) × a flat $10 CPM assumption."
         />
       </div>
 

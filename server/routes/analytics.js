@@ -867,23 +867,28 @@ const CUSTOM_CHANNELS = {
 };
 
 // Sums fetchSourceRows() output into per-channel totals for just the
-// metrics that are genuinely date-scoped (Marfeel-sourced, article-level) —
-// used to diff a channel against its previous period. Deliberately excludes
-// GA4 channel-level metrics (subscribe clicks, loyal %, in-market %, revenue)
-// since GA4 is always a trailing-30-day snapshot regardless of the date
-// filter, so comparing it against a shifted "previous period" would compare
-// two overlapping or nonsensical windows — see GA4_UNAVAILABLE_NOTES/note
-// above for the same reasoning applied to the Efficiency columns.
+// metrics that are genuinely date-scoped (Marfeel-apportioned, article-level
+// — pageviews, users, loyal_users, inmarket_pv, article_count, newsletter
+// signups, all sourced from the same per-article analytics_snapshots/
+// content_sources join as the rest of the Volume table). Deliberately
+// excludes the true GA4 channel-level metrics (Subscribe Clicks, Rev/1K,
+// Clicks/1K, Score) sourced from source_performance, since THAT table is
+// always a trailing-30-day snapshot regardless of the date filter, so
+// comparing it against a shifted "previous period" would compare two
+// overlapping or nonsensical windows — see GA4_UNAVAILABLE_NOTES/note above
+// for the same reasoning applied to the Efficiency columns.
 function buildChannelTotals(sourceRows) {
   const buckets = {};
   for (const key of Object.keys(CUSTOM_CHANNELS)) {
-    buckets[key] = { key, pageviews: 0, users: 0, article_count: 0, newsletter_signups: 0 };
+    buckets[key] = { key, pageviews: 0, users: 0, loyal_users: 0, inmarket_pv: 0, article_count: 0, newsletter_signups: 0 };
   }
   for (const row of sourceRows) {
     const key = customChannelFor(row.source);
     const b = buckets[key];
     b.pageviews          += row.total_pageviews || 0;
     b.users              += row.total_users || 0;
+    b.loyal_users         += row.total_loyal_users || 0;
+    b.inmarket_pv         += row.total_inmarket || 0;
     b.article_count      += row.article_count || 0;
     b.newsletter_signups += row.total_newsletter_signups || 0;
   }
@@ -1041,9 +1046,12 @@ router.get('/channels', (req, res) => {
     const prevTotals = buildChannelTotals(prevSourceRows);
     for (const c of channels) {
       const prev = prevTotals[c.key];
+      const prevInmarketPct = prev && prev.users > 0 ? (prev.inmarket_pv / prev.users) * 100 : 0;
       c.changes = prev ? {
         pageviews: pctChange(c.pageviews, prev.pageviews),
         users: pctChange(c.users, prev.users),
+        loyal_users: pctChange(c.loyal_users, prev.loyal_users),
+        inmarket_pct: pctChange(c.inmarket_pct, prevInmarketPct),
         article_count: pctChange(c.article_count, prev.article_count),
         newsletter_signups: pctChange(c.newsletter_signups, prev.newsletter_signups),
       } : null;

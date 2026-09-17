@@ -21,7 +21,7 @@ export function ChangeBadge({ change }) {
   );
 }
 
-export default function KPICard({ label, value, sub, gold = false, change }) {
+export default function KPICard({ label, value, sub, gold = false, change, info }) {
   return (
     <div style={{
       background: 'var(--bg-surface)',
@@ -32,8 +32,23 @@ export default function KPICard({ label, value, sub, gold = false, change }) {
       flexDirection: 'column',
       gap: 4,
     }}>
-      <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={label}>
-        {label}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={label}>
+          {label}
+        </span>
+        {info && (
+          <span
+            title={info}
+            style={{
+              flexShrink: 0, width: 12, height: 12, borderRadius: '50%',
+              border: '1px solid var(--text-muted)', color: 'var(--text-muted)',
+              fontSize: 9, fontStyle: 'italic', fontFamily: 'var(--font-sans)',
+              lineHeight: '11px', textAlign: 'center', cursor: 'help',
+            }}
+          >
+            i
+          </span>
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <div style={{

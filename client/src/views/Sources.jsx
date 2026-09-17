@@ -27,6 +27,8 @@ const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
 const VOLUME_COLS = [
   { key: 'pageviews',           label: 'Traffic',            align: 'right' },
   { key: 'users',                label: 'Users',              align: 'right' },
+  { key: 'loyal_users',          label: 'Loyal Users',        align: 'right' },
+  { key: 'inmarket_pct',         label: 'In-Market %',        align: 'right' },
   { key: 'ga4_subscribe_clicks', label: 'Subscribe Clicks',   align: 'right' },
   { key: 'newsletter_signups',   label: 'Newsletter Signups', align: 'right' },
 ];
@@ -42,7 +44,7 @@ const EFFICIENCY_COLS = [
 // GA4/Marfeel report these per article, not broken down by traffic source —
 // values are estimated by splitting each article's total proportionally by
 // pageview share across its sources (see volume_metrics_note from the API).
-const ESTIMATED_COLS = new Set(['users', 'newsletter_signups', 'loyal_pct', 'inmarket_pct']);
+const ESTIMATED_COLS = new Set(['users', 'newsletter_signups', 'loyal_pct', 'inmarket_pct', 'loyal_users']);
 
 // Newsletter Signups here is apportioned from the same historical-backfill +
 // live-rolling merge used by Content/Sections/Writers, so it shares that
@@ -58,6 +60,7 @@ function getSortValue(row, key) {
     case 'channel':               return row.label;
     case 'pageviews':              return row.pageviews;
     case 'users':                  return row.users;
+    case 'loyal_users':            return row.loyal_users;
     case 'newsletter_signups':     return row.newsletter_signups;
     case 'loyal_pct':              return row.loyal_pct;
     case 'inmarket_pct':           return row.inmarket_pct;
@@ -239,6 +242,13 @@ export default function Sources() {
             <ChangeBadge change={row.changes?.users} />
           </div>
         );
+      case 'loyal_users':
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+            {fmt(row.loyal_users)}
+            <ChangeBadge change={row.changes?.loyal_users} />
+          </div>
+        );
       case 'newsletter_signups':
         return (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
@@ -247,7 +257,13 @@ export default function Sources() {
           </div>
         );
       case 'loyal_pct':        return row.loyal_pct > 0 ? row.loyal_pct.toFixed(1) + '%' : '—';
-      case 'inmarket_pct':     return row.inmarket_pct > 0 ? row.inmarket_pct.toFixed(1) + '%' : '—';
+      case 'inmarket_pct':
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+            {row.inmarket_pct > 0 ? row.inmarket_pct.toFixed(1) + '%' : '—'}
+            {viewMode === 'volume' && <ChangeBadge change={row.changes?.inmarket_pct} />}
+          </div>
+        );
       case 'score':
         return row.score > 0 ? (
           <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-gold)', background: 'var(--accent-gold-bg)', padding: '2px 6px', borderRadius: 4 }}>
@@ -405,6 +421,8 @@ export default function Sources() {
                               <>
                                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.pageviews)} ({srcPct.toFixed(0)}%)</div>
                                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.users)}</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.loyal_users)}</div>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{srcInmarketPct > 0 ? srcInmarketPct.toFixed(1) + '%' : '—'}</div>
                                 <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }} title="GA4 doesn't break subscribe clicks down by individual source, only by channel.">—</div>
                                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>{fmt(src.newsletter_signups)}</div>
                               </>
