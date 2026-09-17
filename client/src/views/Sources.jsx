@@ -4,9 +4,6 @@ import {
   Tooltip, ResponsiveContainer, Cell, ZAxis,
 } from 'recharts';
 import { api } from '../api/index.js';
-import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
-import { ChangeBadge } from '../components/KPICard.jsx';
-import { useComparisons } from '../context/ComparisonContext.jsx';
 import { NEWSLETTER_NOTE } from '../constants/dataReliability.js';
 
 function fmt(n) {
@@ -16,13 +13,13 @@ function fmt(n) {
   return String(Math.round(n));
 }
 
-const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
-
-// Volume: what happened (traffic, reach, output) — fully date-scoped from
-// Marfeel-sourced, article-level data. Efficiency: how well it converted —
-// sourced from GA4's channel-level rollup, which is always a trailing 30
-// days and uses a different taxonomy (see GA4_UNAVAILABLE_NOTES server-side),
-// so those columns get an "≈" and a tooltip rather than blending silently.
+// Volume: what happened (traffic, reach, output) — across all synced
+// content, not scoped to any publish window (this is about where traffic
+// comes from in general, not what a particular window of articles drove).
+// Efficiency: how well it converted — sourced from GA4's channel-level
+// rollup, which is always a trailing 30 days and uses a different taxonomy
+// (see GA4_UNAVAILABLE_NOTES server-side), so those columns get an "≈" and
+// a tooltip rather than blending silently.
 const VOLUME_COLS = [
   { key: 'pageviews',           label: 'Traffic',            align: 'right' },
   { key: 'users',                label: 'Users',              align: 'right' },
@@ -155,22 +152,19 @@ function ChannelScatter({ channels }) {
 }
 
 export default function Sources() {
-  const { showComparisons } = useComparisons();
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
-  const [filters, setFilters] = useState({ from: initFrom, to: initTo, type: '', preset: DEFAULT_PRESET });
+  const [filters, setFilters] = useState({ type: '' });
   const [viewMode, setViewMode] = useState('volume');
   const [expanded, setExpanded] = useState(null);
   const [sort, setSort] = useState({ key: 'pageviews', dir: 'desc' });
   const [showScatter, setShowScatter] = useState(true);
   const [lastAnalyticsSync, setLastAnalyticsSync] = useState(null);
 
-  const load = ({ from, to, type }) => {
+  const load = ({ type }) => {
     setLoading(true);
     const params = {};
-    if (from) params.dateFrom = from;
-    if (to)   params.dateTo = to;
     if (type) params.type = type;
     api.getChannels(params)
       .then(setResult)
@@ -179,7 +173,7 @@ export default function Sources() {
   };
 
   useEffect(() => {
-    load({ from: initFrom, to: initTo, type: '' });
+    load({ type: '' });
     api.getContentTypes().then(setTypes).catch(console.error);
     api.getSyncStatus()
       .then(status => setLastAnalyticsSync(status?.last_analytics_sync?.updated_at || null))
@@ -192,10 +186,10 @@ export default function Sources() {
     load(next);
   };
 
-  const isDefaultFilters = filters.preset === DEFAULT_PRESET && filters.type === '';
+  const isDefaultFilters = filters.type === '';
 
   const clearFilters = () => {
-    const next = { from: initFrom, to: initTo, type: '', preset: DEFAULT_PRESET };
+    const next = { type: '' };
     setFilters(next);
     load(next);
   };
@@ -230,30 +224,11 @@ export default function Sources() {
               <div style={{ height: '100%', borderRadius: 2, background: row.color, width: `${Math.max(2, grandTotal > 0 ? (row.pageviews / grandTotal) * 100 : 0)}%` }} />
             </div>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', minWidth: 40 }}>{fmt(row.pageviews)}</span>
-            <ChangeBadge change={row.changes?.pageviews} />
           </div>
         );
-      case 'users':
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-            {fmt(row.users)}
-            <ChangeBadge change={row.changes?.users} />
-          </div>
-        );
-      case 'article_count':
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-            {fmt(row.article_count)}
-            <ChangeBadge change={row.changes?.article_count} />
-          </div>
-        );
-      case 'newsletter_signups':
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-            {fmt(row.newsletter_signups)}
-            <ChangeBadge change={row.changes?.newsletter_signups} />
-          </div>
-        );
+      case 'users':          return fmt(row.users);
+      case 'article_count':  return fmt(row.article_count);
+      case 'newsletter_signups': return fmt(row.newsletter_signups);
       case 'loyal_pct':        return row.loyal_pct > 0 ? row.loyal_pct.toFixed(1) + '%' : '—';
       case 'inmarket_pct':     return row.inmarket_pct > 0 ? row.inmarket_pct.toFixed(1) + '%' : '—';
       case 'score':
@@ -273,17 +248,6 @@ export default function Sources() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Published:</span>
-        <DatePresets
-          value={filters.preset}
-          from={filters.from}
-          to={filters.to}
-          onChange={(preset, from, to) => {
-            const next = { ...filters, preset, from, to };
-            setFilters(next);
-            load(next);
-          }}
-        />
         <select value={filters.type} onChange={e => setFilter('type', e.target.value)}>
           <option value="">All Types</option>
           {types.map(t => <option key={t.content_type} value={t.content_type}>{t.content_type} ({t.count})</option>)}
@@ -307,14 +271,10 @@ export default function Sources() {
         </div>
       </div>
 
-      {showComparisons && result?.previous_period && (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -12 }}>
-          <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges on the
-          Volume columns compare to the previous period: <strong style={{ color: 'var(--text-secondary)' }}>{result.previous_period.from}</strong> to{' '}
-          <strong style={{ color: 'var(--text-secondary)' }}>{result.previous_period.to}</strong>. Not shown on Subscribe Clicks or
-          Efficiency columns — those are GA4 channel-level data, always a trailing 30 days regardless of this filter.
-        </div>
-      )}
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -12 }}>
+        Volume columns reflect all synced content's current totals — not scoped to when articles were published.
+        Subscribe Clicks and Efficiency columns are GA4 channel-level data, always a trailing 30 days.
+      </div>
 
       {loading ? (
         <div style={{ padding: 40, color: 'var(--text-muted)' }}>Loading...</div>
@@ -346,9 +306,9 @@ export default function Sources() {
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--text-primary)', margin: 0 }}>Channels</h3>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                {fmt(grandTotal)} total pageviews{filters.from && filters.to ? `, ${filters.from} – ${filters.to}` : ''}.{' '}
+                {fmt(grandTotal)} total pageviews, all synced content.{' '}
                 {viewMode === 'efficiency' && (
-                  <>Columns marked <strong>≈</strong> come from GA4's channel taxonomy (always trailing 30 days, regardless of the date filter above) — hover a value for its source and confidence. </>
+                  <>Columns marked <strong>≈</strong> come from GA4's channel taxonomy (always trailing 30 days) — hover a value for its source and confidence. </>
                 )}
                 Columns marked <strong>*</strong> are estimated — hover a header for details.
               </p>

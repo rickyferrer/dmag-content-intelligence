@@ -77,11 +77,19 @@ export default function PublicationDetail({ issue, onClose }) {
       overflowY: 'auto', zIndex: 100,
       display: 'flex', flexDirection: 'column',
     }}>
-      {/* Cover */}
+      {/* Cover — shown in full (never cropped), letterboxed on a neutral
+          background so a portrait-oriented magazine cover doesn't get
+          clipped the way a wide object-fit:cover banner would. */}
       {issue.cover_image_url && (
-        <img src={issue.cover_image_url} alt=""
-          style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block', borderBottom: '1px solid var(--border)' }}
-        />
+        <div style={{
+          width: '100%', height: 220, background: 'var(--bg-elevated)',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <img src={issue.cover_image_url} alt=""
+            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
+          />
+        </div>
       )}
 
       {/* Header */}

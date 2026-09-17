@@ -731,8 +731,13 @@ router.get('/source-performance', (req, res) => {
 });
 
 // Shared by /by-traffic-source and /channels: per-Marfeel-source volume
-// totals (pageviews, users, loyal/in-market, newsletter signups), scoped to
-// articles published in [dateFrom, dateTo] and optionally filtered by type.
+// totals (pageviews, users, loyal/in-market, newsletter signups), across all
+// synced content — not scoped to when the underlying articles were
+// published, since this is about where CURRENT traffic comes from, not
+// which articles happen to have come out in some window. dateFrom/dateTo
+// are still accepted for /by-traffic-source callers that want that scoping;
+// /channels (the Sources tab) intentionally omits them. Optionally filtered
+// by type either way.
 //
 // content_sources has one row per (article, source) — a real per-source
 // pageview split. analytics_snapshots has only one row per article — GA4
@@ -864,30 +869,6 @@ const CUSTOM_CHANNELS = {
   },
 };
 
-// Sums fetchSourceRows() output into per-channel totals for just the
-// metrics that are genuinely date-scoped (Marfeel-sourced, article-level) —
-// used to diff a channel against its previous period. Deliberately excludes
-// GA4 channel-level metrics (subscribe clicks, loyal %, in-market %, revenue)
-// since GA4 is always a trailing-30-day snapshot regardless of the date
-// filter, so comparing it against a shifted "previous period" would compare
-// two overlapping or nonsensical windows — see GA4_UNAVAILABLE_NOTES/note
-// above for the same reasoning applied to the Efficiency columns.
-function buildChannelTotals(sourceRows) {
-  const buckets = {};
-  for (const key of Object.keys(CUSTOM_CHANNELS)) {
-    buckets[key] = { key, pageviews: 0, users: 0, article_count: 0, newsletter_signups: 0 };
-  }
-  for (const row of sourceRows) {
-    const key = customChannelFor(row.source);
-    const b = buckets[key];
-    b.pageviews          += row.total_pageviews || 0;
-    b.users              += row.total_users || 0;
-    b.article_count      += row.article_count || 0;
-    b.newsletter_signups += row.total_newsletter_signups || 0;
-  }
-  return buckets;
-}
-
 function customChannelFor(source) {
   for (const [key, ch] of Object.entries(CUSTOM_CHANNELS)) {
     if (key === 'referral') continue;
@@ -918,15 +899,17 @@ const GA4_UNAVAILABLE_NOTES = {
 };
 
 // GET /api/analytics/channels
-// The unified Sources view: custom (Marfeel-source-derived, date-scoped)
-// volume metrics merged with GA4 (channel-level, trailing-30-day) conversion
-// metrics, joined through an explicit, honest mapping between the two
-// taxonomies rather than a blended/approximated single metric set.
+// The unified Sources view: custom (Marfeel-source-derived) volume metrics
+// across all synced content, merged with GA4 (channel-level, trailing-30-day)
+// conversion metrics, joined through an explicit, honest mapping between the
+// two taxonomies rather than a blended/approximated single metric set. Not
+// scoped by publish date — this answers "where does our traffic come from",
+// not "where did traffic for articles published in X come from".
 router.get('/channels', (req, res) => {
   const db = getDb();
-  const { dateFrom, dateTo, type } = req.query;
+  const { type } = req.query;
 
-  const sourceRows = fetchSourceRows(db, { dateFrom, dateTo, type });
+  const sourceRows = fetchSourceRows(db, { type });
 
   const buckets = {};
   for (const key of Object.keys(CUSTOM_CHANNELS)) {
@@ -1015,7 +998,7 @@ router.get('/channels', (req, res) => {
   for (const c of channels) {
     const raw = byCustomKey[c.key];
     if (raw) {
-      c.ga4 = { status: 'approximate', note: 'GA4 and Marfeel classify traffic differently and GA4 always reflects a trailing 30 days, regardless of the date filter above — treat as directional.', ...shapeGA4Row(raw) };
+      c.ga4 = { status: 'approximate', note: 'GA4 and Marfeel classify traffic differently and GA4 always reflects a trailing 30 days — treat as directional.', ...shapeGA4Row(raw) };
     } else {
       c.ga4 = { status: 'unavailable', note: GA4_UNAVAILABLE_NOTES[c.key] || 'GA4 has no channel that reliably maps to this group.' };
     }
@@ -1023,37 +1006,11 @@ router.get('/channels', (req, res) => {
 
   channels.sort((a, b) => b.pageviews - a.pageviews);
 
-  // Previous-period comparison — Volume columns only (Traffic, Users,
-  // Articles, Newsletter Signups). Efficiency columns and the "Subscribe
-  // Clicks" volume column are both GA4 channel-level data, always a
-  // trailing 30 days regardless of the date filter, so a shifted
-  // "previous period" wouldn't mean what it means everywhere else — see
-  // buildChannelTotals() above.
-  const previous_period = previousPeriodRange(dateFrom, dateTo);
-  if (previous_period) {
-    const prevSourceRows = fetchSourceRows(db, { dateFrom: previous_period.from, dateTo: previous_period.to, type });
-    const prevTotals = buildChannelTotals(prevSourceRows);
-    for (const c of channels) {
-      const prev = prevTotals[c.key];
-      c.changes = prev ? {
-        pageviews: pctChange(c.pageviews, prev.pageviews),
-        users: pctChange(c.users, prev.users),
-        article_count: pctChange(c.article_count, prev.article_count),
-        newsletter_signups: pctChange(c.newsletter_signups, prev.newsletter_signups),
-      } : null;
-    }
-  } else {
-    for (const c of channels) c.changes = null;
-  }
-
   res.json({
-    dateFrom: dateFrom || null,
-    dateTo: dateTo || null,
     type: type || null,
     ga4_snapshot_at: ga4Snapshot?.snapshot_at || null,
     channels,
     unmapped_ga4: unmapped,
-    previous_period,
     volume_metrics_note: 'Users, Loyal %, In-Market %, and Newsletter Signups are estimated per channel by splitting each article\'s total figures proportionally by pageview share across its traffic sources — GA4 and Marfeel report these per article, not broken down by individual source.',
   });
 });
