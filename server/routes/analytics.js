@@ -1049,21 +1049,34 @@ router.get('/channels', (req, res) => {
   channels.sort((a, b) => b.pageviews - a.pageviews);
 
   // Trailing-30-day comparison: the current (latest) rolling-30-day Volume
-  // totals vs. the same rolling-30-day metric as of ~30 days ago — always
-  // this fixed window, independent of the Type filter's own scoping, since
-  // there's no user-picked date range anymore to derive a "previous period"
-  // from. See fetchSourceRows' `asOf` handling and buildChannelTotals above.
-  const asOf = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const prevSourceRows = fetchSourceRows(db, { type, asOf });
-  const prevTotals = buildChannelTotals(prevSourceRows);
-  for (const c of channels) {
-    const prev = prevTotals[c.key];
-    c.changes = prev ? {
-      pageviews: pctChange(c.pageviews, prev.pageviews),
-      users: pctChange(c.users, prev.users),
-      article_count: pctChange(c.article_count, prev.article_count),
-      newsletter_signups: pctChange(c.newsletter_signups, prev.newsletter_signups),
-    } : null;
+  // totals vs. the same rolling-30-day metric as of the OLDEST snapshot
+  // content_sources still retains, independent of the Type filter's own
+  // scoping. Deliberately not a fixed "now minus 30 days" cutoff: the prune
+  // in scheduler.js keeps the 30 most recent *sync runs*, not 30 calendar
+  // days — if sync only recently started running reliably (or ran more than
+  // once a day for a stretch), the oldest retained snapshot can be much
+  // more recent than 30 days ago. A hardcoded cutoff would then find no
+  // snapshot at all and silently null out every comparison. Using whatever
+  // the oldest retained snapshot actually is always finds real data, and
+  // converges to a true ~30-day comparison once enough daily history has
+  // accumulated. See fetchSourceRows' `asOf` handling and buildChannelTotals
+  // above.
+  const snapshotRange = db.prepare('SELECT MIN(snapshot_at) AS oldest, MAX(snapshot_at) AS latest FROM content_sources').get();
+  const asOf = (snapshotRange?.oldest && snapshotRange.oldest < snapshotRange.latest) ? snapshotRange.oldest : null;
+  if (asOf) {
+    const prevSourceRows = fetchSourceRows(db, { type, asOf });
+    const prevTotals = buildChannelTotals(prevSourceRows);
+    for (const c of channels) {
+      const prev = prevTotals[c.key];
+      c.changes = prev ? {
+        pageviews: pctChange(c.pageviews, prev.pageviews),
+        users: pctChange(c.users, prev.users),
+        article_count: pctChange(c.article_count, prev.article_count),
+        newsletter_signups: pctChange(c.newsletter_signups, prev.newsletter_signups),
+      } : null;
+    }
+  } else {
+    for (const c of channels) c.changes = null;
   }
 
   res.json({
