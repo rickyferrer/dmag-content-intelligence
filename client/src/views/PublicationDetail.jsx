@@ -3,8 +3,8 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import { api } from '../api/index.js';
 import NeedBadge, { NEED_META } from '../components/NeedBadge.jsx';
 
-const PUB_DISPLAY = { 'd-magazine': 'D Magazine', 'd-home': 'D Home', 'd-ceo': 'D CEO' };
-const PUB_COLORS = { 'd-magazine': '#c9a84c', 'd-home': '#5b9bd5', 'd-ceo': '#7c5cbf' };
+const PUB_DISPLAY = { 'd-magazine': 'D Magazine', 'd-home': 'D Home', 'd-ceo': 'D CEO', 'd-weddings': 'D Weddings' };
+const PUB_COLORS = { 'd-magazine': '#c9a84c', 'd-home': '#5b9bd5', 'd-ceo': '#7c5cbf', 'd-weddings': '#c2679e' };
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -77,6 +77,13 @@ export default function PublicationDetail({ issue, onClose }) {
       overflowY: 'auto', zIndex: 100,
       display: 'flex', flexDirection: 'column',
     }}>
+      {/* Cover */}
+      {issue.cover_image_url && (
+        <img src={issue.cover_image_url} alt=""
+          style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block', borderBottom: '1px solid var(--border)' }}
+        />
+      )}
+
       {/* Header */}
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ flex: 1 }}>
@@ -155,14 +162,23 @@ export default function PublicationDetail({ issue, onClose }) {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {articles.map(a => (
                 <a key={a.wp_id} href={a.url} target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'block', padding: '10px 0', borderBottom: '1px solid var(--border-subtle)', textDecoration: 'none' }}
+                  style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border-subtle)', textDecoration: 'none' }}
                 >
-                  <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 5, lineHeight: 1.4 }}>{a.title}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <NeedBadge need={a.user_need} />
-                    <span style={{ fontSize: 12, color: 'var(--accent-gold)', fontFamily: 'var(--font-mono)' }}>
-                      LTV {a.lifetime_value != null ? Math.round(a.lifetime_value) : '—'}
-                    </span>
+                  {a.cover_image_url ? (
+                    <img src={a.cover_image_url} alt=""
+                      style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid var(--border)' }}
+                    />
+                  ) : (
+                    <div style={{ width: 44, height: 44, borderRadius: 4, background: 'var(--bg-elevated)', flexShrink: 0, border: '1px solid var(--border)' }} />
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 5, lineHeight: 1.4 }}>{a.title}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <NeedBadge need={a.user_need} />
+                      <span style={{ fontSize: 12, color: 'var(--accent-gold)', fontFamily: 'var(--font-mono)' }}>
+                        LTV {a.lifetime_value != null ? Math.round(a.lifetime_value) : '—'}
+                      </span>
+                    </div>
                   </div>
                 </a>
               ))}

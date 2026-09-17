@@ -295,6 +295,9 @@ function initSchema() {
   // for individual articles (Content tab, article detail) — true_value keeps
   // feeding every grouped rollup (Sections, Writers, User Needs, etc.).
   try { db.exec('ALTER TABLE analytics_snapshots ADD COLUMN lifetime_value REAL'); } catch {}
+  // WordPress featured-image URL (a display-size thumbnail, not the full
+  // original) — see sync/wordpress.js's fetchMediaUrls().
+  try { db.exec('ALTER TABLE content ADD COLUMN cover_image_url TEXT'); } catch {}
 
   // One-time split of the old combined "loyal in-market" weight into two
   // independent weights (score_w_loyal, score_w_inmarket) — see

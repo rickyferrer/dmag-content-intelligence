@@ -5,6 +5,7 @@ const PUB_LABELS = {
   'D Magazine': 'd-magazine',
   'D Home': 'd-home',
   'D CEO': 'd-ceo',
+  'D Weddings': 'd-weddings',
 };
 const PUB_DISPLAY = Object.fromEntries(Object.entries(PUB_LABELS).map(([k, v]) => [v, k]));
 
@@ -12,6 +13,7 @@ const PUB_COLORS = {
   'd-magazine': '#c9a84c',
   'd-home': '#5b9bd5',
   'd-ceo': '#7c5cbf',
+  'd-weddings': '#c2679e',
 };
 
 function fmt(n) {
@@ -74,6 +76,7 @@ export default function Publications({ onSelect }) {
   });
 
   const COLS = [
+    { key: 'cover',                   label: 'Cover', sortable: false },
     { key: 'date',                    label: 'Issue' },
     { key: 'publication',             label: 'Publication' },
     { key: 'article_count',           label: 'Articles' },
@@ -90,14 +93,15 @@ export default function Publications({ onSelect }) {
 
   const Th = ({ col }) => {
     const active = sort.col === col.key;
+    const sortable = col.sortable !== false;
     return (
       <th
-        onClick={() => toggleSort(col.key)}
+        onClick={sortable ? () => toggleSort(col.key) : undefined}
         style={{
-          padding: '10px 12px', textAlign: col.key === 'top_article' ? 'left' : 'left',
+          padding: '10px 12px', textAlign: 'left',
           fontSize: 12, fontWeight: 600, color: active ? 'var(--accent-gold)' : 'var(--text-muted)',
           textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap',
-          cursor: 'pointer', userSelect: 'none',
+          cursor: sortable ? 'pointer' : 'default', userSelect: 'none',
         }}
       >
         {col.label}{active ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : ''}
@@ -150,6 +154,16 @@ export default function Publications({ onSelect }) {
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                     onMouseLeave={e => e.currentTarget.style.background = ''}
                   >
+                    {/* Cover */}
+                    <td style={{ padding: '8px 12px' }}>
+                      {row.cover_image_url ? (
+                        <img src={row.cover_image_url} alt=""
+                          style={{ width: 40, height: 52, objectFit: 'cover', borderRadius: 4, display: 'block', border: '1px solid var(--border)' }}
+                        />
+                      ) : (
+                        <div style={{ width: 40, height: 52, borderRadius: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }} />
+                      )}
+                    </td>
                     {/* Issue */}
                     <td style={{ padding: '10px 12px', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                       {capitalize(row.month)} {row.year}
@@ -219,7 +233,7 @@ export default function Publications({ onSelect }) {
               })}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={12} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={13} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
                     No publication issues found
                   </td>
                 </tr>

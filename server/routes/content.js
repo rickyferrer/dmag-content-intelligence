@@ -97,6 +97,7 @@ router.get('/', (req, res) => {
       c.wp_id, c.slug, c.url, c.title, c.content_type, c.author, c.writer,
       c.published_at, c.section, c.user_need, c.user_need_secondary,
       c.user_need_confidence, c.user_need_rationale, c.subscription_required,
+      c.cover_image_url,
       a.ga4_pageviews, a.ga4_users, a.ga4_loyal_users,
       a.ga4_inmarket_pageviews, a.ga4_loyal_inmarket_pv,
       a.ga4_avg_engagement_time, a.ga4_sessions,

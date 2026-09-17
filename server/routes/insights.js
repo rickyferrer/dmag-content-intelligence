@@ -49,7 +49,7 @@ const SCHEMA_PROMPT = `You are an analyst answering questions about D Magazine's
   categories, tags (JSON strings), user_need, user_need_secondary, user_need_confidence,
   subscription_required, excluded_from_scoring
   - user_need is one of: update_me, educate_me, give_perspective, divert_me, inspire_me, help_me, connect_me, keep_me_engaged
-  - URLs for magazine issues look like /publications/{d-magazine|d-home|d-ceo}/{year}/{month}/{slug}/
+  - URLs for magazine issues look like /publications/{d-magazine|d-home|d-ceo|d-weddings}/{year}/{month}/{slug}/
 
 **analytics_snapshots** — many rows per wp_id over time (a history of snapshots)
   wp_id, snapshot_at, ga4_pageviews, ga4_users, ga4_loyal_users, ga4_inmarket_pageviews,

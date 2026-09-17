@@ -8,7 +8,7 @@ import { ChangeBadge } from '../components/KPICard.jsx';
 import { useComparisons } from '../context/ComparisonContext.jsx';
 import { SUBSCRIBE_CLICKS_NOTE, NEWSLETTER_NOTE } from '../constants/dataReliability.js';
 
-const PUB_DISPLAY = { 'd-magazine': 'D Magazine', 'd-home': 'D Home', 'd-ceo': 'D CEO' };
+const PUB_DISPLAY = { 'd-magazine': 'D Magazine', 'd-home': 'D Home', 'd-ceo': 'D CEO', 'd-weddings': 'D Weddings' };
 
 // Maps column header label → API sort key
 const COLUMNS = [
@@ -363,10 +363,21 @@ export default function ContentTable({ onSelect }) {
                 onMouseLeave={e => e.currentTarget.style.background = ''}
               >
                 <td style={{ padding: '9px 12px', maxWidth: 300 }}>
-                  <div style={{ fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {row.title}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {row.cover_image_url ? (
+                      <img src={row.cover_image_url} alt=""
+                        style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid var(--border)' }}
+                      />
+                    ) : (
+                      <div style={{ width: 32, height: 32, borderRadius: 4, background: 'var(--bg-elevated)', flexShrink: 0, border: '1px solid var(--border)' }} />
+                    )}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {row.title}
+                      </div>
+                      {(row.writer || row.author) && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{row.writer || row.author}</div>}
+                    </div>
                   </div>
-                  {(row.writer || row.author) && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{row.writer || row.author}</div>}
                 </td>
                 <td style={{ padding: '9px 12px', fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{row.content_type}</td>
                 <td style={{ padding: '9px 12px', fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{row.section || '—'}</td>

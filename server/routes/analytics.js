@@ -355,7 +355,7 @@ router.get('/by-need', (req, res) => {
 
   // Find top performing article per need
   const topArticles = db.prepare(`
-    SELECT c.user_need, c.wp_id, c.title, c.url, a.true_value
+    SELECT c.user_need, c.wp_id, c.title, c.url, c.cover_image_url, a.true_value
     FROM content c
     JOIN (
       SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots GROUP BY wp_id
@@ -487,7 +487,7 @@ router.get('/by-section', (req, res) => {
 
   // Top article per section
   const topRows = db.prepare(`
-    SELECT c.section, c.wp_id, c.title, c.url, a.true_value
+    SELECT c.section, c.wp_id, c.title, c.url, c.cover_image_url, a.true_value
     FROM content c
     JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
@@ -547,7 +547,7 @@ router.get('/by-writer', (req, res) => {
 
   // Top article per writer
   const topRows = db.prepare(`
-    SELECT c.writer, c.wp_id, c.title, c.url, a.true_value
+    SELECT c.writer, c.wp_id, c.title, c.url, c.cover_image_url, a.true_value
     FROM content c
     JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
@@ -583,7 +583,7 @@ router.get('/by-issue', (req, res) => {
   // tab's /api/content merge, so the two views agree instead of one
   // silently showing only the live number for older issues.
   const rows = db.prepare(`
-    SELECT c.wp_id, c.url, c.title, c.published_at,
+    SELECT c.wp_id, c.url, c.title, c.published_at, c.cover_image_url,
       a.true_value, a.ga4_users, a.ga4_pageviews,
       (COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS ga4_subscribe_clicks,
       (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS mf_newsletter_signups,
@@ -630,7 +630,7 @@ router.get('/by-issue', (req, res) => {
         article_count: 0, total_true_value: 0, total_users: 0,
         total_pageviews: 0, total_subscribe_clicks: 0, total_newsletter_signups: 0,
         total_loyal_users: 0, _eng_sum: 0, _eng_count: 0,
-        top_article: null,
+        top_article: null, cover_image_url: null,
       };
     }
     const issue = issueMap[key];
@@ -646,12 +646,22 @@ router.get('/by-issue', (req, res) => {
       issue._eng_count++;
     }
     if (!issue.top_article || (row.true_value || 0) > (issue.top_article.true_value || 0)) {
-      issue.top_article = { wp_id: row.wp_id, title: row.title, url: row.url, true_value: row.true_value };
+      issue.top_article = { wp_id: row.wp_id, title: row.title, url: row.url, true_value: row.true_value, cover_image_url: row.cover_image_url };
+    }
+    // The issue's own bare landing page (…/month/ with no slug after it —
+    // same page the comment above already treats as part of the issue)
+    // carries the actual magazine cover, so prefer it over whichever
+    // individual article happens to score highest.
+    if (!issue.cover_image_url && row.cover_image_url && row.url.slice(match.index + match[0].length) === '') {
+      issue.cover_image_url = row.cover_image_url;
     }
   }
 
   const result = Object.values(issueMap).map(({ _eng_sum, _eng_count, ...issue }) => ({
     ...issue,
+    // Fall back to the top article's image when the issue's own landing
+    // page has no featured image set.
+    cover_image_url: issue.cover_image_url || issue.top_article?.cover_image_url || null,
     avg_engagement_time: _eng_count > 0 ? _eng_sum / _eng_count : 0,
     avg_true_value: issue.article_count > 0 ? issue.total_true_value / issue.article_count : 0,
   }));

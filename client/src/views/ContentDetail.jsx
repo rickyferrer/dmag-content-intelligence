@@ -84,6 +84,13 @@ export default function ContentDetail({ wpId, onClose }) {
       overflowY: 'auto', zIndex: 100,
       display: 'flex', flexDirection: 'column',
     }}>
+      {/* Cover */}
+      {item?.cover_image_url && (
+        <img src={item.cover_image_url} alt=""
+          style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block', borderBottom: '1px solid var(--border)' }}
+        />
+      )}
+
       {/* Header */}
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ flex: 1 }}>

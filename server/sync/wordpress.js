@@ -14,7 +14,7 @@ const FULL_SYNC_LOOKBACK_YEARS = 2;
 const META_PER_PAGE = 50;
 // We request only the nested acf.writers array (not full ACF, which includes huge
 // hero-image objects). acf.writers[] holds the editorial byline as writer_id refs.
-const META_FIELDS = 'id,slug,link,title,date,modified,author,categories,tags,section,type,acf.writers';
+const META_FIELDS = 'id,slug,link,title,date,modified,author,categories,tags,section,type,acf.writers,featured_media';
 
 // Pass 2: fetch full content in small ID batches to avoid large responses
 const CONTENT_BATCH_SIZE = 10;
@@ -163,6 +163,43 @@ async function fetchWriterNames(ids) {
   return cache;
 }
 
+// featured_media is a plain attachment-post ID (0 when no featured image is
+// set) — cheap to request alongside the rest of META_FIELDS. The actual
+// image URL isn't in this response; it's resolved separately below.
+function parseFeaturedMediaId(post) {
+  return post.featured_media || 0;
+}
+
+// Resolve featured-media attachment IDs to a display-size image URL,
+// batched via ?include= same as fetchWriterNames. Prefers a mid-size
+// rendition (medium_large, then medium) over the full original — a cover
+// thumbnail doesn't need a multi-MB source image — falling back to
+// source_url only if WordPress hasn't generated those sizes for this
+// attachment (e.g. an image smaller than the medium_large threshold).
+async function fetchMediaUrls(ids) {
+  const cache = new Map();
+  const unique = [...new Set(ids)].filter(Boolean);
+  const fields = 'id,source_url,media_details.sizes.medium_large.source_url,media_details.sizes.medium.source_url';
+  for (let i = 0; i < unique.length; i += 100) {
+    const chunk = unique.slice(i, i + 100);
+    const url = `${WP_BASE}/media?include=${chunk.join(',')}&per_page=100&_fields=${fields}`;
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+      if (!res.ok) continue;
+      const items = await res.json();
+      for (const it of items) {
+        const sizes = it.media_details?.sizes;
+        const src = sizes?.medium_large?.source_url || sizes?.medium?.source_url || it.source_url;
+        if (src) cache.set(it.id, src);
+      }
+      if (i + 100 < unique.length) await sleep(PAGE_DELAY_MS);
+    } catch (err) {
+      console.warn(`[WP] Media fetch failed for chunk:`, err.message);
+    }
+  }
+  return cache;
+}
+
 function parseSubscriptionRequired(post) {
   // acf removed from meta fields to avoid massive response sizes;
   // subscription_required defaults to 0 — update via separate ACF pass if needed
@@ -239,6 +276,8 @@ export async function syncWordPress() {
   const typeToIds = new Map(); // type → [wp_id, ...]
   // Track writer-id references per post for the writer-resolution pass
   const writerIdsByPost = new Map(); // wp_id → [writer_id, ...]
+  // Track featured-media attachment IDs per post for the cover-image pass
+  const featuredMediaByPost = new Map(); // wp_id → media_id
 
   let totalMeta = 0;
   const errors = [];
@@ -290,6 +329,8 @@ export async function syncWordPress() {
             ids.push(post.id);
             const wIds = parseWriterIds(post);
             if (wIds.length > 0) writerIdsByPost.set(post.id, wIds);
+            const mediaId = parseFeaturedMediaId(post);
+            if (mediaId) featuredMediaByPost.set(post.id, mediaId);
           }
         })();
 
@@ -325,6 +366,22 @@ export async function syncWordPress() {
       }
     })();
     console.log(`[WP] Resolved writers for ${writerUpdates} posts (${writerCache.size} unique names).`);
+  }
+
+  // PASS 1.6: resolve featured-image URLs and update content rows. Same
+  // isolated-pass reasoning as writers above — a failed media fetch never
+  // wipes an existing cover_image_url.
+  if (featuredMediaByPost.size > 0) {
+    const mediaCache = await fetchMediaUrls([...featuredMediaByPost.values()]);
+    const updateCover = db.prepare('UPDATE content SET cover_image_url = ? WHERE wp_id = ?');
+    let coverUpdates = 0;
+    db.transaction(() => {
+      for (const [wpId, mediaId] of featuredMediaByPost) {
+        const src = mediaCache.get(mediaId);
+        if (src) { updateCover.run(src, wpId); coverUpdates++; }
+      }
+    })();
+    console.log(`[WP] Resolved cover images for ${coverUpdates} posts (${mediaCache.size} unique images).`);
   }
 
   console.log('[WP] Starting content fetch...');
