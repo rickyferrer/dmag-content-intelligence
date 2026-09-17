@@ -80,8 +80,8 @@ export default function Publications({ onSelect }) {
     { key: 'date',                    label: 'Issue' },
     { key: 'publication',             label: 'Publication' },
     { key: 'article_count',           label: 'Articles' },
-    { key: 'total_true_value',        label: 'Total Content Value' },
-    { key: 'avg_true_value',          label: 'Avg Content Value' },
+    { key: 'total_lifetime_value',    label: 'Lifetime Value' },
+    { key: 'avg_lifetime_value',      label: 'Avg Lifetime Value' },
     { key: 'total_users',             label: 'Users' },
     { key: 'total_loyal_users',       label: 'Loyal' },
     { key: 'total_pageviews',         label: 'Pageviews' },
@@ -181,13 +181,13 @@ export default function Publications({ onSelect }) {
                     <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
                       {row.article_count}
                     </td>
-                    {/* Total Content Value */}
+                    {/* Lifetime Value */}
                     <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)', textAlign: 'right', fontWeight: 600 }}>
-                      {row.total_true_value != null ? Math.round(row.total_true_value) : '—'}
+                      {row.total_lifetime_value != null ? Math.round(row.total_lifetime_value) : '—'}
                     </td>
-                    {/* Avg Content Value */}
+                    {/* Avg Lifetime Value */}
                     <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
-                      {row.avg_true_value != null ? row.avg_true_value.toFixed(1) : '—'}
+                      {row.avg_lifetime_value != null ? row.avg_lifetime_value.toFixed(1) : '—'}
                     </td>
                     {/* Users */}
                     <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
@@ -223,7 +223,7 @@ export default function Publications({ onSelect }) {
                             {row.top_article.title}
                           </a>
                           <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                            TV {row.top_article.true_value != null ? Math.round(row.top_article.true_value) : '—'}
+                            LTV {row.top_article.lifetime_value != null ? Math.round(row.top_article.lifetime_value) : '—'}
                           </span>
                         </div>
                       ) : '—'}

@@ -108,8 +108,8 @@ export default function PublicationDetail({ issue, onClose }) {
           </h3>
           <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '4px 0' }}>
             <StatRow label="Articles" value={issue.article_count} />
-            <StatRow label="Total Content Value" value={issue.total_true_value != null ? Math.round(issue.total_true_value) : '—'} accent />
-            <StatRow label="Avg Content Value" value={issue.avg_true_value != null ? issue.avg_true_value.toFixed(1) : '—'} />
+            <StatRow label="Lifetime Value" value={issue.total_lifetime_value != null ? Math.round(issue.total_lifetime_value) : '—'} accent />
+            <StatRow label="Avg Lifetime Value" value={issue.avg_lifetime_value != null ? issue.avg_lifetime_value.toFixed(1) : '—'} />
             <StatRow label="Users" value={fmt(issue.total_users)} />
             <StatRow label="Loyal Users" value={fmt(issue.total_loyal_users)} />
             <StatRow label="Pageviews" value={fmt(issue.total_pageviews)} />

@@ -584,7 +584,7 @@ router.get('/by-issue', (req, res) => {
   // silently showing only the live number for older issues.
   const rows = db.prepare(`
     SELECT c.wp_id, c.url, c.title, c.published_at, c.cover_image_url,
-      a.true_value, a.ga4_users, a.ga4_pageviews,
+      a.lifetime_value, a.ga4_users, a.ga4_pageviews,
       (COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS ga4_subscribe_clicks,
       (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS mf_newsletter_signups,
       a.ga4_loyal_users, a.ga4_avg_engagement_time
@@ -627,7 +627,7 @@ router.get('/by-issue', (req, res) => {
     if (!issueMap[key]) {
       issueMap[key] = {
         publication: pub, year: yr, month: mo,
-        article_count: 0, total_true_value: 0, total_users: 0,
+        article_count: 0, total_lifetime_value: 0, total_users: 0,
         total_pageviews: 0, total_subscribe_clicks: 0, total_newsletter_signups: 0,
         total_loyal_users: 0, _eng_sum: 0, _eng_count: 0,
         top_article: null, cover_image_url: null,
@@ -635,7 +635,7 @@ router.get('/by-issue', (req, res) => {
     }
     const issue = issueMap[key];
     issue.article_count++;
-    issue.total_true_value += row.true_value || 0;
+    issue.total_lifetime_value += row.lifetime_value || 0;
     issue.total_users += row.ga4_users || 0;
     issue.total_pageviews += row.ga4_pageviews || 0;
     issue.total_subscribe_clicks += row.ga4_subscribe_clicks || 0;
@@ -645,8 +645,8 @@ router.get('/by-issue', (req, res) => {
       issue._eng_sum += row.ga4_avg_engagement_time;
       issue._eng_count++;
     }
-    if (!issue.top_article || (row.true_value || 0) > (issue.top_article.true_value || 0)) {
-      issue.top_article = { wp_id: row.wp_id, title: row.title, url: row.url, true_value: row.true_value, cover_image_url: row.cover_image_url };
+    if (!issue.top_article || (row.lifetime_value || 0) > (issue.top_article.lifetime_value || 0)) {
+      issue.top_article = { wp_id: row.wp_id, title: row.title, url: row.url, lifetime_value: row.lifetime_value, cover_image_url: row.cover_image_url };
     }
     // The issue's own bare landing page (…/month/ with no slug after it —
     // same page the comment above already treats as part of the issue)
@@ -663,7 +663,7 @@ router.get('/by-issue', (req, res) => {
     // page has no featured image set.
     cover_image_url: issue.cover_image_url || issue.top_article?.cover_image_url || null,
     avg_engagement_time: _eng_count > 0 ? _eng_sum / _eng_count : 0,
-    avg_true_value: issue.article_count > 0 ? issue.total_true_value / issue.article_count : 0,
+    avg_lifetime_value: issue.article_count > 0 ? issue.total_lifetime_value / issue.article_count : 0,
   }));
 
   result.sort((a, b) => {
