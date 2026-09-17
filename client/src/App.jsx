@@ -10,6 +10,7 @@ import PublicationDetail from './views/PublicationDetail.jsx';
 import Writers from './views/Writers.jsx';
 import WriterDetail from './views/WriterDetail.jsx';
 import Vulnerability from './views/Vulnerability.jsx';
+import Goals from './views/Goals.jsx';
 import Insights from './views/Insights.jsx';
 import Settings from './views/Settings.jsx';
 import { ComparisonProvider } from './context/ComparisonContext.jsx';
@@ -25,6 +26,7 @@ const NAV = [
   { id: 'sources',       label: 'Sources' },
   { id: 'needs',          label: 'User Needs' },
   { id: 'vulnerability',  label: 'AI Vulnerability' },
+  { id: 'goals',          label: 'Goals' },
   { id: 'insights',       label: 'Insights' },
   { id: 'settings',       label: 'Settings' },
 ];
@@ -188,6 +190,7 @@ export default function App() {
         {view === 'writers'        && <Writers onSelect={setSelectedWriter} />}
         {view === 'needs'          && <UserNeedsAnalysis />}
         {view === 'vulnerability'  && <Vulnerability />}
+        {view === 'goals'          && <Goals />}
         {view === 'insights'       && <Insights />}
         {view === 'settings'  && <Settings />}
       </main>

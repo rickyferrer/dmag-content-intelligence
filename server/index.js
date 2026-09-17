@@ -11,6 +11,7 @@ import analyticsRoutes from './routes/analytics.js';
 import syncRoutes from './routes/sync.js';
 import settingsRoutes from './routes/settings.js';
 import insightsRoutes from './routes/insights.js';
+import goalsRoutes from './routes/goals.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3001');
@@ -81,6 +82,7 @@ app.use('/api/analytics', auth, analyticsRoutes);
 app.use('/api/sync', auth, adminAuth, syncRoutes);
 app.use('/api/settings', auth, adminAuth, settingsRoutes);
 app.use('/api/insights', auth, insightsRoutes);
+app.use('/api/goals', auth, goalsRoutes);
 
 // Health check (no auth)
 app.get('/health', (req, res) => {

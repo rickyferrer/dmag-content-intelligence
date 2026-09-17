@@ -279,6 +279,27 @@ function initSchema() {
       applied_by        TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_benchmark_checks_checked_at ON benchmark_checks(checked_at);
+
+    -- Editor-defined goals ("hit 500K pageviews this month," "20 articles
+    -- from the Food & Drink section this quarter") — see utils/goals.js for
+    -- how progress/pacing against one of these is computed. metric and
+    -- scope_type are validated against utils/goals.js's METRICS/SCOPES
+    -- catalogs in routes/goals.js, not by a DB constraint, so the catalog
+    -- can grow without a migration. scope_value is NULL for a site-wide goal.
+    CREATE TABLE IF NOT EXISTS goals (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT NOT NULL,
+      metric      TEXT NOT NULL,
+      scope_type  TEXT NOT NULL,
+      scope_value TEXT,
+      target      REAL NOT NULL,
+      start_date  TEXT NOT NULL,
+      end_date    TEXT NOT NULL,
+      archived    INTEGER DEFAULT 0,
+      created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at  TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_goals_archived ON goals(archived);
   `);
 
   // Schema migrations — safe to run on every startup
@@ -455,6 +476,49 @@ export function updateSettings(updates) {
     }
   });
   updateMany(Object.entries(updates));
+}
+
+export function listGoals(includeArchived = false) {
+  const db = getDb();
+  const where = includeArchived ? '' : 'WHERE archived = 0';
+  return db.prepare(`SELECT * FROM goals ${where} ORDER BY end_date ASC, created_at DESC`).all();
+}
+
+export function getGoal(id) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM goals WHERE id = ?').get(id);
+}
+
+export function createGoal(goal) {
+  const db = getDb();
+  const result = db.prepare(`
+    INSERT INTO goals (name, metric, scope_type, scope_value, target, start_date, end_date)
+    VALUES (@name, @metric, @scope_type, @scope_value, @target, @start_date, @end_date)
+  `).run(goal);
+  return getGoal(result.lastInsertRowid);
+}
+
+export function updateGoal(id, goal) {
+  const db = getDb();
+  db.prepare(`
+    UPDATE goals SET
+      name = @name, metric = @metric, scope_type = @scope_type, scope_value = @scope_value,
+      target = @target, start_date = @start_date, end_date = @end_date,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = @id
+  `).run({ ...goal, id });
+  return getGoal(id);
+}
+
+export function setGoalArchived(id, archived) {
+  const db = getDb();
+  db.prepare('UPDATE goals SET archived = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(archived ? 1 : 0, id);
+  return getGoal(id);
+}
+
+export function deleteGoal(id) {
+  const db = getDb();
+  db.prepare('DELETE FROM goals WHERE id = ?').run(id);
 }
 
 // Run db init when executed directly

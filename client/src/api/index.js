@@ -57,4 +57,13 @@ export const api = {
   runBenchmarkCheck: () => apiFetch('/settings/benchmark-checks/run', { method: 'POST' }),
   applyBenchmarkCheck: (id) => apiFetch(`/settings/benchmark-checks/${id}/apply`, { method: 'POST' }),
   dismissBenchmarkCheck: (id) => apiFetch(`/settings/benchmark-checks/${id}/dismiss`, { method: 'POST' }),
+
+  // Goals
+  getGoalMetrics: () => apiFetch('/goals/metrics'),
+  getGoals: (params = {}) => apiFetch('/goals?' + new URLSearchParams(params)),
+  getGoal: (id) => apiFetch(`/goals/${id}`),
+  createGoal: (body) => apiFetch('/goals', { method: 'POST', body: JSON.stringify(body) }),
+  updateGoal: (id, body) => apiFetch(`/goals/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  archiveGoal: (id, archived = true) => apiFetch(`/goals/${id}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }),
+  deleteGoal: (id) => apiFetch(`/goals/${id}`, { method: 'DELETE' }),
 };
