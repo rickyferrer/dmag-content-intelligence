@@ -4,6 +4,8 @@ import {
   Tooltip, ResponsiveContainer, Cell, ZAxis,
 } from 'recharts';
 import { api } from '../api/index.js';
+import { ChangeBadge } from '../components/KPICard.jsx';
+import { useComparisons } from '../context/ComparisonContext.jsx';
 import { NEWSLETTER_NOTE } from '../constants/dataReliability.js';
 
 function fmt(n) {
@@ -152,6 +154,7 @@ function ChannelScatter({ channels }) {
 }
 
 export default function Sources() {
+  const { showComparisons } = useComparisons();
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
@@ -224,11 +227,30 @@ export default function Sources() {
               <div style={{ height: '100%', borderRadius: 2, background: row.color, width: `${Math.max(2, grandTotal > 0 ? (row.pageviews / grandTotal) * 100 : 0)}%` }} />
             </div>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', minWidth: 40 }}>{fmt(row.pageviews)}</span>
+            <ChangeBadge change={row.changes?.pageviews} />
           </div>
         );
-      case 'users':          return fmt(row.users);
-      case 'article_count':  return fmt(row.article_count);
-      case 'newsletter_signups': return fmt(row.newsletter_signups);
+      case 'users':
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+            {fmt(row.users)}
+            <ChangeBadge change={row.changes?.users} />
+          </div>
+        );
+      case 'article_count':
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+            {fmt(row.article_count)}
+            <ChangeBadge change={row.changes?.article_count} />
+          </div>
+        );
+      case 'newsletter_signups':
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+            {fmt(row.newsletter_signups)}
+            <ChangeBadge change={row.changes?.newsletter_signups} />
+          </div>
+        );
       case 'loyal_pct':        return row.loyal_pct > 0 ? row.loyal_pct.toFixed(1) + '%' : '—';
       case 'inmarket_pct':     return row.inmarket_pct > 0 ? row.inmarket_pct.toFixed(1) + '%' : '—';
       case 'score':
@@ -272,7 +294,13 @@ export default function Sources() {
       </div>
 
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -12 }}>
-        Volume columns reflect all synced content's current totals — not scoped to when articles were published.
+        Volume columns reflect all synced content's current totals — not scoped to when articles were published.{' '}
+        {showComparisons && result?.compared_to && (
+          <>
+            <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges compare
+            to the same trailing-30-day snapshot as of <strong style={{ color: 'var(--text-secondary)' }}>{result.compared_to.slice(0, 10)}</strong>.{' '}
+          </>
+        )}
         Subscribe Clicks and Efficiency columns are GA4 channel-level data, always a trailing 30 days.
       </div>
 
