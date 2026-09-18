@@ -21,9 +21,10 @@ const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
 // Volume: what happened (traffic, reach, output) — across ALL synced
 // content, never scoped to when the underlying articles were published (an
 // article published last year can still be driving traffic today, and
-// should still count). The date picker instead controls what the +/-%
-// comparison badges diff against — see the "Compare to" note rendered below
-// and /api/analytics/channels' own comment for why. Efficiency: how well it
+// should still count). The date range instead picks which traffic-source
+// snapshot to view ("to" = current, "from" = the comparison point when the
+// Comparisons toggle is on) — see the note rendered below and
+// /api/analytics/channels' own comment for why. Efficiency: how well it
 // converted — sourced from GA4's channel-level rollup, which is always a
 // trailing 30 days and uses a different taxonomy (see GA4_UNAVAILABLE_NOTES
 // server-side), so those columns get an "≈" and a tooltip rather than
@@ -172,14 +173,16 @@ export default function Sources() {
   const [showScatter, setShowScatter] = useState(true);
   const [lastAnalyticsSync, setLastAnalyticsSync] = useState(null);
 
-  // Only `from` is sent — see /api/analytics/channels' comment: Volume
-  // totals are never scoped by publish date, so `dateFrom` here only tells
-  // the backend which prior snapshot to diff the comparison badges against
-  // (`to` is unused for that purpose, so it's not sent).
-  const load = ({ from, type }) => {
+  // See /api/analytics/channels' comment: `to` picks which snapshot the
+  // CURRENT figures reflect (today/unset just means the true latest), and
+  // `from` — only used when the Comparisons toggle is on — picks the prior
+  // snapshot the +/-% badges diff against. Neither restricts which content
+  // counts by publish date.
+  const load = ({ from, to, type }) => {
     setLoading(true);
     const params = {};
     if (from) params.dateFrom = from;
+    if (to)   params.dateTo = to;
     if (type) params.type = type;
     api.getChannels(params)
       .then(setResult)
@@ -288,7 +291,7 @@ export default function Sources() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }} title="Doesn't restrict which content counts — only sets how far back the +/-% comparison badges look.">Compare to:</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }} title="Picks which traffic-source snapshot to view, not which articles count by publish date.">Date range:</span>
         <DatePresets
           value={filters.preset}
           from={filters.from}
@@ -323,11 +326,11 @@ export default function Sources() {
       </div>
 
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -12 }}>
-        Volume columns reflect all synced content's current totals — not scoped to when articles were published.{' '}
+        Volume columns reflect traffic-source data{result?.current_as_of ? <> as it stood on <strong style={{ color: 'var(--text-secondary)' }}>{result.current_as_of.slice(0, 10)}</strong></> : ' currently'} — not scoped to when articles were published.{' '}
         {showComparisons && result?.compared_to && (
           <>
             <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges compare
-            to the same data as it stood on <strong style={{ color: 'var(--text-secondary)' }}>{result.compared_to}</strong>.{' '}
+            to the previous range, as it stood on <strong style={{ color: 'var(--text-secondary)' }}>{result.compared_to}</strong>.{' '}
           </>
         )}
         Subscribe Clicks and Efficiency columns are GA4 channel-level data, always a trailing 30 days.
@@ -363,7 +366,7 @@ export default function Sources() {
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--text-primary)', margin: 0 }}>Channels</h3>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                {fmt(grandTotal)} total pageviews, all synced content.{' '}
+                {fmt(grandTotal)} total pageviews, all synced content{result?.current_as_of ? `, as of ${result.current_as_of.slice(0, 10)}` : ''}.{' '}
                 {viewMode === 'efficiency' && (
                   <>Columns marked <strong>≈</strong> come from GA4's channel taxonomy (always trailing 30 days) — hover a value for its source and confidence. </>
                 )}

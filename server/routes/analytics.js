@@ -945,23 +945,30 @@ const GA4_UNAVAILABLE_NOTES = {
 
 // GET /api/analytics/channels
 // The unified Sources view: custom (Marfeel-source-derived) volume metrics
-// across ALL synced content, merged with GA4 (channel-level, trailing-30-day)
-// conversion metrics, joined through an explicit, honest mapping between the
-// two taxonomies rather than a blended/approximated single metric set.
+// merged with GA4 (channel-level, trailing-30-day) conversion metrics,
+// joined through an explicit, honest mapping between the two taxonomies
+// rather than a blended/approximated single metric set.
 //
-// The Volume totals themselves are never scoped by `dateFrom` — this answers
-// "where does our traffic come from", not "where did traffic for articles
-// published in X come from" (an article published outside the selected
-// window can still be driving current traffic, and should still count). The
-// date picker instead controls the comparison: `dateFrom` becomes the `asOf`
-// cutoff fetchSourceRows uses to pull a prior snapshot, so the +/-% badges
-// show "current vs. as of the start of the selected window" — e.g. picking
-// "Last 30 days" compares to ~30 days ago, "Last 7 days" to ~7 days ago.
+// The date range picks WHICH SNAPSHOT of traffic-source data to view, not
+// which articles count — Volume totals are never scoped by c.published_at
+// (an article published outside the range can still be driving current
+// traffic, and should still count). `dateTo` becomes the `asOf` cutoff
+// fetchSourceRows uses for the CURRENT figures — pulling the most recent
+// snapshot at or before that point — except when `dateTo` is today (or
+// unset), where "current" just means the true latest snapshot rather than
+// an artificial same-day cutoff. `dateFrom` is only used for the
+// comparison, and only actually shown if the Comparisons toggle is on
+// (client-side): it's the `asOf` cutoff for a second, earlier snapshot,
+// diffed against the current one — "the previous range" in the sense of
+// "the state as of when this range started."
 router.get('/channels', (req, res) => {
   const db = getDb();
-  const { dateFrom, type } = req.query;
+  const { dateFrom, dateTo, type } = req.query;
 
-  const sourceRows = fetchSourceRows(db, { type });
+  const today = new Date().toISOString().slice(0, 10);
+  const currentAsOf = (dateTo && dateTo < today) ? dateTo + 'T23:59:59' : null;
+
+  const sourceRows = fetchSourceRows(db, { type, asOf: currentAsOf });
 
   const buckets = {};
   for (const key of Object.keys(CUSTOM_CHANNELS)) {
@@ -1058,12 +1065,14 @@ router.get('/channels', (req, res) => {
 
   channels.sort((a, b) => b.pageviews - a.pageviews);
 
-  // Comparison: current (latest) snapshot vs. the snapshot as of `dateFrom`
-  // — see the route comment above for why this is an `asOf` cutoff, not a
-  // shifted from/to window like other tabs use (there's no "articles in
-  // this window" to shift, since Volume totals aren't scoped by publish
-  // date). No comparison for "All time" (no dateFrom selected) — same
-  // "nothing meaningful to compare against" convention every other tab uses.
+  // Comparison: the current snapshot (asOf currentAsOf, computed above) vs.
+  // the snapshot as of `dateFrom` — an `asOf` cutoff, not a shifted from/to
+  // window like other tabs use (there's no "articles in this window" to
+  // shift, since Volume totals aren't scoped by publish date). No
+  // comparison for "All time" (no dateFrom selected) — same "nothing
+  // meaningful to compare against" convention every other tab uses. Always
+  // computed when a range is picked; the client only renders it when the
+  // Comparisons toggle is on.
   const compared_to = dateFrom || null;
   if (compared_to) {
     const prevSourceRows = fetchSourceRows(db, { type, asOf: compared_to });
@@ -1086,6 +1095,8 @@ router.get('/channels', (req, res) => {
 
   res.json({
     dateFrom: dateFrom || null,
+    dateTo: dateTo || null,
+    current_as_of: currentAsOf,
     type: type || null,
     ga4_snapshot_at: ga4Snapshot?.snapshot_at || null,
     channels,
