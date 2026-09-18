@@ -333,7 +333,12 @@ export default function Sources() {
             to the previous range, as it stood on <strong style={{ color: 'var(--text-secondary)' }}>{result.compared_to}</strong>.{' '}
           </>
         )}
-        Subscribe Clicks and Efficiency columns are GA4 channel-level data, always a trailing 30 days.
+        Subscribe Clicks and Efficiency columns are GA4 channel-level data, always a trailing 30 days.{' '}
+        {result?.oldest_snapshot_at && (
+          <>
+            Traffic-source data goes back to <strong style={{ color: 'var(--text-secondary)' }}>{result.oldest_snapshot_at.slice(0, 10)}</strong> — only the last 30 sync runs are kept, so this date moves forward over time and isn't always a full 30 days back.
+          </>
+        )}
       </div>
 
       {loading ? (

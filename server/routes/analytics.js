@@ -970,6 +970,13 @@ router.get('/channels', (req, res) => {
 
   const sourceRows = fetchSourceRows(db, { type, asOf: currentAsOf });
 
+  // content_sources only retains the 30 most recent sync runs (see the
+  // prune in scheduler.js), not a fixed 30 calendar days — if sync ever
+  // ran more than once a day, or had a gap, the real coverage is shorter.
+  // Surfaced so the Sources page can say honestly how far back its
+  // traffic-source data actually goes, instead of assuming "last 30 days".
+  const oldest_snapshot_at = db.prepare('SELECT MIN(snapshot_at) AS oldest FROM content_sources').get()?.oldest || null;
+
   const buckets = {};
   for (const key of Object.keys(CUSTOM_CHANNELS)) {
     buckets[key] = {
@@ -1102,6 +1109,7 @@ router.get('/channels', (req, res) => {
     channels,
     unmapped_ga4: unmapped,
     compared_to,
+    oldest_snapshot_at,
     volume_metrics_note: 'Users, Loyal %, In-Market %, and Newsletter Signups are estimated per channel by splitting each article\'s total figures proportionally by pageview share across its traffic sources — GA4 and Marfeel report these per article, not broken down by individual source.',
   });
 });
