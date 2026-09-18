@@ -384,44 +384,72 @@ async function fetchSourceData(token, dateRange) {
 }
 
 // Site-wide daily pageviews by source (no url grouping, so it's one small
-// response covering ALL traffic, not just the top articles). The per-article
-// query above returns only totals, but its response also carries an
-// `actualData.data` field that was never read — this is where a daily series
-// would live. The exact shape is unconfirmed, so this logs it and tries the
-// plausible layouts: (a) one entry per source holding a series of values,
-// (b) one entry per day holding per-source values. Returns
-// [{date, source, pageviews}] or null when nothing could be interpreted.
-function sourceOf(x) {
-  const fromItems = Array.isArray(x?.items) ? x.items.find(i => i.type === 'source') : null;
-  return fromItems?.value ?? x?.source ?? x?.name ?? null;
+// response covering ALL traffic, not just the top articles). Confirmed shape
+// (from production logs): actualData.values is one entry per source —
+// {key: <hash>, total, items: [{type: 'source', value: 'Google'}]} — and
+// actualData.data is a list with one object per day, mapping each source's
+// hash key to that day's pageviews: [{<hash>: 12208, <hash>: 8322, ...}, ...].
+// Days carry no date in the visible keys, so any non-source entry that parses
+// as a plausible date is used (in case there is one), else the list is taken
+// as the trailing N days ending today (warned about, since an off-by-one would
+// shift every day). Returns [{date, source, pageviews}] or null.
+function plausibleDay(x) {
+  if (x == null || typeof x === 'boolean') return null;
+  if (typeof x === 'number' && x < 1e9) return null; // small numbers are counts, not epochs
+  const d = normalizeDay(x);
+  const y = d ? Number(d.slice(0, 4)) : 0;
+  return y >= 2020 && y <= 2100 ? d : null;
 }
-function extractSourceDaily(actualData) {
-  const out = [];
-  const data = actualData?.data;
-  const push = (date, source, pv) => {
-    if (date && source && typeof pv === 'number') out.push({ date, source: String(source), pageviews: pv });
-  };
-  const dateOf = (e) => normalizeDay(e?.date ?? e?.day ?? e?.timestamp ?? e?.time ?? e?.key);
 
-  if (Array.isArray(data)) {
-    for (const e of data) {
-      const series = e?.values ?? e?.data ?? e?.series;
-      const src = sourceOf(e);
-      if (src && Array.isArray(series)) {                       // (a)
-        series.forEach((v) => {
-          const isObj = v && typeof v === 'object';
-          push(isObj ? dateOf(v) : null, src, isObj ? (v.value ?? v.total) : v);
-        });
-        continue;
-      }
-      const d = dateOf(e);                                      // (b)
-      const group = e?.values ?? e?.items ?? e?.sources;
-      if (d && Array.isArray(group)) {
-        for (const x of group) push(d, sourceOf(x) ?? x?.key, x?.total ?? x?.value);
-      } else if (d && group && typeof group === 'object') {
-        for (const [k, v] of Object.entries(group)) push(d, k, typeof v === 'number' ? v : v?.total ?? v?.value);
-      }
+export function extractSourceDaily(actualData) {
+  const values = actualData?.values;
+  const data = actualData?.data;
+  if (!Array.isArray(values) || !Array.isArray(data) || data.length === 0) return null;
+
+  const keyToSource = new Map();
+  for (const v of values) {
+    const src = Array.isArray(v?.items) ? v.items.find(i => i.type === 'source')?.value : null;
+    if (v?.key && src) keyToSource.set(v.key, String(src));
+  }
+  if (keyToSource.size === 0) return null;
+
+  const byDaySource = new Map(); // `${date}|${source}` → pageviews
+  let positional = false;
+  data.forEach((day, i) => {
+    if (!day || typeof day !== 'object') return;
+    let date = null;
+    for (const [k, v] of Object.entries(day)) {
+      if (keyToSource.has(k)) continue;
+      date = plausibleDay(v) || plausibleDay(k);
+      if (date) break;
     }
+    if (!date) {
+      positional = true;
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - (data.length - 1 - i));
+      date = d.toISOString().slice(0, 10);
+    }
+    for (const [k, v] of Object.entries(day)) {
+      const src = keyToSource.get(k);
+      if (!src || typeof v !== 'number') continue;
+      const key = `${date}|${src}`;
+      byDaySource.set(key, (byDaySource.get(key) || 0) + v);
+    }
+  });
+
+  if (positional) {
+    console.warn(`[Marfeel] Daily source series carries no dates — assuming its ${data.length} entries are the trailing days ending today (UTC).`);
+  }
+  const out = [...byDaySource].map(([k, pageviews]) => {
+    const [date, source] = k.split('|');
+    return { date, source, pageviews };
+  });
+
+  // Sanity check: each source's days should add up to its reported total.
+  const top = values.find(v => keyToSource.has(v.key) && v.total > 0);
+  if (top) {
+    const sum = out.filter(r => r.source === keyToSource.get(top.key)).reduce((n, r) => n + r.pageviews, 0);
+    console.log(`[Marfeel] Daily source series check: ${keyToSource.get(top.key)} days sum to ${sum} vs reported total ${top.total}`);
   }
   return out.length ? out : null;
 }
