@@ -98,21 +98,18 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_sources_snap     ON content_sources(snapshot_at);
     CREATE INDEX IF NOT EXISTS idx_sources_source   ON content_sources(source);
 
-    -- True per-day pageviews by (article, source). content_sources above only
-    -- holds one rolling-30-day total per sync, which can't be re-cut into an
-    -- arbitrary date range; this table can. Each sync upserts the days it
-    -- re-fetches (Marfeel's window is the trailing 30 days), so it
-    -- accumulates history beyond 30 days over time. See sync/marfeel.js's
-    -- extractDailyValues() for how the per-day values are pulled out.
-    CREATE TABLE IF NOT EXISTS content_sources_daily (
-      wp_id     INTEGER,
+    -- Site-wide daily pageviews by traffic source. content_sources above
+    -- only holds one rolling-30-day total per article per sync, which can't
+    -- be re-cut into an arbitrary date range; this can. Each sync upserts the
+    -- days Marfeel returns (trailing 30), so history accumulates past 30
+    -- days over time. Not per-article: Marfeel's per-article response has no
+    -- per-day values, so type filtering isn't possible against this table.
+    CREATE TABLE IF NOT EXISTS source_daily (
       date      TEXT,
       source    TEXT,
       pageviews INTEGER DEFAULT 0,
-      FOREIGN KEY (wp_id) REFERENCES content(wp_id)
+      PRIMARY KEY (date, source)
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_daily_key  ON content_sources_daily(wp_id, date, source);
-    CREATE INDEX IF NOT EXISTS idx_sources_daily_date        ON content_sources_daily(date);
 
     CREATE TABLE IF NOT EXISTS source_performance (
       id                  INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -143,6 +143,7 @@ export async function runAnalyticsSync() {
     let ga4Metrics = new Map();
     let marfeelMetrics = new Map();
     let marfeelSources = new Map(); // url → [{source, pageviews}]
+    let marfeelSourceDaily = null;  // [{date, source, pageviews}] site-wide, or null
 
     try {
       ga4Metrics = await syncGA4();
@@ -157,6 +158,7 @@ export async function runAnalyticsSync() {
       const mfResult = await syncMarfeel();
       marfeelMetrics = mfResult.metrics || mfResult; // backward-compat if shape changes
       marfeelSources = mfResult.sourcesByUrl || new Map();
+      marfeelSourceDaily = mfResult.sourceDaily || null;
       siteWideNewsletterSignupsToday = mfResult.siteWideNewsletterSignupsToday;
       setSyncState('last_marfeel_sync', snapshotAt);
     } catch (err) {
@@ -297,31 +299,17 @@ export async function runAnalyticsSync() {
         urlToWpId.set(norm, row.wp_id);
         urlToWpId.set(norm.endsWith('/') ? norm.slice(0,-1) : norm+'/', row.wp_id);
       }
-      // Per-day rows (when Marfeel's response carried them) — upserted so
-      // re-fetched days overwrite instead of duplicating, and history
-      // accumulates past the 30-day window each query covers.
-      const upsertDaily = db.prepare(`
-        INSERT INTO content_sources_daily (wp_id, date, source, pageviews)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(wp_id, date, source) DO UPDATE SET pageviews = excluded.pageviews
-      `);
       let sourcesInserted = 0;
-      let dailyUpserted = 0;
       db.transaction(() => {
         for (const [url, sources] of marfeelSources) {
           const wpId = urlToWpId.get(url);
           if (!wpId) continue;
-          for (const { source, pageviews, daily } of sources) {
+          for (const { source, pageviews } of sources) {
             insertSource.run(wpId, snapshotAt, source, pageviews);
             sourcesInserted++;
-            if (daily) {
-              for (const d of daily) { upsertDaily.run(wpId, d.date, source, d.pageviews); dailyUpserted++; }
-            }
           }
         }
       })();
-      db.prepare("DELETE FROM content_sources_daily WHERE date < date('now', '-400 days')").run();
-      console.log(`[Scheduler] Daily source rows upserted: ${dailyUpserted}${dailyUpserted === 0 ? ' (Marfeel response had no per-day values)' : ''}`);
       // Prune: keep only the 30 most recent snapshot_at values in content_sources
       db.prepare(`
         DELETE FROM content_sources
@@ -331,6 +319,21 @@ export async function runAnalyticsSync() {
         )
       `).run();
       console.log(`[Scheduler] Source data: ${sourcesInserted} rows written`);
+    }
+
+    // ── Site-wide daily pageviews by source (drives the Sources date range) ──
+    // Upserted so re-fetched days overwrite instead of duplicating, and
+    // history accumulates past the 30-day window each query covers.
+    if (marfeelSourceDaily?.length) {
+      const upsertDay = db.prepare(`
+        INSERT INTO source_daily (date, source, pageviews) VALUES (?, ?, ?)
+        ON CONFLICT(date, source) DO UPDATE SET pageviews = excluded.pageviews
+      `);
+      db.transaction(() => { for (const d of marfeelSourceDaily) upsertDay.run(d.date, d.source, d.pageviews); })();
+      db.prepare("DELETE FROM source_daily WHERE date < date('now', '-400 days')").run();
+      console.log(`[Scheduler] Daily source series: ${marfeelSourceDaily.length} day/source points upserted`);
+    } else {
+      console.log('[Scheduler] Daily source series: none (Marfeel response could not be read — see the "Source-by-day query shape" log line)');
     }
 
     // ── GA4 source performance (channel-level conversion rates) ──────────────

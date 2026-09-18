@@ -22,7 +22,7 @@ const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
 // content, never scoped to when the underlying articles were published (an
 // article published last year can still be driving traffic today, and
 // should still count). The date range sums real per-day traffic
-// (content_sources_daily); until a sync has stored per-day rows it falls
+// (source_daily); until a sync has stored per-day rows it falls
 // back to the rolling snapshot, and the caption below says which mode is
 // active — see /api/analytics/channels' own comment. Efficiency: how well it
 // converted — sourced from GA4's channel-level rollup, which is always a
@@ -328,7 +328,7 @@ export default function Sources() {
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -12 }}>
         {result?.range_mode === 'daily' ? (
           <>
-            Volume columns sum real daily traffic{filters.from && filters.to ? <> for <strong style={{ color: 'var(--text-secondary)' }}>{filters.from} – {filters.to}</strong></> : ' across all stored days'} — any article counts if it drew traffic then, regardless of when it was published. Users, Loyal Users, In-Market % and Newsletter Signups are estimates (each article's trailing-30-day figure scaled to its share of traffic in the range; ranges over 30 days are capped).{' '}
+            Traffic sums real daily pageviews by source{filters.from && filters.to ? <> for <strong style={{ color: 'var(--text-secondary)' }}>{filters.from} – {filters.to}</strong></> : ' across all stored days'} — all traffic on the site, regardless of when articles were published. Users, Loyal Users, In-Market % and Newsletter Signups are estimates (each source's latest per-pageview rate × the range's pageviews).{' '}
             {showComparisons && result?.previous_period && (
               <>
                 <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges compare to the previous range, <strong style={{ color: 'var(--text-secondary)' }}>{result.previous_period.from} – {result.previous_period.to}</strong>.{' '}
@@ -338,7 +338,7 @@ export default function Sources() {
           </>
         ) : (
           <>
-            Per-day source data hasn't been stored yet (it starts with the next sync), so the range can't change these numbers yet — showing the latest rolling 30-day snapshot{result?.current_as_of ? <> as it stood on <strong style={{ color: 'var(--text-secondary)' }}>{result.current_as_of.slice(0, 10)}</strong></> : ''}, not scoped to when articles were published.{' '}
+            {result?.snapshot_reason === 'type_filter' ? "Daily source data is site-wide, so it can't be filtered by content type — showing the latest rolling 30-day snapshot for this type" : "Per-day source data hasn't been stored yet (it starts with the next sync), so the range can't change these numbers yet — showing the latest rolling 30-day snapshot"}{result?.current_as_of ? <> as it stood on <strong style={{ color: 'var(--text-secondary)' }}>{result.current_as_of.slice(0, 10)}</strong></> : ''}, not scoped to when articles were published.{' '}
             {showComparisons && result?.compared_to && (
               <>
                 <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges compare to the same snapshot data as it stood on <strong style={{ color: 'var(--text-secondary)' }}>{result.compared_to}</strong>.{' '}

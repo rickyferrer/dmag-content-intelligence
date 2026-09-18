@@ -307,16 +307,8 @@ async function fetchNewsletterSignups(token) {
   return combined;
 }
 
-// The query asks for granularity: 'daily', but historically only item.total
-// was ever read, so the per-day shape of the response was never confirmed.
-// This pulls per-day values out defensively: item.values as an array whose
-// entries are either {date|day|timestamp|key, value|total} objects, or bare
-// numbers paired with a parallel dates/labels array on the response — and,
-// as a last resort, bare numbers assumed to be the trailing N days ending
-// today (logged as a warning, since an off-by-one there would shift every
-// day by one). Returns [{date: 'YYYY-MM-DD', pageviews}] or null when the
-// shape can't be interpreted, in which case the caller just skips the daily
-// table and the Sources page falls back to the rolling snapshot.
+// Normalises whatever date-ish value Marfeel hands back (epoch seconds/ms,
+// ISO string, YYYYMMDD) to 'YYYY-MM-DD'.
 function normalizeDay(raw) {
   if (raw == null) return null;
   if (typeof raw === 'number') {
@@ -329,44 +321,13 @@ function normalizeDay(raw) {
   return isNaN(d) ? null : d.toISOString().slice(0, 10);
 }
 
-let warnedPositionalDates = false;
-function extractDailyValues(item, respObj, windowDays) {
-  const vals = item?.values;
-  if (!Array.isArray(vals) || vals.length === 0) return null;
-  const dateList = respObj?.actualData?.dates || respObj?.actualData?.labels || respObj?.dates || respObj?.labels || null;
-
-  const out = [];
-  for (let i = 0; i < vals.length; i++) {
-    const v = vals[i];
-    const isObj = v && typeof v === 'object';
-    const value = isObj ? (v.value ?? v.total ?? 0) : v;
-    if (typeof value !== 'number') return null;
-
-    let date = null;
-    if (isObj) date = normalizeDay(v.date ?? v.day ?? v.timestamp ?? v.key);
-    if (!date && Array.isArray(dateList)) date = normalizeDay(dateList[i]);
-    if (!date && vals.length === windowDays) {
-      const d = new Date();
-      d.setUTCDate(d.getUTCDate() - (windowDays - 1 - i));
-      date = d.toISOString().slice(0, 10);
-      if (!warnedPositionalDates) {
-        warnedPositionalDates = true;
-        console.warn('[Marfeel] Per-day source values carry no dates — assuming the trailing window ends today. Verify against Marfeel if day-level accuracy matters.');
-      }
-    }
-    if (!date) return null;
-    out.push({ date, pageviews: value });
-  }
-  return out;
-}
-
 // Fetch per-article acquisition sources via source+url combined groupBy.
-// Returns Map<normalised_url, Array<{source, pageviews, daily}>> — `daily`
-// is the per-day breakdown when the response has one (see above), else null.
+// Returns Map<normalised_url, Array<{source, pageviews}>>. This query has
+// no per-day values per article (confirmed from production logs: items are
+// only {key, total, items}) — see fetchSourceDailySeries for daily data.
 async function fetchSourceData(token, dateRange) {
-  const result = new Map(); // url → [{source, pageviews, daily}]
+  const result = new Map(); // url → [{source, pageviews}]
   const limit = 2000;
-  const windowDays = dateRange?.last?.number || 30;
   let loggedShape = false;
   let from = 0;
 
@@ -411,7 +372,7 @@ async function fetchSourceData(token, dateRange) {
       try { const u = new URL(rawUrl); url = u.origin + u.pathname; } catch { /* keep raw */ }
 
       if (!result.has(url)) result.set(url, []);
-      result.get(url).push({ source, pageviews: item.total || 0, daily: extractDailyValues(item, resp[0], windowDays) });
+      result.get(url).push({ source, pageviews: item.total || 0 });
     }
 
     if (items.length < limit) break;
@@ -420,6 +381,67 @@ async function fetchSourceData(token, dateRange) {
   }
 
   return result;
+}
+
+// Site-wide daily pageviews by source (no url grouping, so it's one small
+// response covering ALL traffic, not just the top articles). The per-article
+// query above returns only totals, but its response also carries an
+// `actualData.data` field that was never read — this is where a daily series
+// would live. The exact shape is unconfirmed, so this logs it and tries the
+// plausible layouts: (a) one entry per source holding a series of values,
+// (b) one entry per day holding per-source values. Returns
+// [{date, source, pageviews}] or null when nothing could be interpreted.
+function sourceOf(x) {
+  const fromItems = Array.isArray(x?.items) ? x.items.find(i => i.type === 'source') : null;
+  return fromItems?.value ?? x?.source ?? x?.name ?? null;
+}
+function extractSourceDaily(actualData) {
+  const out = [];
+  const data = actualData?.data;
+  const push = (date, source, pv) => {
+    if (date && source && typeof pv === 'number') out.push({ date, source: String(source), pageviews: pv });
+  };
+  const dateOf = (e) => normalizeDay(e?.date ?? e?.day ?? e?.timestamp ?? e?.time ?? e?.key);
+
+  if (Array.isArray(data)) {
+    for (const e of data) {
+      const series = e?.values ?? e?.data ?? e?.series;
+      const src = sourceOf(e);
+      if (src && Array.isArray(series)) {                       // (a)
+        series.forEach((v) => {
+          const isObj = v && typeof v === 'object';
+          push(isObj ? dateOf(v) : null, src, isObj ? (v.value ?? v.total) : v);
+        });
+        continue;
+      }
+      const d = dateOf(e);                                      // (b)
+      const group = e?.values ?? e?.items ?? e?.sources;
+      if (d && Array.isArray(group)) {
+        for (const x of group) push(d, sourceOf(x) ?? x?.key, x?.total ?? x?.value);
+      } else if (d && group && typeof group === 'object') {
+        for (const [k, v] of Object.entries(group)) push(d, k, typeof v === 'number' ? v : v?.total ?? v?.value);
+      }
+    }
+  }
+  return out.length ? out : null;
+}
+
+async function fetchSourceDailySeries(token, dateRange) {
+  const resp = await marfeelQuery(token, {
+    dates: dateRange,
+    granularity: 'daily',
+    filters: [],
+    groupBy: ['source'],
+    metrics: ['pageViewsTotal'],
+    order: { metric: 'pageViewsTotal', sort: 'DESC' },
+    limit: 2000,
+    from: 0,
+  });
+  const actualData = resp?.[0]?.actualData;
+  console.log('[Marfeel] Source-by-day query shape — actualData keys:', Object.keys(actualData || {}),
+    '| values[0]:', JSON.stringify(actualData?.values?.[0])?.slice(0, 300),
+    '| data sample:', JSON.stringify(actualData?.data)?.slice(0, 900));
+  return extractSourceDaily(actualData);
 }
 
 export async function syncMarfeel() {
@@ -603,6 +625,19 @@ export async function syncMarfeel() {
     console.warn('[Marfeel] Source fetch failed:', err.message);
   }
 
+  // Site-wide daily pageviews by source — what makes the Sources date range
+  // real. Separate query (and its own rate-limit pause) so a failure never
+  // affects the per-article data above.
+  let sourceDaily = null;
+  try {
+    await sleep(RATE_LIMIT_DELAY);
+    console.log('[Marfeel] Fetching daily pageviews by source...');
+    sourceDaily = await fetchSourceDailySeries(token, dateRange);
+    console.log(`[Marfeel] Daily source series: ${sourceDaily ? sourceDaily.length + ' day/source points' : 'could not be read from the response'}`);
+  } catch (err) {
+    console.warn('[Marfeel] Daily source fetch failed:', err.message);
+  }
+
   // Site-wide newsletter signups for today — separate from the per-article
   // numbers above; see fetchSiteWideNewsletterSignupsToday for why this can
   // only ever capture "today", not a backfilled history.
@@ -616,5 +651,5 @@ export async function syncMarfeel() {
   }
 
   console.log(`[Marfeel] Sync complete: ${allMetrics.size} URLs`);
-  return { metrics: allMetrics, sourcesByUrl, siteWideNewsletterSignupsToday };
+  return { metrics: allMetrics, sourcesByUrl, sourceDaily, siteWideNewsletterSignupsToday };
 }
