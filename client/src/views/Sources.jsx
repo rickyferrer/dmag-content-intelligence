@@ -21,10 +21,10 @@ const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
 // Volume: what happened (traffic, reach, output) — across ALL synced
 // content, never scoped to when the underlying articles were published (an
 // article published last year can still be driving traffic today, and
-// should still count). The date range instead picks which traffic-source
-// snapshot to view ("to" = current, "from" = the comparison point when the
-// Comparisons toggle is on) — see the note rendered below and
-// /api/analytics/channels' own comment for why. Efficiency: how well it
+// should still count). The date range sums real per-day traffic
+// (content_sources_daily); until a sync has stored per-day rows it falls
+// back to the rolling snapshot, and the caption below says which mode is
+// active — see /api/analytics/channels' own comment. Efficiency: how well it
 // converted — sourced from GA4's channel-level rollup, which is always a
 // trailing 30 days and uses a different taxonomy (see GA4_UNAVAILABLE_NOTES
 // server-side), so those columns get an "≈" and a tooltip rather than
@@ -291,7 +291,7 @@ export default function Sources() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }} title="Picks which traffic-source snapshot to view, not which articles count by publish date.">Date range:</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }} title="Sums real daily traffic in this range — not limited to articles published in it.">Date range:</span>
         <DatePresets
           value={filters.preset}
           from={filters.from}
@@ -326,19 +326,30 @@ export default function Sources() {
       </div>
 
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -12 }}>
-        Volume columns reflect traffic-source data{result?.current_as_of ? <> as it stood on <strong style={{ color: 'var(--text-secondary)' }}>{result.current_as_of.slice(0, 10)}</strong></> : ' currently'} — not scoped to when articles were published.{' '}
-        {showComparisons && result?.compared_to && (
+        {result?.range_mode === 'daily' ? (
           <>
-            <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges compare
-            to the previous range, as it stood on <strong style={{ color: 'var(--text-secondary)' }}>{result.compared_to}</strong>.{' '}
+            Volume columns sum real daily traffic{filters.from && filters.to ? <> for <strong style={{ color: 'var(--text-secondary)' }}>{filters.from} – {filters.to}</strong></> : ' across all stored days'} — any article counts if it drew traffic then, regardless of when it was published. Users, Loyal Users, In-Market % and Newsletter Signups are estimates (each article's trailing-30-day figure scaled to its share of traffic in the range; ranges over 30 days are capped).{' '}
+            {showComparisons && result?.previous_period && (
+              <>
+                <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges compare to the previous range, <strong style={{ color: 'var(--text-secondary)' }}>{result.previous_period.from} – {result.previous_period.to}</strong>.{' '}
+              </>
+            )}
+            Daily data is stored from <strong style={{ color: 'var(--text-secondary)' }}>{result.daily_coverage?.from}</strong>{filters.from && result.daily_coverage?.from && filters.from < result.daily_coverage.from ? <> — this range starts earlier, so days before then are missing and totals are understated</> : ''}.{' '}
+          </>
+        ) : (
+          <>
+            Per-day source data hasn't been stored yet (it starts with the next sync), so the range can't change these numbers yet — showing the latest rolling 30-day snapshot{result?.current_as_of ? <> as it stood on <strong style={{ color: 'var(--text-secondary)' }}>{result.current_as_of.slice(0, 10)}</strong></> : ''}, not scoped to when articles were published.{' '}
+            {showComparisons && result?.compared_to && (
+              <>
+                <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges compare to the same snapshot data as it stood on <strong style={{ color: 'var(--text-secondary)' }}>{result.compared_to}</strong>.{' '}
+              </>
+            )}
+            {result?.oldest_snapshot_at && (
+              <>Snapshots go back to <strong style={{ color: 'var(--text-secondary)' }}>{result.oldest_snapshot_at.slice(0, 10)}</strong> (only the last 30 sync runs are kept).{' '}</>
+            )}
           </>
         )}
-        Subscribe Clicks and Efficiency columns are GA4 channel-level data, always a trailing 30 days.{' '}
-        {result?.oldest_snapshot_at && (
-          <>
-            Traffic-source data goes back to <strong style={{ color: 'var(--text-secondary)' }}>{result.oldest_snapshot_at.slice(0, 10)}</strong> — only the last 30 sync runs are kept, so this date moves forward over time and isn't always a full 30 days back.
-          </>
-        )}
+        Subscribe Clicks and Efficiency columns are GA4 channel-level data, always a trailing 30 days.
       </div>
 
       {loading ? (
@@ -371,7 +382,7 @@ export default function Sources() {
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--text-primary)', margin: 0 }}>Channels</h3>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                {fmt(grandTotal)} total pageviews, all synced content{result?.current_as_of ? `, as of ${result.current_as_of.slice(0, 10)}` : ''}.{' '}
+                {fmt(grandTotal)} total pageviews{result?.range_mode === 'daily' ? (filters.from && filters.to ? `, ${filters.from} – ${filters.to}` : ', all stored days') : ', latest rolling 30-day snapshot'}.{' '}
                 {viewMode === 'efficiency' && (
                   <>Columns marked <strong>≈</strong> come from GA4's channel taxonomy (always trailing 30 days) — hover a value for its source and confidence. </>
                 )}

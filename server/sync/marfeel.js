@@ -307,11 +307,67 @@ async function fetchNewsletterSignups(token) {
   return combined;
 }
 
+// The query asks for granularity: 'daily', but historically only item.total
+// was ever read, so the per-day shape of the response was never confirmed.
+// This pulls per-day values out defensively: item.values as an array whose
+// entries are either {date|day|timestamp|key, value|total} objects, or bare
+// numbers paired with a parallel dates/labels array on the response — and,
+// as a last resort, bare numbers assumed to be the trailing N days ending
+// today (logged as a warning, since an off-by-one there would shift every
+// day by one). Returns [{date: 'YYYY-MM-DD', pageviews}] or null when the
+// shape can't be interpreted, in which case the caller just skips the daily
+// table and the Sources page falls back to the rolling snapshot.
+function normalizeDay(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'number') {
+    const d = new Date(raw > 1e12 ? raw : raw * 1000);
+    return isNaN(d) ? null : d.toISOString().slice(0, 10);
+  }
+  const s = String(raw);
+  if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  const d = new Date(s);
+  return isNaN(d) ? null : d.toISOString().slice(0, 10);
+}
+
+let warnedPositionalDates = false;
+function extractDailyValues(item, respObj, windowDays) {
+  const vals = item?.values;
+  if (!Array.isArray(vals) || vals.length === 0) return null;
+  const dateList = respObj?.actualData?.dates || respObj?.actualData?.labels || respObj?.dates || respObj?.labels || null;
+
+  const out = [];
+  for (let i = 0; i < vals.length; i++) {
+    const v = vals[i];
+    const isObj = v && typeof v === 'object';
+    const value = isObj ? (v.value ?? v.total ?? 0) : v;
+    if (typeof value !== 'number') return null;
+
+    let date = null;
+    if (isObj) date = normalizeDay(v.date ?? v.day ?? v.timestamp ?? v.key);
+    if (!date && Array.isArray(dateList)) date = normalizeDay(dateList[i]);
+    if (!date && vals.length === windowDays) {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - (windowDays - 1 - i));
+      date = d.toISOString().slice(0, 10);
+      if (!warnedPositionalDates) {
+        warnedPositionalDates = true;
+        console.warn('[Marfeel] Per-day source values carry no dates — assuming the trailing window ends today. Verify against Marfeel if day-level accuracy matters.');
+      }
+    }
+    if (!date) return null;
+    out.push({ date, pageviews: value });
+  }
+  return out;
+}
+
 // Fetch per-article acquisition sources via source+url combined groupBy.
-// Returns Map<normalised_url, Array<{source, pageviews}>>
+// Returns Map<normalised_url, Array<{source, pageviews, daily}>> — `daily`
+// is the per-day breakdown when the response has one (see above), else null.
 async function fetchSourceData(token, dateRange) {
-  const result = new Map(); // url → [{source, pageviews}]
+  const result = new Map(); // url → [{source, pageviews, daily}]
   const limit = 2000;
+  const windowDays = dateRange?.last?.number || 30;
+  let loggedShape = false;
   let from = 0;
 
   while (true) {
@@ -336,6 +392,14 @@ async function fetchSourceData(token, dateRange) {
     const items = resp[0]?.actualData?.values || resp[0]?.data?.values || [];
     if (items.length === 0) break;
 
+    if (!loggedShape) {
+      loggedShape = true;
+      const sample = items[0] || {};
+      console.log('[Marfeel] Source query shape — actualData keys:', Object.keys(resp[0]?.actualData || {}),
+        '| item keys:', Object.keys(sample),
+        '| item.values sample:', JSON.stringify(Array.isArray(sample.values) ? sample.values.slice(0, 3) : sample.values));
+    }
+
     for (const item of items) {
       const sourceItem = item.items?.find(i => i.type === 'source');
       const urlItem    = item.items?.find(i => i.type === 'url');
@@ -347,7 +411,7 @@ async function fetchSourceData(token, dateRange) {
       try { const u = new URL(rawUrl); url = u.origin + u.pathname; } catch { /* keep raw */ }
 
       if (!result.has(url)) result.set(url, []);
-      result.get(url).push({ source, pageviews: item.total || 0 });
+      result.get(url).push({ source, pageviews: item.total || 0, daily: extractDailyValues(item, resp[0], windowDays) });
     }
 
     if (items.length < limit) break;

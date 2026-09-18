@@ -297,17 +297,31 @@ export async function runAnalyticsSync() {
         urlToWpId.set(norm, row.wp_id);
         urlToWpId.set(norm.endsWith('/') ? norm.slice(0,-1) : norm+'/', row.wp_id);
       }
+      // Per-day rows (when Marfeel's response carried them) — upserted so
+      // re-fetched days overwrite instead of duplicating, and history
+      // accumulates past the 30-day window each query covers.
+      const upsertDaily = db.prepare(`
+        INSERT INTO content_sources_daily (wp_id, date, source, pageviews)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(wp_id, date, source) DO UPDATE SET pageviews = excluded.pageviews
+      `);
       let sourcesInserted = 0;
+      let dailyUpserted = 0;
       db.transaction(() => {
         for (const [url, sources] of marfeelSources) {
           const wpId = urlToWpId.get(url);
           if (!wpId) continue;
-          for (const { source, pageviews } of sources) {
+          for (const { source, pageviews, daily } of sources) {
             insertSource.run(wpId, snapshotAt, source, pageviews);
             sourcesInserted++;
+            if (daily) {
+              for (const d of daily) { upsertDaily.run(wpId, d.date, source, d.pageviews); dailyUpserted++; }
+            }
           }
         }
       })();
+      db.prepare("DELETE FROM content_sources_daily WHERE date < date('now', '-400 days')").run();
+      console.log(`[Scheduler] Daily source rows upserted: ${dailyUpserted}${dailyUpserted === 0 ? ' (Marfeel response had no per-day values)' : ''}`);
       // Prune: keep only the 30 most recent snapshot_at values in content_sources
       db.prepare(`
         DELETE FROM content_sources

@@ -827,6 +827,71 @@ function fetchSourceRows(db, { dateFrom, dateTo, type, asOf } = {}) {
   }));
 }
 
+// Same shape as fetchSourceRows' output, but computed from the true per-day
+// table (content_sources_daily) so an arbitrary [dateFrom, dateTo] range sums
+// real days instead of re-reading one rolling-30-day snapshot. Pageviews per
+// (article, source) are exact for the range. Users / loyal / in-market /
+// newsletter still only exist per article (as a rolling 30-day figure), so
+// they're estimated: the article's figure × the share of its trailing-30-day
+// traffic that fell inside the range (capped at 1, so a range longer than 30
+// days can't exceed the 30-day figure) × the source's share of that
+// in-range traffic. Not scoped by publish date — an old article driving
+// traffic in the range still counts.
+function fetchSourceRowsDaily(db, { dateFrom, dateTo, type } = {}) {
+  const params = [dateFrom || '0000-01-01', dateTo || '9999-12-31'];
+  const typeClause = type ? 'AND c.content_type = ?' : '';
+  if (type) params.push(type);
+
+  const rows = db.prepare(`
+    WITH src_range AS (
+      SELECT wp_id, source, SUM(pageviews) AS pv
+      FROM content_sources_daily
+      WHERE date >= ? AND date <= ?
+      GROUP BY wp_id, source
+    ),
+    art_range AS (SELECT wp_id, SUM(pv) AS range_pv FROM src_range GROUP BY wp_id),
+    art_win AS (
+      SELECT wp_id, SUM(pageviews) AS win_pv
+      FROM content_sources_daily
+      WHERE date > date((SELECT MAX(date) FROM content_sources_daily), '-30 days')
+      GROUP BY wp_id
+    )
+    SELECT
+      sr.source,
+      SUM(sr.pv)                AS total_pageviews,
+      COUNT(DISTINCT sr.wp_id)  AS article_count,
+      SUM(CASE WHEN ar.range_pv > 0 AND aw.win_pv > 0 THEN a.ga4_users * MIN(1.0, ar.range_pv * 1.0 / aw.win_pv) * sr.pv / ar.range_pv ELSE 0 END)             AS total_users,
+      SUM(CASE WHEN ar.range_pv > 0 AND aw.win_pv > 0 THEN a.ga4_loyal_users * MIN(1.0, ar.range_pv * 1.0 / aw.win_pv) * sr.pv / ar.range_pv ELSE 0 END)       AS total_loyal_users,
+      SUM(CASE WHEN ar.range_pv > 0 AND aw.win_pv > 0 THEN a.ga4_loyal_inmarket_pv * MIN(1.0, ar.range_pv * 1.0 / aw.win_pv) * sr.pv / ar.range_pv ELSE 0 END) AS total_inmarket,
+      SUM(CASE WHEN ar.range_pv > 0 AND aw.win_pv > 0 THEN (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) * MIN(1.0, ar.range_pv * 1.0 / aw.win_pv) * sr.pv / ar.range_pv ELSE 0 END) AS total_newsletter_signups
+    FROM src_range sr
+    JOIN content c ON c.wp_id = sr.wp_id
+    JOIN art_range ar ON ar.wp_id = sr.wp_id
+    LEFT JOIN art_win aw ON aw.wp_id = sr.wp_id
+    LEFT JOIN (
+      SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
+    ) lxa ON lxa.wp_id = sr.wp_id
+    LEFT JOIN analytics_snapshots a ON a.wp_id = lxa.wp_id AND a.snapshot_at = lxa.latest
+    LEFT JOIN (
+      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
+      FROM historical_newsletter_signups
+      WHERE week_start < date('now', '-30 days')
+      GROUP BY wp_id
+    ) h ON h.wp_id = sr.wp_id
+    WHERE sr.pv > 0 ${typeClause}
+    GROUP BY sr.source
+    ORDER BY total_pageviews DESC
+  `).all(...params);
+
+  return rows.map(r => ({
+    ...r,
+    total_users: Math.round(r.total_users || 0),
+    total_loyal_users: Math.round(r.total_loyal_users || 0),
+    total_inmarket: Math.round(r.total_inmarket || 0),
+    total_newsletter_signups: Math.round(r.total_newsletter_signups || 0),
+  }));
+}
+
 // GET /api/analytics/by-traffic-source
 // Returns per-source totals across all content, joined to content metadata for date filtering.
 router.get('/by-traffic-source', (req, res) => {
@@ -965,10 +1030,19 @@ router.get('/channels', (req, res) => {
   const db = getDb();
   const { dateFrom, dateTo, type } = req.query;
 
-  const today = new Date().toISOString().slice(0, 10);
-  const currentAsOf = (dateTo && dateTo < today) ? dateTo + 'T23:59:59' : null;
+  // Prefer true per-day data (content_sources_daily) so the range actually
+  // changes the numbers. Until a sync has stored any per-day rows, fall back
+  // to the rolling-snapshot behavior (range only moves the comparison point)
+  // and say so in the response, rather than returning nothing.
+  const dailyCoverage = db.prepare('SELECT MIN(date) AS from_date, MAX(date) AS to_date, COUNT(*) AS n FROM content_sources_daily').get();
+  const range_mode = dailyCoverage.n > 0 ? 'daily' : 'snapshot';
 
-  const sourceRows = fetchSourceRows(db, { type, asOf: currentAsOf });
+  const today = new Date().toISOString().slice(0, 10);
+  const currentAsOf = (range_mode === 'snapshot' && dateTo && dateTo < today) ? dateTo + 'T23:59:59' : null;
+
+  const sourceRows = range_mode === 'daily'
+    ? fetchSourceRowsDaily(db, { dateFrom, dateTo, type })
+    : fetchSourceRows(db, { type, asOf: currentAsOf });
 
   // content_sources only retains the 30 most recent sync runs (see the
   // prune in scheduler.js), not a fixed 30 calendar days — if sync ever
@@ -1080,9 +1154,15 @@ router.get('/channels', (req, res) => {
   // meaningful to compare against" convention every other tab uses. Always
   // computed when a range is picked; the client only renders it when the
   // Comparisons toggle is on.
-  const compared_to = dateFrom || null;
-  if (compared_to) {
-    const prevSourceRows = fetchSourceRows(db, { type, asOf: compared_to });
+  // In daily mode the comparison is a genuine previous range of equal length
+  // (same convention as every other tab, via previousPeriodRange); in
+  // snapshot-fallback mode it's the older-snapshot cutoff described above.
+  const previous_period = range_mode === 'daily' ? previousPeriodRange(dateFrom, dateTo) : null;
+  const compared_to = range_mode === 'daily' ? null : (dateFrom || null);
+  if (previous_period || compared_to) {
+    const prevSourceRows = previous_period
+      ? fetchSourceRowsDaily(db, { dateFrom: previous_period.from, dateTo: previous_period.to, type })
+      : fetchSourceRows(db, { type, asOf: compared_to });
     const prevTotals = buildChannelTotals(prevSourceRows);
     for (const c of channels) {
       const prev = prevTotals[c.key];
@@ -1104,6 +1184,9 @@ router.get('/channels', (req, res) => {
     dateFrom: dateFrom || null,
     dateTo: dateTo || null,
     current_as_of: currentAsOf,
+    range_mode,
+    daily_coverage: range_mode === 'daily' ? { from: dailyCoverage.from_date, to: dailyCoverage.to_date } : null,
+    previous_period,
     type: type || null,
     ga4_snapshot_at: ga4Snapshot?.snapshot_at || null,
     channels,
