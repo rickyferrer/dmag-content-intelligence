@@ -85,6 +85,11 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_content_published ON content(published_at);
     CREATE INDEX IF NOT EXISTS idx_snapshots_wp_id ON analytics_snapshots(wp_id);
     CREATE INDEX IF NOT EXISTS idx_snapshots_at ON analytics_snapshots(snapshot_at);
+    -- Covering index for the "latest (or as-of) snapshot per article" subquery
+    -- (SELECT wp_id, MAX(snapshot_at) ... GROUP BY wp_id) used across nearly
+    -- every analytics query — with a year of history that would otherwise scan
+    -- millions of rows instead of reading one index entry per article.
+    CREATE INDEX IF NOT EXISTS idx_snapshots_wp_at ON analytics_snapshots(wp_id, snapshot_at);
 
     CREATE TABLE IF NOT EXISTS content_sources (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,

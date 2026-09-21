@@ -211,8 +211,8 @@ const COMPARABLE_METRICS = [
 // always comparable; every other metric comes from analytics snapshots, and
 // is only compared when at least half of that period's articles have a
 // snapshot from the end of their own period (see fetchGroupedAggregates'
-// `asOf` — snapshots are only retained ~30 days, so a range that began
-// further back than that has nothing valid to compare against, and
+// `asOf` — snapshots are only retained SNAPSHOT_RETENTION_DAYS (scheduler.js),
+// so a range that began further back than that has nothing valid to compare against, and
 // comparing against today's aged-out numbers instead is what produced
 // +1,000% "growth"). Omitted metrics are undefined, which ChangeBadge
 // renders as nothing.

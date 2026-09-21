@@ -99,23 +99,40 @@ export async function runContentSync() {
   }
 }
 
+// How much daily snapshot history to keep. Every per-article metric is a
+// rolling trailing-30-day figure as of its snapshot, so comparing a period to
+// an earlier one (Writers/Sections badges, Overview) needs a snapshot from
+// the end of that earlier period — this bounds how far back a range's
+// comparison can reach. Costs roughly one snapshot row per article per day
+// (~9K rows/day at current volume); history only accrues going forward, it
+// can't be backfilled.
+export const SNAPSHOT_RETENTION_DAYS = 365;
+
 // Collapse to at most one snapshot per article per calendar day (the latest
 // that day), then drop anything older than `keepDays`. Analytics sync runs
 // hourly, so capping by row count alone (the old approach) only retained
-// ~30 hours of history — nowhere near enough for a 30-day trend chart. This
-// keeps roughly the same row volume but spreads it across real calendar days.
-export function pruneSnapshots(db, keepDays = 30) {
+// ~30 hours of history — nowhere near enough for a trend chart. This keeps
+// roughly the same row volume but spreads it across real calendar days.
+export function pruneSnapshots(db, keepDays = SNAPSHOT_RETENTION_DAYS) {
+  // Only the last couple of days can hold duplicates (every earlier day was
+  // already collapsed by a previous run), so scope the window function to
+  // those — scanning the whole table each hourly run would mean sorting
+  // millions of rows once a year of history has accumulated. Both the inner
+  // ranking AND the outer delete must share the same cutoff, otherwise the
+  // NOT IN would delete every older row that isn't in the ranked subset.
   const dedupe = db.prepare(`
     DELETE FROM analytics_snapshots
-    WHERE id NOT IN (
-      SELECT id FROM (
-        SELECT id, ROW_NUMBER() OVER (
-          PARTITION BY wp_id, DATE(snapshot_at) ORDER BY snapshot_at DESC
-        ) AS rn
-        FROM analytics_snapshots
+    WHERE snapshot_at >= date('now', '-2 days')
+      AND id NOT IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (
+            PARTITION BY wp_id, DATE(snapshot_at) ORDER BY snapshot_at DESC
+          ) AS rn
+          FROM analytics_snapshots
+          WHERE snapshot_at >= date('now', '-2 days')
+        )
+        WHERE rn = 1
       )
-      WHERE rn = 1
-    )
   `).run();
 
   const old = db.prepare(`
@@ -509,7 +526,7 @@ export async function runAnalyticsSync() {
     scoreContent(db);
 
     // ── Retention: keep last 30 snapshots per content item ────────────────────
-    pruneSnapshots(db, 30);
+    pruneSnapshots(db);
 
     setSyncState('last_analytics_sync', snapshotAt);
 

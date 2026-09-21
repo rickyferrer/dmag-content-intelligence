@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getSettings, updateSettings, getDb, logAudit, getAuditLog } from '../db.js';
-import { scoreContent, pruneSnapshots, runBenchmarkCheckIfDue } from '../sync/scheduler.js';
+import { scoreContent, pruneSnapshots, SNAPSHOT_RETENTION_DAYS, runBenchmarkCheckIfDue } from '../sync/scheduler.js';
 import { BENCHMARK_META } from '../utils/trueValue.js';
 
 const router = Router();
@@ -211,8 +211,8 @@ router.post('/cleanup', (req, res) => {
       `DELETE FROM content WHERE published_at < ?`
     ).run(cutoffIso);
 
-    // 3. Prune excess snapshots for remaining content (keep last 30)
-    pruneSnapshots(db, 30);
+    // 3. Prune excess snapshots for remaining content
+    pruneSnapshots(db, SNAPSHOT_RETENTION_DAYS);
 
     // 4. Report remaining counts
     const remainingContent = db.prepare('SELECT COUNT(*) as n FROM content').get().n;
