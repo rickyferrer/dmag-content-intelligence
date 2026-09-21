@@ -23,11 +23,17 @@ function getReadonlyDb() {
 }
 
 const FORBIDDEN = /\b(insert|update|delete|drop|alter|attach|detach|pragma|create|replace|vacuum|reindex)\b/i;
+// Tables the assistant must never read: other users' chat history and goals,
+// the audit log, and sync_state (holds the Marfeel API token). Accounts and
+// sessions aren't here because they live in a separate database file the
+// assistant's connection can't reach (see authDb.js).
+const OFF_LIMITS = /\b(insight_conversations|insight_messages|goals|audit_log|sync_state)\b/i;
 
 function runQuery(sql) {
   const trimmed = sql.trim().replace(/;+\s*$/, '');
   if (!/^select\b/i.test(trimmed)) throw new Error('Only SELECT queries are allowed.');
   if (FORBIDDEN.test(trimmed)) throw new Error('Query contains a disallowed keyword.');
+  if (OFF_LIMITS.test(trimmed)) throw new Error('Query references a table that is not available.');
   if (trimmed.includes(';')) throw new Error('Only a single statement is allowed.');
 
   const rows = getReadonlyDb().prepare(trimmed).all();
@@ -132,19 +138,19 @@ function makeTitle(question) {
 
 // GET /api/insights/conversations
 router.get('/conversations', (req, res) => {
-  res.json(listInsightConversations());
+  res.json(listInsightConversations(req.user.id));
 });
 
 // GET /api/insights/conversations/:id
 router.get('/conversations/:id', (req, res) => {
-  const conversation = getInsightConversation(req.params.id);
+  const conversation = getInsightConversation(req.params.id, req.user.id);
   if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
   res.json(conversation);
 });
 
 // DELETE /api/insights/conversations/:id
 router.delete('/conversations/:id', (req, res) => {
-  deleteInsightConversation(req.params.id);
+  deleteInsightConversation(req.params.id, req.user.id);
   res.json({ ok: true });
 });
 
@@ -159,7 +165,11 @@ router.post('/ask', async (req, res) => {
   }
 
   const isNewConversation = !conversation_id;
-  const convId = conversation_id || createInsightConversation(makeTitle(question));
+  // A follow-up must target a conversation this user owns.
+  if (!isNewConversation && !getInsightConversation(conversation_id, req.user.id)) {
+    return res.status(404).json({ error: 'Conversation not found' });
+  }
+  const convId = conversation_id || createInsightConversation(makeTitle(question), req.user.id);
   const priorMessages = isNewConversation ? [] : getRecentInsightMessages(convId).map(m => ({ role: m.role, content: m.content }));
 
   const messages = [...priorMessages, { role: 'user', content: question.trim() }];
@@ -212,7 +222,7 @@ router.post('/ask', async (req, res) => {
     console.error('[Insights] Error:', err.message);
     // Don't leave an empty, titled-but-message-less conversation in the list
     // if the very first question in it failed.
-    if (isNewConversation) { try { deleteInsightConversation(convId); } catch {} }
+    if (isNewConversation) { try { deleteInsightConversation(convId, req.user.id); } catch {} }
     res.status(500).json({ error: err.message });
   }
 });

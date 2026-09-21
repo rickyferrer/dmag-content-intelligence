@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getSyncStatus, runContentSync, runAnalyticsSync, runClassification, runCategoryClassification, runVoiceClassification } from '../sync/scheduler.js';
 import { logAudit } from '../db.js';
+import { requireAdmin } from '../auth.js';
 
 const router = Router();
 
@@ -11,7 +12,7 @@ router.get('/status', (req, res) => {
 });
 
 // POST /api/sync/trigger
-router.post('/trigger', async (req, res) => {
+router.post('/trigger', requireAdmin, async (req, res) => {
   const { type = 'all' } = req.body || {};
 
   logAudit(req.auth?.user || 'unknown', 'trigger_sync', { type });

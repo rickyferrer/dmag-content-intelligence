@@ -15,6 +15,9 @@ import Insights from './views/Insights.jsx';
 import Settings from './views/Settings.jsx';
 import { ComparisonProvider } from './context/ComparisonContext.jsx';
 import ComparisonToggle from './components/ComparisonToggle.jsx';
+import Login from './views/Login.jsx';
+import AccountMenu from './components/AccountMenu.jsx';
+import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { api } from './api/index.js';
 
 const NAV = [
@@ -39,7 +42,25 @@ const SYNC_LABELS = {
 };
 const SYNC_HEALTH_POLL_MS = 10 * 60 * 1000; // 10 min — cheap, and this only needs to catch multi-day staleness
 
+// Auth gate: nothing else mounts (and no data request fires) until there's a
+// signed-in user, so a signed-out visitor only ever sees the sign-in form.
 export default function App() {
+  return (
+    <AuthProvider>
+      <AuthGate />
+    </AuthProvider>
+  );
+}
+
+function AuthGate() {
+  const { user } = useAuth();
+  if (user === undefined) return null; // first session check still in flight
+  if (user === null) return <Login />;
+  return <Dashboard />;
+}
+
+function Dashboard() {
+  const { isAdmin } = useAuth();
   const [view, setView] = useState('overview');
   const [selectedId, setSelectedId] = useState(null);
   const [selectedIssue, setSelectedIssue] = useState(null);
@@ -101,7 +122,7 @@ export default function App() {
         </div>
 
         <nav style={{ display: 'flex', gap: 4 }}>
-          {NAV.map(item => (
+          {NAV.filter(item => item.id !== 'settings' || isAdmin).map(item => (
             <button
               key={item.id}
               onClick={() => { setView(item.id); setSelectedId(null); setSelectedIssue(null); setSelectedWriter(null); }}
@@ -121,8 +142,9 @@ export default function App() {
           ))}
         </nav>
 
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 20 }}>
           <ComparisonToggle />
+          <AccountMenu />
         </div>
       </header>
 
@@ -144,12 +166,14 @@ export default function App() {
             ⚠ {staleSyncs.map(s => s.staleHours == null ? `${s.label} has never completed` : `${s.label} hasn't updated in ${s.staleHours}h`).join(' · ')} — data may be missing or out of date.
           </span>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexShrink: 0 }}>
-            <button
-              onClick={() => { setView('settings'); setSelectedId(null); }}
-              style={{ background: 'transparent', border: '1px solid #8a5a1a', color: '#ffd699', borderRadius: 4, padding: '3px 10px', fontSize: 11 }}
-            >
-              View Sync Status
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => { setView('settings'); setSelectedId(null); }}
+                style={{ background: 'transparent', border: '1px solid #8a5a1a', color: '#ffd699', borderRadius: 4, padding: '3px 10px', fontSize: 11 }}
+              >
+                View Sync Status
+              </button>
+            )}
             <button
               onClick={() => setBannerDismissed(true)}
               aria-label="Dismiss"
@@ -192,7 +216,7 @@ export default function App() {
         {view === 'vulnerability'  && <Vulnerability />}
         {view === 'goals'          && <Goals />}
         {view === 'insights'       && <Insights />}
-        {view === 'settings'  && <Settings />}
+        {view === 'settings'  && isAdmin && <Settings />}
       </main>
 
       {/* Detail panel (content view) */}

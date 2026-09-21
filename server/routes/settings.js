@@ -5,8 +5,8 @@ import { BENCHMARK_META } from '../utils/trueValue.js';
 
 const router = Router();
 
-// req.auth is set by express-basic-auth after a successful admin challenge —
-// this route tree is always mounted behind adminAuth (see server/index.js).
+// req.auth is set by attachUser (auth.js) from the session — this route tree
+// is always mounted behind requireAdmin (see server/index.js).
 const actorOf = (req) => req.auth?.user || 'unknown';
 
 // GET /api/settings

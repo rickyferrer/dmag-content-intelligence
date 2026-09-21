@@ -332,6 +332,13 @@ function initSchema() {
   // WordPress featured-image URL (a display-size thumbnail, not the full
   // original) — see sync/wordpress.js's fetchMediaUrls().
   try { db.exec('ALTER TABLE content ADD COLUMN cover_image_url TEXT'); } catch {}
+  // Per-user ownership (individual logins). No FK: users live in the separate
+  // auth.db (see authDb.js). NULL = created before logins existed; bootstrapAdmin()
+  // hands those to the first admin.
+  try { db.exec('ALTER TABLE goals ADD COLUMN user_id INTEGER'); } catch {}
+  try { db.exec('ALTER TABLE insight_conversations ADD COLUMN user_id INTEGER'); } catch {}
+  db.exec('CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_insight_conv_user ON insight_conversations(user_id)');
 
   // One-time split of the old combined "loyal in-market" weight into two
   // independent weights (score_w_loyal, score_w_inmarket) — see
@@ -390,7 +397,7 @@ function initSchema() {
   }
 }
 
-// actor: the admin Basic Auth username (req.auth.user), or 'system' for
+// actor: the signed-in username (req.auth.user), or 'system' for
 // scheduled/cron-triggered actions. details: any JSON-serializable object.
 export function logAudit(actor, action, details) {
   const db = getDb();
@@ -404,19 +411,23 @@ export function getAuditLog(limit = 100) {
   return rows.map(r => ({ ...r, details: r.details ? JSON.parse(r.details) : null }));
 }
 
-export function listInsightConversations(limit = 200) {
+// Every conversation function is scoped to its owner (userId) — a
+// conversation another user owns is indistinguishable from one that
+// doesn't exist.
+export function listInsightConversations(userId, limit = 200) {
   const db = getDb();
   return db.prepare(`
     SELECT id, title, created_at, updated_at
     FROM insight_conversations
+    WHERE user_id = ?
     ORDER BY updated_at DESC
     LIMIT ?
-  `).all(limit);
+  `).all(userId, limit);
 }
 
-export function getInsightConversation(id) {
+export function getInsightConversation(id, userId) {
   const db = getDb();
-  const conversation = db.prepare('SELECT id, title, created_at, updated_at FROM insight_conversations WHERE id = ?').get(id);
+  const conversation = db.prepare('SELECT id, title, created_at, updated_at FROM insight_conversations WHERE id = ? AND user_id = ?').get(id, userId);
   if (!conversation) return null;
   const messages = db.prepare(`
     SELECT id, role, content, queries_run, created_at
@@ -428,9 +439,9 @@ export function getInsightConversation(id) {
   };
 }
 
-export function createInsightConversation(title) {
+export function createInsightConversation(title, userId) {
   const db = getDb();
-  return db.prepare('INSERT INTO insight_conversations (title) VALUES (?)').run(title).lastInsertRowid;
+  return db.prepare('INSERT INTO insight_conversations (title, user_id) VALUES (?, ?)').run(title, userId).lastInsertRowid;
 }
 
 export function appendInsightMessage(conversationId, role, content, queriesRun = null) {
@@ -440,8 +451,9 @@ export function appendInsightMessage(conversationId, role, content, queriesRun =
   db.prepare('UPDATE insight_conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(conversationId);
 }
 
-export function deleteInsightConversation(id) {
+export function deleteInsightConversation(id, userId) {
   const db = getDb();
+  if (!db.prepare('SELECT 1 FROM insight_conversations WHERE id = ? AND user_id = ?').get(id, userId)) return;
   db.prepare('DELETE FROM insight_messages WHERE conversation_id = ?').run(id);
   db.prepare('DELETE FROM insight_conversations WHERE id = ?').run(id);
 }
@@ -491,47 +503,48 @@ export function updateSettings(updates) {
   updateMany(Object.entries(updates));
 }
 
-export function listGoals(includeArchived = false) {
+// Goals are private to their creator — every function takes the owner's id.
+export function listGoals(userId, includeArchived = false) {
   const db = getDb();
-  const where = includeArchived ? '' : 'WHERE archived = 0';
-  return db.prepare(`SELECT * FROM goals ${where} ORDER BY end_date ASC, created_at DESC`).all();
+  const archived = includeArchived ? '' : 'AND archived = 0';
+  return db.prepare(`SELECT * FROM goals WHERE user_id = ? ${archived} ORDER BY end_date ASC, created_at DESC`).all(userId);
 }
 
-export function getGoal(id) {
+export function getGoal(id, userId) {
   const db = getDb();
-  return db.prepare('SELECT * FROM goals WHERE id = ?').get(id);
+  return db.prepare('SELECT * FROM goals WHERE id = ? AND user_id = ?').get(id, userId);
 }
 
-export function createGoal(goal) {
+export function createGoal(goal, userId) {
   const db = getDb();
   const result = db.prepare(`
-    INSERT INTO goals (name, metric, scope_type, scope_value, target, start_date, end_date)
-    VALUES (@name, @metric, @scope_type, @scope_value, @target, @start_date, @end_date)
-  `).run(goal);
-  return getGoal(result.lastInsertRowid);
+    INSERT INTO goals (name, metric, scope_type, scope_value, target, start_date, end_date, user_id)
+    VALUES (@name, @metric, @scope_type, @scope_value, @target, @start_date, @end_date, @user_id)
+  `).run({ ...goal, user_id: userId });
+  return getGoal(result.lastInsertRowid, userId);
 }
 
-export function updateGoal(id, goal) {
+export function updateGoal(id, goal, userId) {
   const db = getDb();
   db.prepare(`
     UPDATE goals SET
       name = @name, metric = @metric, scope_type = @scope_type, scope_value = @scope_value,
       target = @target, start_date = @start_date, end_date = @end_date,
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = @id
-  `).run({ ...goal, id });
-  return getGoal(id);
+    WHERE id = @id AND user_id = @user_id
+  `).run({ ...goal, id, user_id: userId });
+  return getGoal(id, userId);
 }
 
-export function setGoalArchived(id, archived) {
+export function setGoalArchived(id, archived, userId) {
   const db = getDb();
-  db.prepare('UPDATE goals SET archived = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(archived ? 1 : 0, id);
-  return getGoal(id);
+  db.prepare('UPDATE goals SET archived = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(archived ? 1 : 0, id, userId);
+  return getGoal(id, userId);
 }
 
-export function deleteGoal(id) {
+export function deleteGoal(id, userId) {
   const db = getDb();
-  db.prepare('DELETE FROM goals WHERE id = ?').run(id);
+  db.prepare('DELETE FROM goals WHERE id = ? AND user_id = ?').run(id, userId);
 }
 
 // Run db init when executed directly

@@ -1,18 +1,38 @@
 const BASE = '/api';
 
+// A 401 from anywhere but the auth endpoints themselves means the session
+// ended (expired, signed out elsewhere, account deactivated) — tell the app
+// so it can drop back to the sign-in screen instead of every panel failing.
 async function apiFetch(path, options = {}) {
   const res = await fetch(BASE + path, {
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`API ${path} failed (${res.status}): ${text}`);
+    if (res.status === 401 && !path.startsWith('/auth/')) window.dispatchEvent(new Event('auth:expired'));
+    let message = null;
+    try { message = JSON.parse(text)?.error; } catch { /* not JSON */ }
+    const err = new Error(message || `API ${path} failed (${res.status}): ${text}`);
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }
 
 export const api = {
+  // Auth & users
+  me: () => apiFetch('/auth/me'),
+  login: (username, password) => apiFetch('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  logout: () => apiFetch('/auth/logout', { method: 'POST' }),
+  changePassword: (current_password, new_password) => apiFetch('/auth/change-password', { method: 'POST', body: JSON.stringify({ current_password, new_password }) }),
+  listUsers: () => apiFetch('/users'),
+  createUser: (body) => apiFetch('/users', { method: 'POST', body: JSON.stringify(body) }),
+  updateUser: (id, body) => apiFetch(`/users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  resetUserPassword: (id, password) => apiFetch(`/users/${id}/password`, { method: 'POST', body: JSON.stringify({ password }) }),
+  deleteUser: (id) => apiFetch(`/users/${id}`, { method: 'DELETE' }),
+
   // Content
   getContent: (params = {}) => apiFetch('/content?' + new URLSearchParams(params)),
   getContentItem: (id) => apiFetch(`/content/${id}`),

@@ -38,7 +38,7 @@ router.get('/', async (req, res) => {
   try {
     const db = getDb();
     const includeArchived = req.query.includeArchived === 'true';
-    const goals = await Promise.all(listGoals(includeArchived).map(g => withProgress(db, g)));
+    const goals = await Promise.all(listGoals(req.user.id, includeArchived).map(g => withProgress(db, g)));
     res.json(goals);
   } catch (err) {
     console.error('[Server] GET /api/goals error:', err.message);
@@ -50,7 +50,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const db = getDb();
-    const goal = getGoal(req.params.id);
+    const goal = getGoal(req.params.id, req.user.id);
     if (!goal) return res.status(404).json({ error: 'Goal not found' });
     const [withP, trend] = await Promise.all([withProgress(db, goal), computeGoalTrend(db, goal)]);
     res.json({ ...withP, trend });
@@ -74,7 +74,7 @@ router.post('/', async (req, res) => {
       target: req.body.target,
       start_date: req.body.start_date,
       end_date: req.body.end_date,
-    });
+    }, req.user.id);
     res.status(201).json(await withProgress(getDb(), goal));
   } catch (err2) {
     console.error('[Server] POST /api/goals error:', err2.message);
@@ -84,7 +84,7 @@ router.post('/', async (req, res) => {
 
 // PUT /api/goals/:id
 router.put('/:id', async (req, res) => {
-  const existing = getGoal(req.params.id);
+  const existing = getGoal(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Goal not found' });
   const err = validateGoal(req.body);
   if (err) return res.status(400).json({ error: err });
@@ -98,7 +98,7 @@ router.put('/:id', async (req, res) => {
       target: req.body.target,
       start_date: req.body.start_date,
       end_date: req.body.end_date,
-    });
+    }, req.user.id);
     res.json(await withProgress(getDb(), goal));
   } catch (err2) {
     console.error('[Server] PUT /api/goals/:id error:', err2.message);
@@ -108,10 +108,10 @@ router.put('/:id', async (req, res) => {
 
 // POST /api/goals/:id/archive
 router.post('/:id/archive', async (req, res) => {
-  const existing = getGoal(req.params.id);
+  const existing = getGoal(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Goal not found' });
   try {
-    const goal = setGoalArchived(req.params.id, req.body?.archived !== false);
+    const goal = setGoalArchived(req.params.id, req.body?.archived !== false, req.user.id);
     res.json(await withProgress(getDb(), goal));
   } catch (err) {
     console.error('[Server] POST /api/goals/:id/archive error:', err.message);
@@ -121,9 +121,9 @@ router.post('/:id/archive', async (req, res) => {
 
 // DELETE /api/goals/:id
 router.delete('/:id', (req, res) => {
-  const existing = getGoal(req.params.id);
+  const existing = getGoal(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'Goal not found' });
-  deleteGoal(req.params.id);
+  deleteGoal(req.params.id, req.user.id);
   res.json({ ok: true });
 });
 

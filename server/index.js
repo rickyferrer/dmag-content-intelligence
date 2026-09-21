@@ -1,7 +1,5 @@
 import 'dotenv/config';
 import express from 'express';
-import cors from 'cors';
-import basicAuth from 'express-basic-auth';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb } from './db.js';
@@ -12,6 +10,9 @@ import syncRoutes from './routes/sync.js';
 import settingsRoutes from './routes/settings.js';
 import insightsRoutes from './routes/insights.js';
 import goalsRoutes from './routes/goals.js';
+import authRoutes from './routes/auth.js';
+import usersRoutes from './routes/users.js';
+import { attachUser, requireAuth, requireAdmin, bootstrapAdmin } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3001');
@@ -33,67 +34,45 @@ process.on('uncaughtException', (err) => {
   console.error('[Server] Uncaught exception (process kept alive):', err);
 });
 
-// Auth middleware — only if credentials are configured
-const authUser = process.env.DASHBOARD_USER;
-const authPass = process.env.DASHBOARD_PASS;
-const useAuth = authUser && authPass;
+// Individual logins: session-cookie auth (see auth.js / authDb.js). Roles:
+//   user  — sees every analytics tab; has their own goals and Insights history.
+//   admin — additionally owns Settings (scoring weights, sync triggers,
+//           exclusions, cleanup) and user management. All of that sits behind
+//           requireAdmin — the UI hiding it is not what protects it.
+// The first admin is created from ADMIN_USER/ADMIN_PASS (else DASHBOARD_USER/
+// DASHBOARD_PASS) the first time the server starts with no accounts.
+app.set('trust proxy', 1); // Render terminates TLS in front of us; needed for req.ip and Secure cookies
 
-const adminUser = process.env.ADMIN_USER;
-const adminPass = process.env.ADMIN_PASS;
-const useAdminAuth = adminUser && adminPass;
-
-// A request carries exactly one Authorization header, so admin credentials
-// must ALSO be accepted by the viewer tier — otherwise the moment an admin
-// authenticates for Settings, the browser starts sending those admin
-// credentials on every request (Basic Auth is cached per realm+origin, not
-// per path), and every other tab in the app would start rejecting them,
-// locking the admin out of the very dashboard they're administering.
-// Admins can therefore always view; only admin credentials can mutate.
-const viewerUsers = { ...(useAuth ? { [authUser]: authPass } : {}), ...(useAdminAuth ? { [adminUser]: adminPass } : {}) };
-
-const auth = Object.keys(viewerUsers).length > 0
-  ? basicAuth({
-      users: viewerUsers,
-      challenge: true,
-      realm: 'D Magazine Content Intelligence',
-    })
-  : (req, res, next) => next();
-
-// Separate, stricter tier for admin/mutating routes (sync triggers, score
-// recalculation, scoring exclusions, destructive data cleanup) — distinct
-// from the shared viewer credential used for the read-only analysis tabs.
-// Mounted AFTER `auth` on admin routes, so a request must satisfy both: the
-// viewer challenge (which admin creds already do, per above), then this
-// second, stricter challenge that ONLY admin credentials satisfy.
-const adminAuth = useAdminAuth
-  ? basicAuth({
-      users: { [adminUser]: adminPass },
-      challenge: true,
-      realm: 'D Magazine Admin',
-    })
-  : (req, res, next) => next();
-
-app.use(cors({ origin: true, credentials: true }));
+// No CORS: the client is always same-origin (Vite proxy in dev, this server in
+// prod), and with cookie auth a permissive credentialed CORS policy would let
+// other websites make authenticated requests as a signed-in user.
 app.use(express.json());
+app.use(attachUser);
 
-// API routes (auth required)
-app.use('/api/content', auth, contentRoutes);
-app.use('/api/analytics', auth, analyticsRoutes);
-app.use('/api/sync', auth, adminAuth, syncRoutes);
-app.use('/api/settings', auth, adminAuth, settingsRoutes);
-app.use('/api/insights', auth, insightsRoutes);
-app.use('/api/goals', auth, goalsRoutes);
-
-// Health check (no auth)
+// Public
+app.use('/api/auth', authRoutes);
 app.get('/health', (req, res) => {
   res.json({ ok: true, ts: new Date().toISOString() });
 });
 
+// Signed-in users
+app.use('/api/content', requireAuth, contentRoutes);
+app.use('/api/analytics', requireAuth, analyticsRoutes);
+app.use('/api/insights', requireAuth, insightsRoutes);
+app.use('/api/goals', requireAuth, goalsRoutes);
+app.use('/api/sync', requireAuth, syncRoutes); // trigger is admin-only inside sync.js
+
+// Admin only
+app.use('/api/settings', requireAdmin, settingsRoutes);
+app.use('/api/users', requireAdmin, usersRoutes);
+
 // Serve React build in production
 if (process.env.NODE_ENV === 'production') {
   const clientDist = path.join(__dirname, '..', 'client', 'dist');
-  app.use(auth, express.static(clientDist));
-  app.get('*', auth, (req, res) => {
+  // The app shell is public so the sign-in screen can load; every data
+  // endpoint above is what's protected.
+  app.use(express.static(clientDist));
+  app.get('*', (req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 }
@@ -101,12 +80,11 @@ if (process.env.NODE_ENV === 'production') {
 // Initialize DB
 getDb();
 console.log('[Server] Database initialized');
+bootstrapAdmin();
 
 // Start cron jobs
 initScheduler();
 
 app.listen(PORT, () => {
   console.log(`[Server] Running on http://localhost:${PORT}`);
-  if (!useAuth) console.log('[Server] WARNING: No auth configured (DASHBOARD_USER/DASHBOARD_PASS)');
-  if (!useAdminAuth) console.log('[Server] WARNING: No admin auth configured (ADMIN_USER/ADMIN_PASS) — Settings/sync routes are only protected by the shared viewer credential');
 });

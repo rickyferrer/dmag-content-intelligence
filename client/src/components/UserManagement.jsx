@@ -1,0 +1,100 @@
+import React, { useEffect, useState } from 'react';
+import { api } from '../api/index.js';
+import { useAuth } from '../context/AuthContext.jsx';
+
+// Admin-only (the server enforces it; Settings only renders this for admins).
+export default function UserManagement() {
+  const { user: me } = useAuth();
+  const [users, setUsers] = useState([]);
+  const [error, setError] = useState(null);
+  const [form, setForm] = useState({ username: '', display_name: '', password: '', role: 'user' });
+  const [busy, setBusy] = useState(false);
+
+  const load = () => api.listUsers().then(setUsers).catch(e => setError(e.message));
+  useEffect(() => { load(); }, []);
+
+  const run = async (fn) => {
+    setError(null);
+    try { await fn(); await load(); } catch (e) { setError(e.message); }
+  };
+
+  const add = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    await run(async () => {
+      await api.createUser(form);
+      setForm({ username: '', display_name: '', password: '', role: 'user' });
+    });
+    setBusy(false);
+  };
+
+  const resetPassword = (u) => {
+    const pw = window.prompt(`New password for ${u.username} (10+ characters). They'll be signed out everywhere.`);
+    if (pw) run(() => api.resetUserPassword(u.id, pw));
+  };
+  const remove = (u) => {
+    if (window.confirm(`Delete ${u.username}? Their login is removed; their goals and Insights history stay in the database but become inaccessible.`)) {
+      run(() => api.deleteUser(u.id));
+    }
+  };
+
+  const cell = { padding: '8px 10px', fontSize: 13, color: 'var(--text-secondary)' };
+  const small = { fontSize: 11, padding: '3px 8px' };
+
+  return (
+    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, gridColumn: '1 / -1' }}>
+      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>Users</h3>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+        Everyone signs in with their own account and keeps their own goals and Insights history.
+        Only admins can see Settings (scoring weights, syncs, exclusions) and manage users.
+      </p>
+
+      {error && <div role="alert" style={{ fontSize: 12, color: '#e05c5c', marginBottom: 10 }}>{error}</div>}
+
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
+        <thead>
+          <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
+            {['User', 'Role', 'Status', 'Last sign-in', ''].map(h => <th key={h} style={{ ...cell, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>{h}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {users.map(u => {
+            const self = u.id === me.id;
+            return (
+              <tr key={u.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <td style={cell}><strong style={{ color: 'var(--text-primary)' }}>{u.display_name}</strong> <span style={{ color: 'var(--text-muted)' }}>@{u.username}</span></td>
+                <td style={cell}>
+                  <select value={u.role} disabled={self} onChange={e => run(() => api.updateUser(u.id, { role: e.target.value }))}>
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </td>
+                <td style={{ ...cell, color: u.active ? '#4caf86' : 'var(--text-muted)' }}>{u.active ? 'Active' : 'Deactivated'}</td>
+                <td style={cell}>{u.last_login_at ? u.last_login_at.slice(0, 16).replace('T', ' ') : 'never'}</td>
+                <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <button style={small} onClick={() => resetPassword(u)}>Reset password</button>{' '}
+                  {!self && <button style={small} onClick={() => run(() => api.updateUser(u.id, { active: !u.active }))}>{u.active ? 'Deactivate' : 'Reactivate'}</button>}{' '}
+                  {!self && <button style={{ ...small, color: '#e05c5c' }} onClick={() => remove(u)}>Delete</button>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <label style={lbl}>Username<input value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} required autoComplete="off" /></label>
+        <label style={lbl}>Display name<input value={form.display_name} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} autoComplete="off" /></label>
+        <label style={lbl}>Temporary password<input type="text" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required minLength={10} autoComplete="off" placeholder="10+ characters" /></label>
+        <label style={lbl}>Role
+          <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+        <button type="submit" disabled={busy}>Add user</button>
+      </form>
+    </div>
+  );
+}
+const lbl = { fontSize: 12, color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 };

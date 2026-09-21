@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
+import UserManagement from '../components/UserManagement.jsx';
 
 // Mirrors server/utils/trueValue.js's BENCHMARK_META labels/units — kept
 // here too since there's no API endpoint that just returns metadata.
@@ -187,6 +188,8 @@ export default function Settings() {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+      <UserManagement />
+
       {/* Content Value Model */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24 }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
