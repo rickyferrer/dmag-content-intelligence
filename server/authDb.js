@@ -40,6 +40,29 @@ export function getAuthDb() {
         expires_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_app_sessions_user ON app_sessions(user_id);
+      -- Every sign-in attempt, successful or not (username kept as typed so a
+      -- failed attempt against a nonexistent account is still visible).
+      CREATE TABLE IF NOT EXISTS login_events (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER,
+        username   TEXT,
+        success    INTEGER NOT NULL,
+        ip         TEXT,
+        user_agent TEXT,
+        at         TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_login_events_at ON login_events(at);
+      -- A "visit" = a stretch of activity by one user; a new one starts after
+      -- VISIT_GAP_MINUTES of silence. See touchVisit().
+      CREATE TABLE IF NOT EXISTS user_visits (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id      INTEGER NOT NULL,
+        started_at   TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        ip           TEXT,
+        user_agent   TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_visits_user ON user_visits(user_id, started_at);
     `);
     db.pragma('foreign_keys = ON');
   }
@@ -103,6 +126,7 @@ export function setPassword(id, password) {
 }
 
 export function deleteUser(id) {
+  getAuthDb().prepare('DELETE FROM user_visits WHERE user_id = ?').run(id);
   getAuthDb().prepare('DELETE FROM app_users WHERE id = ?').run(id);
 }
 
@@ -138,3 +162,63 @@ export function getSessionUser(token) {
 
 export const deleteSession = (token) => getAuthDb().prepare('DELETE FROM app_sessions WHERE token_hash = ?').run(sha256(token));
 export const deleteUserSessions = (userId) => getAuthDb().prepare('DELETE FROM app_sessions WHERE user_id = ?').run(userId);
+
+// ── Usage logging ───────────────────────────────────────────────────────────
+export const VISIT_GAP_MINUTES = 30;
+const RETENTION_DAYS = 400;
+const nowIso = () => new Date().toISOString();
+
+export function logLoginEvent({ userId = null, username, success, ip, userAgent }) {
+  getAuthDb().prepare('INSERT INTO login_events (user_id, username, success, ip, user_agent, at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(userId, String(username || '').slice(0, 64), success ? 1 : 0, ip || null, String(userAgent || '').slice(0, 200), nowIso());
+  getAuthDb().prepare('DELETE FROM login_events WHERE at < ?').run(new Date(Date.now() - RETENTION_DAYS * 86400000).toISOString());
+}
+
+// Called on every authenticated app request (except background polls — see
+// auth.js). Extends the user's current visit, or opens a new one if they've
+// been silent for VISIT_GAP_MINUTES. DB writes are throttled to once a minute
+// per user; the in-memory map also lets a server restart pick the open visit
+// back up from the database instead of splitting it in two.
+const openVisits = new Map(); // userId → { id, lastSeenMs, lastWriteMs }
+export function touchVisit(userId, ip, userAgent) {
+  const now = Date.now();
+  const gap = VISIT_GAP_MINUTES * 60000;
+  const d = getAuthDb();
+  let v = openVisits.get(userId);
+
+  if (!v) {
+    const row = d.prepare('SELECT id, last_seen_at FROM user_visits WHERE user_id = ? ORDER BY id DESC LIMIT 1').get(userId);
+    if (row && now - Date.parse(row.last_seen_at) < gap) {
+      v = { id: row.id, lastSeenMs: Date.parse(row.last_seen_at), lastWriteMs: Date.parse(row.last_seen_at) };
+      openVisits.set(userId, v);
+    }
+  }
+  if (v && now - v.lastSeenMs < gap) {
+    v.lastSeenMs = now;
+    if (now - v.lastWriteMs > 60000) {
+      d.prepare('UPDATE user_visits SET last_seen_at = ? WHERE id = ?').run(new Date(now).toISOString(), v.id);
+      v.lastWriteMs = now;
+    }
+    return;
+  }
+  const at = new Date(now).toISOString();
+  const r = d.prepare('INSERT INTO user_visits (user_id, started_at, last_seen_at, ip, user_agent) VALUES (?, ?, ?, ?, ?)')
+    .run(userId, at, at, ip || null, String(userAgent || '').slice(0, 200));
+  openVisits.set(userId, { id: r.lastInsertRowid, lastSeenMs: now, lastWriteMs: now });
+}
+
+export function getUsageStats() {
+  const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
+  const rows = getAuthDb().prepare(`
+    SELECT u.id,
+      (SELECT MAX(last_seen_at) FROM user_visits v WHERE v.user_id = u.id) AS last_active_at,
+      (SELECT COUNT(*) FROM user_visits v WHERE v.user_id = u.id AND v.started_at >= ?) AS visits_30d,
+      (SELECT COUNT(*) FROM user_visits v WHERE v.user_id = u.id) AS visits_total,
+      (SELECT COUNT(*) FROM login_events e WHERE e.user_id = u.id AND e.success = 1) AS logins_total
+    FROM app_users u
+  `).all(since30);
+  return Object.fromEntries(rows.map(r => [r.id, r]));
+}
+
+export const getRecentLoginEvents = (limit = 50) =>
+  getAuthDb().prepare('SELECT id, user_id, username, success, ip, user_agent, at FROM login_events ORDER BY id DESC LIMIT ?').all(limit);

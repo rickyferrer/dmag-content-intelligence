@@ -3,6 +3,7 @@ import { logAudit } from '../db.js';
 import {
   listUsers, getUserById, getUserRecordByUsername, createUser, updateUser, setPassword,
   deleteUser, deleteUserSessions, validatePassword, countActiveAdmins,
+  getUsageStats, getRecentLoginEvents,
 } from '../authDb.js';
 
 // Mounted behind requireAdmin (see index.js).
@@ -10,7 +11,23 @@ const router = Router();
 const ROLES = new Set(['admin', 'user']);
 const USERNAME_RE = /^[A-Za-z0-9._@-]{3,64}$/;
 
-router.get('/', (req, res) => res.json(listUsers()));
+// Each user carries their usage: last_active_at, visits_30d, visits_total,
+// logins_total (a "visit" = a stretch of activity; see touchVisit in authDb.js).
+router.get('/', (req, res) => {
+  const usage = getUsageStats();
+  res.json(listUsers().map(u => ({
+    ...u,
+    last_active_at: usage[u.id]?.last_active_at || null,
+    visits_30d: usage[u.id]?.visits_30d || 0,
+    visits_total: usage[u.id]?.visits_total || 0,
+    logins_total: usage[u.id]?.logins_total || 0,
+  })));
+});
+
+// GET /api/users/logins — recent sign-in attempts, newest first (incl. failures).
+router.get('/logins', (req, res) => {
+  res.json(getRecentLoginEvents(Math.min(200, Number(req.query.limit) || 50)));
+});
 
 router.post('/', (req, res) => {
   const { username, display_name, password, role = 'user' } = req.body || {};

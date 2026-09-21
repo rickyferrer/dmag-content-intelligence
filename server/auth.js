@@ -1,4 +1,4 @@
-import { getSessionUser, countUsers, createUser, SESSION_DAYS } from './authDb.js';
+import { getSessionUser, countUsers, createUser, touchVisit, SESSION_DAYS } from './authDb.js';
 import { getDb } from './db.js';
 
 const COOKIE = 'dmci_session';
@@ -27,6 +27,12 @@ export function attachUser(req, res, next) {
   if (user) {
     req.user = user;
     req.auth = { user: user.username }; // what audit-log call sites read
+    // Usage logging. The sync-status poll is skipped: the open app fires it
+    // every 10 minutes on its own, so counting it would make a tab left open
+    // overnight look like continuous use.
+    if (req.path.startsWith('/api/') && req.path !== '/api/sync/status') {
+      try { touchVisit(user.id, req.ip, req.headers['user-agent']); } catch (e) { console.error('[Auth] usage log failed:', e.message); }
+    }
   }
   next();
 }

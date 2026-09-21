@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   getUserRecordByUsername, verifyPassword, verifyAgainstDummy, createSession, deleteSession,
-  setPassword, deleteUserSessions, validatePassword,
+  setPassword, deleteUserSessions, validatePassword, logLoginEvent,
 } from '../authDb.js';
 import {
   setSessionCookie, clearSessionCookie, sessionTokenOf, requireAuth,
@@ -10,22 +10,29 @@ import {
 
 const router = Router();
 
-// POST /api/auth/login
+// POST /api/auth/login — every attempt is recorded in login_events (who, when,
+// from where, success or not) so admins can see sign-ins and spot guessing.
 router.post('/login', (req, res) => {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
   if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
 
+  const meta = { username, ip: req.ip, userAgent: req.headers['user-agent'] };
   const keys = [`ip:${req.ip}|${username.toLowerCase()}`, `user:${username.toLowerCase()}`];
-  if (isThrottled(keys)) return res.status(429).json({ error: 'Too many failed attempts. Try again in a few minutes.' });
+  if (isThrottled(keys)) {
+    logLoginEvent({ ...meta, success: false });
+    return res.status(429).json({ error: 'Too many failed attempts. Try again in a few minutes.' });
+  }
 
   const rec = getUserRecordByUsername(username);
   const ok = rec ? verifyPassword(password, rec.password_hash) : (verifyAgainstDummy(password), false);
   if (!ok || !rec.active) {
     recordFailure(keys);
+    logLoginEvent({ ...meta, userId: rec?.id ?? null, success: false });
     return res.status(401).json({ error: 'Incorrect username or password.' });
   }
   clearFailures(keys);
+  logLoginEvent({ ...meta, userId: rec.id, success: true });
   setSessionCookie(res, createSession(rec.id));
   res.json({ user: { id: rec.id, username: rec.username, display_name: rec.display_name, role: rec.role } });
 });

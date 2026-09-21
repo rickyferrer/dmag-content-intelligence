@@ -28,6 +28,7 @@ export const api = {
   logout: () => apiFetch('/auth/logout', { method: 'POST' }),
   changePassword: (current_password, new_password) => apiFetch('/auth/change-password', { method: 'POST', body: JSON.stringify({ current_password, new_password }) }),
   listUsers: () => apiFetch('/users'),
+  listLogins: () => apiFetch('/users/logins?limit=50'),
   createUser: (body) => apiFetch('/users', { method: 'POST', body: JSON.stringify(body) }),
   updateUser: (id, body) => apiFetch(`/users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   resetUserPassword: (id, password) => apiFetch(`/users/${id}/password`, { method: 'POST', body: JSON.stringify({ password }) }),

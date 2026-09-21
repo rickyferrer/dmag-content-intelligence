@@ -2,6 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
+// SQLite's datetime('now') is UTC without a zone marker; everything else here is ISO. Show both in the viewer's local time.
+function fmtWhen(s) {
+  if (!s) return '—';
+  const d = new Date(s.includes('T') ? s : s.replace(' ', 'T') + 'Z');
+  return isNaN(d) ? s : d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
 // Admin-only (the server enforces it; Settings only renders this for admins).
 export default function UserManagement() {
   const { user: me } = useAuth();
@@ -9,8 +16,13 @@ export default function UserManagement() {
   const [error, setError] = useState(null);
   const [form, setForm] = useState({ username: '', display_name: '', password: '', role: 'user' });
   const [busy, setBusy] = useState(false);
+  const [logins, setLogins] = useState([]);
+  const [showLogins, setShowLogins] = useState(false);
 
-  const load = () => api.listUsers().then(setUsers).catch(e => setError(e.message));
+  const load = () => {
+    api.listUsers().then(setUsers).catch(e => setError(e.message));
+    api.listLogins().then(setLogins).catch(() => {});
+  };
   useEffect(() => { load(); }, []);
 
   const run = async (fn) => {
@@ -54,7 +66,7 @@ export default function UserManagement() {
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
         <thead>
           <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
-            {['User', 'Role', 'Status', 'Last sign-in', ''].map(h => <th key={h} style={{ ...cell, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>{h}</th>)}
+            {['User', 'Role', 'Status', 'Last active', 'Visits (30d)', 'Visits (all)', 'Sign-ins', ''].map(h => <th key={h} style={{ ...cell, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>{h}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -70,7 +82,10 @@ export default function UserManagement() {
                   </select>
                 </td>
                 <td style={{ ...cell, color: u.active ? '#4caf86' : 'var(--text-muted)' }}>{u.active ? 'Active' : 'Deactivated'}</td>
-                <td style={cell}>{u.last_login_at ? u.last_login_at.slice(0, 16).replace('T', ' ') : 'never'}</td>
+                <td style={cell} title={u.last_login_at ? `Last sign-in: ${fmtWhen(u.last_login_at)}` : 'Has never signed in'}>{u.last_active_at ? fmtWhen(u.last_active_at) : 'never'}</td>
+                <td style={cell}>{u.visits_30d}</td>
+                <td style={cell}>{u.visits_total}</td>
+                <td style={cell}>{u.logins_total}</td>
                 <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <button style={small} onClick={() => resetPassword(u)}>Reset password</button>{' '}
                   {!self && <button style={small} onClick={() => run(() => api.updateUser(u.id, { active: !u.active }))}>{u.active ? 'Deactivate' : 'Reactivate'}</button>}{' '}
@@ -81,6 +96,28 @@ export default function UserManagement() {
           })}
         </tbody>
       </table>
+
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -10, marginBottom: 16 }}>
+        A visit is a stretch of activity — a new one starts after 30 minutes of silence. Background refreshes of an open tab don't count.{' '}
+        <button type="button" onClick={() => setShowLogins(v => !v)} style={{ fontSize: 11, padding: '2px 8px' }}>
+          {showLogins ? 'Hide' : 'Show'} recent sign-ins
+        </button>
+      </div>
+      {showLogins && (
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
+          <tbody>
+            {logins.length === 0 && <tr><td style={cell}>No sign-ins recorded yet.</td></tr>}
+            {logins.map(e => (
+              <tr key={e.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <td style={cell}>{fmtWhen(e.at)}</td>
+                <td style={cell}>@{e.username}</td>
+                <td style={{ ...cell, color: e.success ? '#4caf86' : '#e05c5c' }}>{e.success ? 'Signed in' : 'Failed attempt'}</td>
+                <td style={{ ...cell, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{e.ip || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <label style={lbl}>Username<input value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} required autoComplete="off" /></label>
