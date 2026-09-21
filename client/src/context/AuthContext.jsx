@@ -20,12 +20,16 @@ export function AuthProvider({ children }) {
     const r = await api.login(username, password);
     setUser(r.user);
   }, []);
+  const completeSignup = useCallback(async (token, password) => {
+    const r = await api.completeSignup(token, password);
+    setUser(r.user);
+  }, []);
   const logout = useCallback(async () => {
     try { await api.logout(); } finally { setUser(null); }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isAdmin: user?.role === 'admin', login, logout }}>
+    <AuthContext.Provider value={{ user, isAdmin: user?.role === 'admin', login, logout, completeSignup }}>
       {children}
     </AuthContext.Provider>
   );

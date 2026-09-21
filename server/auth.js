@@ -86,3 +86,32 @@ export function recordFailure(keys) {
   for (const k of keys) fails.set(k, [...(fails.get(k) || []).filter(t => now - t < WINDOW_MS), now]);
 }
 export function clearFailures(keys) { for (const k of keys) fails.delete(k); }
+
+// ── Self-service sign-up policy ─────────────────────────────────────────────
+// Email verification proves someone controls an address — it doesn't prove
+// they should see D Magazine's analytics. So sign-ups are limited to
+// SIGNUP_ALLOWED_DOMAINS (comma-separated; default dmagazine.com; "*" lets
+// anyone with a verifiable email in — an explicit opt-in, never the default).
+export function allowedSignupDomains() {
+  return (process.env.SIGNUP_ALLOWED_DOMAINS || 'dmagazine.com').split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
+}
+export function emailAllowedToSignUp(email) {
+  const domains = allowedSignupDomains();
+  return domains.includes('*') || domains.includes(email.split('@')[1]);
+}
+// Anyone verifying one of these addresses becomes an admin.
+export function adminEmails() {
+  return (process.env.ADMIN_EMAILS || 'ricky.ferrer@dmagazine.com').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+}
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Sign-up email throttle: 10 requests/hour per IP, 3/hour per address —
+// keeps the form from being used to spam someone's inbox.
+const signupHits = new Map();
+export function signupThrottled(ip, email) {
+  const now = Date.now();
+  const recent = (k) => (signupHits.get(k) || []).filter(t => now - t < 3600000);
+  const limited = recent(`ip:${ip}`).length >= 10 || recent(`em:${email}`).length >= 3;
+  if (!limited) for (const k of [`ip:${ip}`, `em:${email}`]) signupHits.set(k, [...recent(k), now]);
+  return limited;
+}

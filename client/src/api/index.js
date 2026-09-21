@@ -25,6 +25,10 @@ export const api = {
   // Auth & users
   me: () => apiFetch('/auth/me'),
   login: (username, password) => apiFetch('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  authConfig: () => apiFetch('/auth/config'),
+  signup: (email, display_name) => apiFetch('/auth/signup', { method: 'POST', body: JSON.stringify({ email, display_name }) }),
+  signupInfo: (token) => apiFetch(`/auth/signup-info?token=${encodeURIComponent(token)}`),
+  completeSignup: (token, password) => apiFetch('/auth/signup/complete', { method: 'POST', body: JSON.stringify({ token, password }) }),
   logout: () => apiFetch('/auth/logout', { method: 'POST' }),
   changePassword: (current_password, new_password) => apiFetch('/auth/change-password', { method: 'POST', body: JSON.stringify({ current_password, new_password }) }),
   listUsers: () => apiFetch('/users'),

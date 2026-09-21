@@ -57,7 +57,7 @@ export default function UserManagement() {
     <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, gridColumn: '1 / -1' }}>
       <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>Users</h3>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-        Everyone signs in with their own account and keeps their own goals and Insights history.
+        Everyone signs in with their own account and keeps their own goals and Insights history. People can also create their own account from the sign-in screen (email-verified, limited to allowed domains).
         Only admins can see Settings (scoring weights, syncs, exclusions) and manage users.
       </p>
 
@@ -74,7 +74,7 @@ export default function UserManagement() {
             const self = u.id === me.id;
             return (
               <tr key={u.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                <td style={cell}><strong style={{ color: 'var(--text-primary)' }}>{u.display_name}</strong> <span style={{ color: 'var(--text-muted)' }}>@{u.username}</span></td>
+                <td style={cell}><strong style={{ color: 'var(--text-primary)' }}>{u.display_name}</strong> <span style={{ color: 'var(--text-muted)' }}>{u.email ? u.email : `@${u.username}`}</span></td>
                 <td style={cell}>
                   <select value={u.role} disabled={self} onChange={e => run(() => api.updateUser(u.id, { role: e.target.value }))}>
                     <option value="user">User</option>

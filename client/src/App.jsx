@@ -16,6 +16,7 @@ import Settings from './views/Settings.jsx';
 import { ComparisonProvider } from './context/ComparisonContext.jsx';
 import ComparisonToggle from './components/ComparisonToggle.jsx';
 import Login from './views/Login.jsx';
+import CompleteSignup from './views/CompleteSignup.jsx';
 import AccountMenu from './components/AccountMenu.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { api } from './api/index.js';
@@ -54,7 +55,14 @@ export default function App() {
 
 function AuthGate() {
   const { user } = useAuth();
+  const [signupToken, setSignupToken] = useState(() => new URLSearchParams(window.location.search).get('signup'));
+  const finishSignup = () => { window.history.replaceState({}, '', window.location.pathname); setSignupToken(null); };
+
+  // Someone already signed in who opens an emailed link just drops the token.
+  useEffect(() => { if (signupToken && user) finishSignup(); }, [signupToken, user]);
+
   if (user === undefined) return null; // first session check still in flight
+  if (signupToken && user === null) return <CompleteSignup token={signupToken} onDone={finishSignup} />;
   if (user === null) return <Login />;
   return <Dashboard />;
 }

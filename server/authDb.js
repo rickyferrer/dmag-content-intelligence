@@ -52,6 +52,16 @@ export function getAuthDb() {
         at         TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_login_events_at ON login_events(at);
+      -- Self-service sign-ups waiting on the emailed link. No account (and no
+      -- password) exists until the link is used, so nobody can pre-register
+      -- someone else's address and then log in as them.
+      CREATE TABLE IF NOT EXISTS pending_signups (
+        email        TEXT PRIMARY KEY COLLATE NOCASE,
+        display_name TEXT,
+        token_hash   TEXT NOT NULL,
+        expires_at   TEXT NOT NULL,
+        created_at   TEXT NOT NULL
+      );
       -- A "visit" = a stretch of activity by one user; a new one starts after
       -- VISIT_GAP_MINUTES of silence. See touchVisit().
       CREATE TABLE IF NOT EXISTS user_visits (
@@ -64,6 +74,7 @@ export function getAuthDb() {
       );
       CREATE INDEX IF NOT EXISTS idx_user_visits_user ON user_visits(user_id, started_at);
     `);
+    try { db.exec('ALTER TABLE app_users ADD COLUMN email TEXT'); } catch {}
     db.pragma('foreign_keys = ON');
   }
   return db;
@@ -97,7 +108,7 @@ export function validatePassword(pw) {
 }
 
 // ── Users ───────────────────────────────────────────────────────────────────
-const PUBLIC_COLS = 'id, username, display_name, role, active, created_at, last_login_at';
+const PUBLIC_COLS = 'id, username, display_name, email, role, active, created_at, last_login_at';
 
 export const listUsers = () => getAuthDb().prepare(`SELECT ${PUBLIC_COLS} FROM app_users ORDER BY role = 'admin' DESC, username`).all();
 export const getUserById = (id) => getAuthDb().prepare(`SELECT ${PUBLIC_COLS} FROM app_users WHERE id = ?`).get(id);
@@ -105,10 +116,10 @@ export const getUserRecordByUsername = (username) => getAuthDb().prepare('SELECT
 export const countUsers = () => getAuthDb().prepare('SELECT COUNT(*) AS n FROM app_users').get().n;
 export const countActiveAdmins = () => getAuthDb().prepare("SELECT COUNT(*) AS n FROM app_users WHERE role = 'admin' AND active = 1").get().n;
 
-export function createUser({ username, displayName, password, role = 'user' }) {
+export function createUser({ username, displayName, password, role = 'user', email = null }) {
   const r = getAuthDb().prepare(
-    'INSERT INTO app_users (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)'
-  ).run(username, displayName || username, hashPassword(password), role);
+    'INSERT INTO app_users (username, display_name, password_hash, role, email) VALUES (?, ?, ?, ?, ?)'
+  ).run(username, displayName || username, hashPassword(password), role, email);
   return getUserById(r.lastInsertRowid);
 }
 
@@ -222,3 +233,25 @@ export function getUsageStats() {
 
 export const getRecentLoginEvents = (limit = 50) =>
   getAuthDb().prepare('SELECT id, user_id, username, success, ip, user_agent, at FROM login_events ORDER BY id DESC LIMIT ?').all(limit);
+
+// ── Self-service sign-up ────────────────────────────────────────────────────
+const SIGNUP_TTL_HOURS = 24;
+
+export function createPendingSignup(email, displayName) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const d = getAuthDb();
+  d.prepare('DELETE FROM pending_signups WHERE expires_at < ?').run(nowIso());
+  // One live request per address: asking again replaces the earlier link.
+  d.prepare('INSERT OR REPLACE INTO pending_signups (email, display_name, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
+    .run(email, displayName, sha256(token), new Date(Date.now() + SIGNUP_TTL_HOURS * 3600000).toISOString(), nowIso());
+  return token;
+}
+
+export function getPendingSignup(token) {
+  if (!token || typeof token !== 'string') return null;
+  const row = getAuthDb().prepare('SELECT email, display_name, expires_at FROM pending_signups WHERE token_hash = ?').get(sha256(token));
+  return row && row.expires_at > nowIso() ? row : null;
+}
+
+export const deletePendingSignup = (email) => getAuthDb().prepare('DELETE FROM pending_signups WHERE email = ?').run(email);
+export const emailInUse = (email) => !!getAuthDb().prepare('SELECT 1 FROM app_users WHERE username = ? OR email = ?').get(email, email);
