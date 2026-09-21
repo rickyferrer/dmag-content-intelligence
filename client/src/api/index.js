@@ -16,6 +16,7 @@ async function apiFetch(path, options = {}) {
     try { message = JSON.parse(text)?.error; } catch { /* not JSON */ }
     const err = new Error(message || `API ${path} failed (${res.status}): ${text}`);
     err.status = res.status;
+    try { err.code = JSON.parse(text)?.code; } catch { /* not JSON */ }
     throw err;
   }
   return res.json();
@@ -24,11 +25,8 @@ async function apiFetch(path, options = {}) {
 export const api = {
   // Auth & users
   me: () => apiFetch('/auth/me'),
-  login: (username, password) => apiFetch('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
-  authConfig: () => apiFetch('/auth/config'),
-  signup: (email, display_name) => apiFetch('/auth/signup', { method: 'POST', body: JSON.stringify({ email, display_name }) }),
-  signupInfo: (token) => apiFetch(`/auth/signup-info?token=${encodeURIComponent(token)}`),
-  completeSignup: (token, password) => apiFetch('/auth/signup/complete', { method: 'POST', body: JSON.stringify({ token, password }) }),
+  login: (username, password) => apiFetch('/auth/login', { method: 'POST', body: JSON.stringify({ username, password: password || undefined }) }),
+  signup: (email, display_name, password) => apiFetch('/auth/signup', { method: 'POST', body: JSON.stringify({ email, display_name, password: password || undefined }) }),
   logout: () => apiFetch('/auth/logout', { method: 'POST' }),
   changePassword: (current_password, new_password) => apiFetch('/auth/change-password', { method: 'POST', body: JSON.stringify({ current_password, new_password }) }),
   listUsers: () => apiFetch('/users'),

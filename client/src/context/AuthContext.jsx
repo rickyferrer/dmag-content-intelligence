@@ -20,8 +20,8 @@ export function AuthProvider({ children }) {
     const r = await api.login(username, password);
     setUser(r.user);
   }, []);
-  const completeSignup = useCallback(async (token, password) => {
-    const r = await api.completeSignup(token, password);
+  const signup = useCallback(async (email, name, password) => {
+    const r = await api.signup(email, name, password);
     setUser(r.user);
   }, []);
   const logout = useCallback(async () => {
@@ -29,7 +29,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isAdmin: user?.role === 'admin', login, logout, completeSignup }}>
+    <AuthContext.Provider value={{ user, isAdmin: user?.role === 'admin', login, logout, signup }}>
       {children}
     </AuthContext.Provider>
   );

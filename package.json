@@ -25,8 +25,7 @@
     "googleapis": "^173.0.0",
     "html-to-text": "^9.0.5",
     "node-cron": "^3.0.3",
-    "node-fetch": "^3.3.2",
-    "nodemailer": "^10.0.10"
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"

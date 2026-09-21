@@ -87,31 +87,20 @@ export function recordFailure(keys) {
 }
 export function clearFailures(keys) { for (const k of keys) fails.delete(k); }
 
-// ── Self-service sign-up policy ─────────────────────────────────────────────
-// Email verification proves someone controls an address — it doesn't prove
-// they should see D Magazine's analytics. So sign-ups are limited to
-// SIGNUP_ALLOWED_DOMAINS (comma-separated; default dmagazine.com; "*" lets
-// anyone with a verifiable email in — an explicit opt-in, never the default).
-export function allowedSignupDomains() {
-  return (process.env.SIGNUP_ALLOWED_DOMAINS || 'dmagazine.com').split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
-}
-export function emailAllowedToSignUp(email) {
-  const domains = allowedSignupDomains();
-  return domains.includes('*') || domains.includes(email.split('@')[1]);
-}
-// Anyone verifying one of these addresses becomes an admin.
-export function adminEmails() {
-  return (process.env.ADMIN_EMAILS || 'ricky.ferrer@dmagazine.com').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
-}
+// ── Open sign-up ────────────────────────────────────────────────────────────
+// Anyone can create an account (email + name, password optional). There is
+// deliberately no domain allowlist or "this email becomes admin" rule: without
+// email verification an address is just typed text, so either would be a
+// door anyone could walk through. Admins remove accounts they don't
+// recognize in Settings → Users, and admin role requires a password.
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Sign-up email throttle: 10 requests/hour per IP, 3/hour per address —
-// keeps the form from being used to spam someone's inbox.
+// 10 new accounts/hour per IP — stops the form being used to flood the user list.
 const signupHits = new Map();
-export function signupThrottled(ip, email) {
+export function signupThrottled(ip) {
   const now = Date.now();
-  const recent = (k) => (signupHits.get(k) || []).filter(t => now - t < 3600000);
-  const limited = recent(`ip:${ip}`).length >= 10 || recent(`em:${email}`).length >= 3;
-  if (!limited) for (const k of [`ip:${ip}`, `em:${email}`]) signupHits.set(k, [...recent(k), now]);
-  return limited;
+  const recent = (signupHits.get(ip) || []).filter(t => now - t < 3600000);
+  if (recent.length >= 10) { signupHits.set(ip, recent); return true; }
+  signupHits.set(ip, [...recent, now]);
+  return false;
 }

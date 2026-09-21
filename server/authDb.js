@@ -52,16 +52,7 @@ export function getAuthDb() {
         at         TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_login_events_at ON login_events(at);
-      -- Self-service sign-ups waiting on the emailed link. No account (and no
-      -- password) exists until the link is used, so nobody can pre-register
-      -- someone else's address and then log in as them.
-      CREATE TABLE IF NOT EXISTS pending_signups (
-        email        TEXT PRIMARY KEY COLLATE NOCASE,
-        display_name TEXT,
-        token_hash   TEXT NOT NULL,
-        expires_at   TEXT NOT NULL,
-        created_at   TEXT NOT NULL
-      );
+
       -- A "visit" = a stretch of activity by one user; a new one starts after
       -- VISIT_GAP_MINUTES of silence. See touchVisit().
       CREATE TABLE IF NOT EXISTS user_visits (
@@ -87,6 +78,11 @@ export function hashPassword(password) {
   return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
 }
 
+// Accounts created by open sign-up can be email-only (no password). Stored as
+// this sentinel, which can never verify — see verifyPassword's scheme check.
+export const NO_PASSWORD = '!';
+export const hasPassword = (rec) => !!rec && rec.password_hash !== NO_PASSWORD;
+
 export function verifyPassword(password, stored) {
   const [scheme, saltHex, hashHex] = String(stored || '').split('$');
   if (scheme !== 'scrypt' || !saltHex || !hashHex) return false;
@@ -108,7 +104,7 @@ export function validatePassword(pw) {
 }
 
 // ── Users ───────────────────────────────────────────────────────────────────
-const PUBLIC_COLS = 'id, username, display_name, email, role, active, created_at, last_login_at';
+const PUBLIC_COLS = `id, username, display_name, email, role, active, created_at, last_login_at, (password_hash != '${NO_PASSWORD}') AS has_password`;
 
 export const listUsers = () => getAuthDb().prepare(`SELECT ${PUBLIC_COLS} FROM app_users ORDER BY role = 'admin' DESC, username`).all();
 export const getUserById = (id) => getAuthDb().prepare(`SELECT ${PUBLIC_COLS} FROM app_users WHERE id = ?`).get(id);
@@ -119,7 +115,7 @@ export const countActiveAdmins = () => getAuthDb().prepare("SELECT COUNT(*) AS n
 export function createUser({ username, displayName, password, role = 'user', email = null }) {
   const r = getAuthDb().prepare(
     'INSERT INTO app_users (username, display_name, password_hash, role, email) VALUES (?, ?, ?, ?, ?)'
-  ).run(username, displayName || username, hashPassword(password), role, email);
+  ).run(username, displayName || username, password ? hashPassword(password) : NO_PASSWORD, role, email);
   return getUserById(r.lastInsertRowid);
 }
 
@@ -160,7 +156,7 @@ export function getSessionUser(token) {
   if (!token) return null;
   const th = sha256(token);
   const row = getAuthDb().prepare(`
-    SELECT s.expires_at, u.id, u.username, u.display_name, u.role, u.active
+    SELECT s.expires_at, u.id, u.username, u.display_name, u.role, u.active, (u.password_hash != '!') AS has_password
     FROM app_sessions s JOIN app_users u ON u.id = s.user_id
     WHERE s.token_hash = ?
   `).get(th);
@@ -168,7 +164,7 @@ export function getSessionUser(token) {
   if (row.expires_at < isoIn(SESSION_DAYS - 5)) {
     getAuthDb().prepare('UPDATE app_sessions SET expires_at = ? WHERE token_hash = ?').run(isoIn(SESSION_DAYS), th);
   }
-  return { id: row.id, username: row.username, display_name: row.display_name, role: row.role };
+  return { id: row.id, username: row.username, display_name: row.display_name, role: row.role, has_password: !!row.has_password };
 }
 
 export const deleteSession = (token) => getAuthDb().prepare('DELETE FROM app_sessions WHERE token_hash = ?').run(sha256(token));
@@ -234,24 +230,4 @@ export function getUsageStats() {
 export const getRecentLoginEvents = (limit = 50) =>
   getAuthDb().prepare('SELECT id, user_id, username, success, ip, user_agent, at FROM login_events ORDER BY id DESC LIMIT ?').all(limit);
 
-// ── Self-service sign-up ────────────────────────────────────────────────────
-const SIGNUP_TTL_HOURS = 24;
-
-export function createPendingSignup(email, displayName) {
-  const token = crypto.randomBytes(32).toString('hex');
-  const d = getAuthDb();
-  d.prepare('DELETE FROM pending_signups WHERE expires_at < ?').run(nowIso());
-  // One live request per address: asking again replaces the earlier link.
-  d.prepare('INSERT OR REPLACE INTO pending_signups (email, display_name, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
-    .run(email, displayName, sha256(token), new Date(Date.now() + SIGNUP_TTL_HOURS * 3600000).toISOString(), nowIso());
-  return token;
-}
-
-export function getPendingSignup(token) {
-  if (!token || typeof token !== 'string') return null;
-  const row = getAuthDb().prepare('SELECT email, display_name, expires_at FROM pending_signups WHERE token_hash = ?').get(sha256(token));
-  return row && row.expires_at > nowIso() ? row : null;
-}
-
-export const deletePendingSignup = (email) => getAuthDb().prepare('DELETE FROM pending_signups WHERE email = ?').run(email);
 export const emailInUse = (email) => !!getAuthDb().prepare('SELECT 1 FROM app_users WHERE username = ? OR email = ?').get(email, email);

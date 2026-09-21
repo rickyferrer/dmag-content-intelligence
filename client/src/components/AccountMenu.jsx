@@ -30,18 +30,18 @@ export default function AccountMenu() {
           background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 6,
           boxShadow: '0 4px 16px rgba(0,0,0,0.15)', padding: 4, display: 'flex', flexDirection: 'column',
         }}>
-          <button onClick={() => { setOpen(false); setChanging(true); }} style={menuItem}>Change password</button>
+          <button onClick={() => { setOpen(false); setChanging(true); }} style={menuItem}>{user.has_password ? 'Change password' : 'Set a password'}</button>
           <button onClick={logout} style={menuItem}>Sign out</button>
         </div>
       )}
-      {changing && <ChangePassword onClose={() => setChanging(false)} />}
+      {changing && <ChangePassword hasPassword={user.has_password} onClose={() => setChanging(false)} />}
     </div>
   );
 }
 
 const menuItem = { background: 'transparent', border: 'none', textAlign: 'left', padding: '7px 10px', fontSize: 12, color: 'var(--text-primary)', borderRadius: 4 };
 
-function ChangePassword({ onClose }) {
+function ChangePassword({ onClose, hasPassword }) {
   const [cur, setCur] = useState('');
   const [next, setNext] = useState('');
   const [error, setError] = useState(null);
@@ -59,15 +59,17 @@ function ChangePassword({ onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseDown={onClose}>
       <form onSubmit={submit} onMouseDown={e => e.stopPropagation()} style={{ width: 320, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-primary)' }}>Change password</h3>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-primary)' }}>{hasPassword ? 'Change password' : 'Set a password'}</h3>
         {done ? (
           <>
-            <div style={{ fontSize: 13, color: '#4caf86' }}>Password changed. Your other sessions were signed out.</div>
+            <div style={{ fontSize: 13, color: '#4caf86' }}>Password saved. Your other sessions were signed out.</div>
             <button type="button" onClick={onClose}>Close</button>
           </>
         ) : (
           <>
-            <label style={lbl}>Current password<input type="password" value={cur} onChange={e => setCur(e.target.value)} autoComplete="current-password" required /></label>
+            {hasPassword
+              ? <label style={lbl}>Current password<input type="password" value={cur} onChange={e => setCur(e.target.value)} autoComplete="current-password" required /></label>
+              : <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>You signed up with just your email, so anyone who knows it can sign in as you. A password stops that.</div>}
             <label style={lbl}>New password (10+ characters)<input type="password" value={next} onChange={e => setNext(e.target.value)} autoComplete="new-password" required minLength={10} /></label>
             {error && <div role="alert" style={{ fontSize: 12, color: '#e05c5c' }}>{error}</div>}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

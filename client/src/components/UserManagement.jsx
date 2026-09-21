@@ -57,7 +57,7 @@ export default function UserManagement() {
     <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, gridColumn: '1 / -1' }}>
       <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>Users</h3>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-        Everyone signs in with their own account and keeps their own goals and Insights history. People can also create their own account from the sign-in screen (email-verified, limited to allowed domains).
+        Everyone signs in with their own account and keeps their own goals and Insights history. Anyone can create their own account from the sign-in screen (no email verification), so check this list and delete anyone who shouldn't have access. Accounts without a password can't be made admin.
         Only admins can see Settings (scoring weights, syncs, exclusions) and manage users.
       </p>
 
@@ -66,7 +66,7 @@ export default function UserManagement() {
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
         <thead>
           <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
-            {['User', 'Role', 'Status', 'Last active', 'Visits (30d)', 'Visits (all)', 'Sign-ins', ''].map(h => <th key={h} style={{ ...cell, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>{h}</th>)}
+            {['User', 'Role', 'Status', 'Joined', 'Last active', 'Visits (30d)', 'Visits (all)', 'Sign-ins', ''].map(h => <th key={h} style={{ ...cell, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>{h}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -74,7 +74,7 @@ export default function UserManagement() {
             const self = u.id === me.id;
             return (
               <tr key={u.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                <td style={cell}><strong style={{ color: 'var(--text-primary)' }}>{u.display_name}</strong> <span style={{ color: 'var(--text-muted)' }}>{u.email ? u.email : `@${u.username}`}</span></td>
+                <td style={cell}><strong style={{ color: 'var(--text-primary)' }}>{u.display_name}</strong> <span style={{ color: 'var(--text-muted)' }}>{u.email ? u.email : `@${u.username}`}</span>{!u.has_password && <span title="Signed up with just an email — anyone who knows it can sign in as them. Can't be an admin until a password is set." style={{ marginLeft: 6, fontSize: 10, color: '#e0a13c', border: '1px solid #e0a13c', borderRadius: 3, padding: '0 4px' }}>no password</span>}</td>
                 <td style={cell}>
                   <select value={u.role} disabled={self} onChange={e => run(() => api.updateUser(u.id, { role: e.target.value }))}>
                     <option value="user">User</option>
@@ -82,6 +82,7 @@ export default function UserManagement() {
                   </select>
                 </td>
                 <td style={{ ...cell, color: u.active ? '#4caf86' : 'var(--text-muted)' }}>{u.active ? 'Active' : 'Deactivated'}</td>
+                <td style={cell}>{fmtWhen(u.created_at)}</td>
                 <td style={cell} title={u.last_login_at ? `Last sign-in: ${fmtWhen(u.last_login_at)}` : 'Has never signed in'}>{u.last_active_at ? fmtWhen(u.last_active_at) : 'never'}</td>
                 <td style={cell}>{u.visits_30d}</td>
                 <td style={cell}>{u.visits_total}</td>

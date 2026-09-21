@@ -48,6 +48,11 @@ router.put('/:id', (req, res) => {
   if (!cur) return res.status(404).json({ error: 'User not found' });
   const { display_name, role, active } = req.body || {};
   if (role !== undefined && !ROLES.has(role)) return res.status(400).json({ error: 'Role must be "admin" or "user".' });
+  // Without email verification an email-only account can be signed into by
+  // anyone who knows the address — so it can never hold the admin role.
+  if (role === 'admin' && cur.role !== 'admin' && !cur.has_password) {
+    return res.status(400).json({ error: 'Set a password for this user first (Reset password), then make them an admin — admins can\'t be email-only.' });
+  }
   const losesAdmin = cur.role === 'admin' && cur.active && ((role && role !== 'admin') || active === false);
   if (losesAdmin && countActiveAdmins() <= 1) return res.status(400).json({ error: 'There must be at least one active admin.' });
   const user = updateUser(id, { displayName: display_name, role, active });
