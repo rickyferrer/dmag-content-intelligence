@@ -23,6 +23,13 @@ const STATUS_META = {
   missed:      { label: 'Goal Missed',    color: '#e05c5c' },
 };
 
+// Monday–Sunday, containing today.
+function weekRange() {
+  const d = new Date();
+  const from = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+  const to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 6);
+  return { from: fmtDate(from), to: fmtDate(to) };
+}
 function monthRange() {
   const d = new Date();
   const from = new Date(d.getFullYear(), d.getMonth(), 1);
@@ -75,7 +82,7 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
   const set = (key, value) => setForm(f => ({ ...f, [key]: value }));
 
   const applyPreset = (preset) => {
-    const range = preset === 'month' ? monthRange() : preset === 'quarter' ? quarterRange() : yearRange();
+    const range = preset === 'week' ? weekRange() : preset === 'month' ? monthRange() : preset === 'quarter' ? quarterRange() : yearRange();
     setForm(f => ({ ...f, start_date: range.from, end_date: range.to }));
   };
 
@@ -178,6 +185,7 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
         <div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Time period</div>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            <button type="button" onClick={() => applyPreset('week')} style={{ fontSize: 11, padding: '4px 9px' }}>This Week</button>
             <button type="button" onClick={() => applyPreset('month')} style={{ fontSize: 11, padding: '4px 9px' }}>This Month</button>
             <button type="button" onClick={() => applyPreset('quarter')} style={{ fontSize: 11, padding: '4px 9px' }}>This Quarter</button>
             <button type="button" onClick={() => applyPreset('year')} style={{ fontSize: 11, padding: '4px 9px' }}>This Year</button>
