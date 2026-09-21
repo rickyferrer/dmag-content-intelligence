@@ -33,6 +33,7 @@ export default function Writers({ onSelect }) {
   const { showComparisons } = useComparisons();
   const [data, setData] = useState([]);
   const [previousPeriod, setPreviousPeriod] = useState(null);
+  const [previousMetricsAvailable, setPreviousMetricsAvailable] = useState(null);
   const [loading, setLoading] = useState(true);
   const [types, setTypes] = useState([]);
   const [filters, setFilters] = useState({ from: initFrom, to: initTo, type: '', preset: DEFAULT_PRESET });
@@ -47,7 +48,7 @@ export default function Writers({ onSelect }) {
     if (to) params.dateTo = to;
     if (type) params.type = type;
     api.getByWriter(params)
-      .then(res => { setData(res.data); setPreviousPeriod(res.previous_period); })
+      .then(res => { setData(res.data); setPreviousPeriod(res.previous_period); setPreviousMetricsAvailable(res.previous_metrics_available); })
       .catch(console.error)
       .finally(() => setLoading(false));
   };
@@ -111,6 +112,9 @@ export default function Writers({ onSelect }) {
           <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges below compare
           to the previous period: <strong style={{ color: 'var(--text-secondary)' }}>{previousPeriod.from}</strong> to{' '}
           <strong style={{ color: 'var(--text-secondary)' }}>{previousPeriod.to}</strong>
+          {previousMetricsAvailable === false && (
+            <> — only article counts are compared: metrics are rolling 30-day figures, and snapshots from that far back aren't kept, so there's nothing valid to compare them against.</>
+          )}
         </div>
       )}
 

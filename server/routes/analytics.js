@@ -144,11 +144,25 @@ async function computeTrafficSummary(db, dateFrom, dateTo) {
 // Shared aggregate query for grouped leaderboards (by-section, by-writer) —
 // groupCol is a raw SQL column reference (e.g. 'c.section'), only ever
 // called with a hardcoded value from this file, never user input.
-function fetchGroupedAggregates(db, groupCol, groupAlias, whereSql, params) {
+//
+// `asOf`, when set, uses each article's snapshot AT OR BEFORE that time
+// instead of its latest, and shifts the historical/live split to match — the
+// same pattern as computeContentSummary. The previous-period query needs this:
+// every metric here is a rolling trailing-30-day figure, so an article
+// published 30–60 days ago read from TODAY's snapshot has mostly aged out of
+// the window and looks tiny next to a fresh one, inflating every comparison
+// by hundreds of percent. Read as of the end of its own period instead, it's
+// measured over the same early-life window as the current cohort.
+// `matched_count` = articles that actually had a snapshot to read.
+function fetchGroupedAggregates(db, groupCol, groupAlias, whereSql, params, asOf = null) {
+  const snapshotCutoff = asOf ? 'WHERE snapshot_at <= ?' : '';
+  const snapshotParams = asOf ? [asOf] : [];
+  const historyCutoff = new Date((asOf ? new Date(asOf).getTime() : Date.now()) - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   return db.prepare(`
     SELECT
       ${groupCol} AS ${groupAlias},
       COUNT(c.wp_id)              AS article_count,
+      COUNT(a.wp_id)              AS matched_count,
       SUM(a.true_value)           AS total_true_value,
       -- Excludes true_value = 0 (excluded-from-scoring or not enough
       -- traffic yet) so an average isn't dragged down by pieces that were
@@ -163,24 +177,24 @@ function fetchGroupedAggregates(db, groupCol, groupAlias, whereSql, params) {
       SUM(COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS total_newsletter_signups
     FROM content c
     LEFT JOIN (
-      SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
+      SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots ${snapshotCutoff} GROUP BY wp_id
     ) lx ON c.wp_id = lx.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
     LEFT JOIN (
       SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
       FROM historical_newsletter_signups
-      WHERE week_start < date('now', '-30 days')
+      WHERE week_start < ?
       GROUP BY wp_id
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
       SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
       FROM historical_subscribe_clicks
-      WHERE date < date('now', '-30 days')
+      WHERE date < ?
       GROUP BY wp_id
     ) hs ON hs.wp_id = c.wp_id
     WHERE ${whereSql}
     GROUP BY ${groupCol}
-  `).all(...params);
+  `).all(...snapshotParams, historyCutoff, historyCutoff, ...params);
 }
 
 const COMPARABLE_METRICS = [
@@ -193,16 +207,35 @@ const COMPARABLE_METRICS = [
 // against a same-shape previous-period row set on groupKey. `changes` is
 // null for a row with no counterpart in the previous period (e.g. a writer
 // who published nothing last period) — nothing to compare against, not a
-// 0% change.
+// 0% change. article_count is a plain count of what was published, so it's
+// always comparable; every other metric comes from analytics snapshots, and
+// is only compared when at least half of that period's articles have a
+// snapshot from the end of their own period (see fetchGroupedAggregates'
+// `asOf` — snapshots are only retained ~30 days, so a range that began
+// further back than that has nothing valid to compare against, and
+// comparing against today's aged-out numbers instead is what produced
+// +1,000% "growth"). Omitted metrics are undefined, which ChangeBadge
+// renders as nothing.
 function attachChanges(rows, groupKey, prevRows) {
   const prevMap = Object.fromEntries(prevRows.map(r => [r[groupKey], r]));
   return rows.map(r => {
     const prev = prevMap[r[groupKey]];
     if (!prev) return { ...r, changes: null };
-    const changes = {};
-    for (const m of COMPARABLE_METRICS) changes[m] = pctChange(r[m], prev[m]);
+    const changes = { article_count: pctChange(r.article_count, prev.article_count) };
+    const covered = prev.article_count > 0 && prev.matched_count / prev.article_count >= 0.5;
+    if (covered) {
+      for (const m of COMPARABLE_METRICS) if (m !== 'article_count') changes[m] = pctChange(r[m], prev[m]);
+    }
     return { ...r, changes };
   });
+}
+
+// True when the previous period had enough snapshot coverage overall for
+// metric comparisons to mean anything — lets the UI say so when it's false.
+function metricsComparable(prevRows) {
+  const total = prevRows.reduce((n, r) => n + r.article_count, 0);
+  const matched = prevRows.reduce((n, r) => n + r.matched_count, 0);
+  return total > 0 && matched / total >= 0.5;
 }
 
 // GET /api/analytics/summary
@@ -449,11 +482,14 @@ router.get('/by-section', (req, res) => {
   // one (e.g. Last 30 Days vs. the 30 days before that), distinct from the
   // prior-year comparison below.
   const previous_period = previousPeriodRange(dateFrom, dateTo);
+  let previous_metrics_available = null;
   if (previous_period) {
     const prevWhere = ["c.section IS NOT NULL AND c.section != ''", 'c.published_at >= ?', 'c.published_at <= ?'];
     const prevParams = [previous_period.from, previous_period.to + 'T23:59:59'];
     if (type) { prevWhere.push('c.content_type = ?'); prevParams.push(type); }
-    const prevRows = fetchGroupedAggregates(db, 'c.section', 'section', prevWhere.join(' AND '), prevParams);
+    // Read the previous cohort as of the end of its own period — see fetchGroupedAggregates.
+    const prevRows = fetchGroupedAggregates(db, 'c.section', 'section', prevWhere.join(' AND '), prevParams, previous_period.to + 'T23:59:59');
+    previous_metrics_available = metricsComparable(prevRows);
     rows = attachChanges(rows, 'section', prevRows);
   } else {
     rows = rows.map(r => ({ ...r, changes: null }));
@@ -509,6 +545,7 @@ router.get('/by-section', (req, res) => {
       py: pyMap[r.section] || null,
     })),
     previous_period,
+    previous_metrics_available,
   });
 });
 
@@ -535,11 +572,14 @@ router.get('/by-writer', (req, res) => {
   // one. Computed only for the 10 writers actually shown, after the
   // top-10 cut, so a writer's comparison always matches the row on screen.
   const previous_period = previousPeriodRange(dateFrom, dateTo);
+  let previous_metrics_available = null;
   if (previous_period) {
     const prevWhere = ["c.writer IS NOT NULL AND c.writer != ''", 'c.published_at >= ?', 'c.published_at <= ?'];
     const prevParams = [previous_period.from, previous_period.to + 'T23:59:59'];
     if (type) { prevWhere.push('c.content_type = ?'); prevParams.push(type); }
-    const prevRows = fetchGroupedAggregates(db, 'c.writer', 'writer', prevWhere.join(' AND '), prevParams);
+    // Read the previous cohort as of the end of its own period — see fetchGroupedAggregates.
+    const prevRows = fetchGroupedAggregates(db, 'c.writer', 'writer', prevWhere.join(' AND '), prevParams, previous_period.to + 'T23:59:59');
+    previous_metrics_available = metricsComparable(prevRows);
     rows = attachChanges(rows, 'writer', prevRows);
   } else {
     rows = rows.map(r => ({ ...r, changes: null }));
@@ -568,6 +608,7 @@ router.get('/by-writer', (req, res) => {
       top_article: topByWriter[r.writer] || null,
     })),
     previous_period,
+    previous_metrics_available,
   });
 });
 
