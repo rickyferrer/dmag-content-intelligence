@@ -82,8 +82,8 @@ export default function Login() {
       <form onSubmit={signIn} style={cardStyle}>
         <Brand />
         <label style={lbl}>
-          Email or username
-          <input value={email} onChange={e => { setEmail(e.target.value); setNeedsPassword(false); }} autoFocus autoComplete="username" required />
+          Email address
+          <input type="email" value={email} onChange={e => { setEmail(e.target.value); setNeedsPassword(false); }} autoFocus autoComplete="email" required />
         </label>
         {needsPassword && (
           <label style={lbl}>

@@ -17,7 +17,8 @@ const router = Router();
 router.post('/login', (req, res) => {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
-  if (!username) return res.status(400).json({ error: 'Enter your email or username.' });
+  if (!username) return res.status(400).json({ error: 'Enter your email address.' });
+  if (!EMAIL_RE.test(username)) return res.status(400).json({ error: 'Enter a valid email address.', code: 'invalid_email' });
 
   const meta = { username, ip: req.ip, userAgent: req.headers['user-agent'] };
   const keys = [`ip:${req.ip}|${username.toLowerCase()}`, `user:${username.toLowerCase()}`];

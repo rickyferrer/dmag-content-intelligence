@@ -504,9 +504,9 @@ export default function Settings() {
             disabled={cleaning || cleanupConfirmText !== 'DELETE'}
             style={{
               padding: '8px 18px', borderRadius: 4, fontSize: 13, fontWeight: 500,
-              background: cleaning || cleanupConfirmText !== 'DELETE' ? 'var(--bg-elevated)' : '#c0392b18',
+              background: cleaning || cleanupConfirmText !== 'DELETE' ? 'var(--bg-elevated)' : '#c0392b',
               border: '1px solid #c0392b50',
-              color: cleaning || cleanupConfirmText !== 'DELETE' ? 'var(--text-muted)' : '#c0392b',
+              color: cleaning || cleanupConfirmText !== 'DELETE' ? 'var(--text-muted)' : '#fff',
               opacity: cleaning || cleanupConfirmText !== 'DELETE' ? 0.6 : 1,
               cursor: cleaning || cleanupConfirmText !== 'DELETE' ? 'not-allowed' : 'pointer',
             }}
