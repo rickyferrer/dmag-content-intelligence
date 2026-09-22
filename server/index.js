@@ -63,7 +63,7 @@ app.use('/api/goals', requireAuth, goalsRoutes);
 app.use('/api/sync', requireAuth, syncRoutes); // trigger is admin-only inside sync.js
 
 // Admin only
-app.use('/api/settings', requireAdmin, settingsRoutes);
+app.use('/api/settings', requireAuth, settingsRoutes); // GET / is readable by anyone signed in; every other route requires admin internally (see settings.js)
 app.use('/api/users', requireAdmin, usersRoutes);
 
 // Serve React build in production

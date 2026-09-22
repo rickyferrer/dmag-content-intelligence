@@ -1,19 +1,23 @@
 import { Router } from 'express';
 import { getSettings, updateSettings, getDb, logAudit, getAuditLog } from '../db.js';
 import { scoreContent, pruneSnapshots, SNAPSHOT_RETENTION_DAYS, runBenchmarkCheckIfDue } from '../sync/scheduler.js';
+import { requireAdmin } from '../auth.js';
 import { BENCHMARK_META } from '../utils/trueValue.js';
 
 const router = Router();
 
-// req.auth is set by attachUser (auth.js) from the session — this route tree
-// is always mounted behind requireAdmin (see server/index.js).
+// req.auth is set by attachUser (auth.js) from the session.
 const actorOf = (req) => req.auth?.user || 'unknown';
 
-// GET /api/settings
+// GET /api/settings — the current Content Value weights. Readable by any
+// signed-in user (Settings shows this section to everyone, read-only);
+// every route below this one requires admin.
 router.get('/', (req, res) => {
   const settings = getSettings();
   res.json(settings);
 });
+
+router.use(requireAdmin);
 
 // PUT /api/settings
 router.put('/', (req, res) => {

@@ -59,8 +59,10 @@ function AuthGate() {
   return <Dashboard />;
 }
 
+// The Settings tab is open to everyone now — Settings.jsx itself decides
+// per-section what a non-admin can see/do (e.g. Content Value Model is
+// read-only for them, and several admin-only sections don't render at all).
 function Dashboard() {
-  const { isAdmin } = useAuth();
   const [view, setView] = useState('overview');
   const [selectedId, setSelectedId] = useState(null);
   const [selectedIssue, setSelectedIssue] = useState(null);
@@ -122,7 +124,7 @@ function Dashboard() {
         </div>
 
         <nav style={{ display: 'flex', gap: 4 }}>
-          {NAV.filter(item => item.id !== 'settings' || isAdmin).map(item => (
+          {NAV.map(item => (
             <button
               key={item.id}
               onClick={() => { setView(item.id); setSelectedId(null); setSelectedIssue(null); setSelectedWriter(null); }}
@@ -166,14 +168,12 @@ function Dashboard() {
             ⚠ {staleSyncs.map(s => s.staleHours == null ? `${s.label} has never completed` : `${s.label} hasn't updated in ${s.staleHours}h`).join(' · ')} — data may be missing or out of date.
           </span>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexShrink: 0 }}>
-            {isAdmin && (
-              <button
-                onClick={() => { setView('settings'); setSelectedId(null); }}
-                style={{ background: 'transparent', border: '1px solid #8a5a1a', color: '#ffd699', borderRadius: 4, padding: '3px 10px', fontSize: 11 }}
-              >
-                View Sync Status
-              </button>
-            )}
+            <button
+              onClick={() => { setView('settings'); setSelectedId(null); }}
+              style={{ background: 'transparent', border: '1px solid #8a5a1a', color: '#ffd699', borderRadius: 4, padding: '3px 10px', fontSize: 11 }}
+            >
+              View Sync Status
+            </button>
             <button
               onClick={() => setBannerDismissed(true)}
               aria-label="Dismiss"
@@ -216,7 +216,7 @@ function Dashboard() {
         {view === 'vulnerability'  && <Vulnerability />}
         {view === 'goals'          && <Goals />}
         {view === 'insights'       && <Insights />}
-        {view === 'settings'  && isAdmin && <Settings />}
+        {view === 'settings'  && <Settings />}
       </main>
 
       {/* Detail panel (content view) */}

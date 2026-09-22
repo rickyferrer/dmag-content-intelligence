@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
 import UserManagement from '../components/UserManagement.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 // Mirrors server/utils/trueValue.js's BENCHMARK_META labels/units — kept
 // here too since there's no API endpoint that just returns metadata.
@@ -32,6 +33,7 @@ const WEIGHT_META = {
 };
 
 export default function Settings() {
+  const { isAdmin } = useAuth();
   const [settings, setSettings] = useState({});
   const [dirty, setDirty] = useState({});
   const [saving, setSaving] = useState(false);
@@ -54,14 +56,20 @@ export default function Settings() {
   const loadBenchmarkChecks = () => api.getBenchmarkChecks().then(setBenchmarkChecks).catch(console.error);
 
   useEffect(() => {
+    // Readable by everyone signed in — see server/routes/settings.js.
     api.getSettings().then(setSettings).catch(console.error);
     api.getSyncStatus().then(setSyncStatus).catch(console.error);
+    // Everything else on this page (exclusions, audit log, benchmark checks,
+    // and the sections below that use them) is admin-only server-side —
+    // skip the requests entirely for a non-admin instead of firing ones
+    // that'll just 403.
+    if (!isAdmin) return;
     api.getExclusions()
       .then(rows => setExclusionText(rows.map(r => r.url).join('\n')))
       .catch(console.error);
     loadAuditLog();
     loadBenchmarkChecks();
-  }, []);
+  }, [isAdmin]);
 
   const handleChange = (key, val) => {
     setDirty(d => ({ ...d, [key]: parseFloat(val) }));
@@ -188,9 +196,9 @@ export default function Settings() {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
-      <UserManagement />
+      {isAdmin && <UserManagement />}
 
-      {/* Content Value Model */}
+      {/* Content Value Model — visible to everyone; only admins can edit. */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24 }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
           Content Value Model
@@ -199,7 +207,9 @@ export default function Settings() {
           Each article is scored on how well it converts its readers (per-reader rates vs. a
           benchmark), weighted by strategic priority below — so a niche article that drives
           subscriptions beats a high-traffic article that doesn't. Weights are relative.
-          After changing any value, hit <strong>Recalculate All Scores</strong>.
+          {isAdmin
+            ? <> After changing any value, hit <strong>Recalculate All Scores</strong>.</>
+            : ' Only admins can change these — ask one if a weight needs adjusting.'}
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -225,7 +235,8 @@ export default function Settings() {
                   min={meta.min} max={meta.max} step={meta.step}
                   value={val || 0}
                   onChange={e => handleChange(key, e.target.value)}
-                  style={{ width: '100%', accentColor: 'var(--accent-gold)' }}
+                  disabled={!isAdmin}
+                  style={{ width: '100%', accentColor: 'var(--accent-gold)', opacity: isAdmin ? 1 : 0.6, cursor: isAdmin ? 'pointer' : 'default' }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
                   <span>{meta.min}</span>
@@ -236,33 +247,35 @@ export default function Settings() {
           })}
         </div>
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-          <button
-            onClick={handleSave}
-            disabled={saving || Object.keys(dirty).length === 0}
-            style={{
-              padding: '8px 18px', borderRadius: 4, fontSize: 13, fontWeight: 500,
-              background: 'var(--accent-gold)', border: 'none', color: '#0f0f0f',
-              opacity: (saving || Object.keys(dirty).length === 0) ? 0.5 : 1,
-            }}
-          >
-            {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save Weights'}
-          </button>
-          <button
-            onClick={handleRecalculate}
-            disabled={recalculating}
-            style={{
-              padding: '8px 18px', borderRadius: 4, fontSize: 13,
-              background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
-              opacity: recalculating ? 0.6 : 1,
-            }}
-          >
-            {recalculating ? 'Recalculating...' : 'Recalculate All Scores'}
-          </button>
-        </div>
+        {isAdmin && (
+          <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+            <button
+              onClick={handleSave}
+              disabled={saving || Object.keys(dirty).length === 0}
+              style={{
+                padding: '8px 18px', borderRadius: 4, fontSize: 13, fontWeight: 500,
+                background: 'var(--accent-gold)', border: 'none', color: '#0f0f0f',
+                opacity: (saving || Object.keys(dirty).length === 0) ? 0.5 : 1,
+              }}
+            >
+              {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save Weights'}
+            </button>
+            <button
+              onClick={handleRecalculate}
+              disabled={recalculating}
+              style={{
+                padding: '8px 18px', borderRadius: 4, fontSize: 13,
+                background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
+                opacity: recalculating ? 0.6 : 1,
+              }}
+            >
+              {recalculating ? 'Recalculating...' : 'Recalculate All Scores'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Sync Status */}
+      {/* Sync Status — visible to everyone; only admins can trigger a sync. */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24 }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 16, color: 'var(--text-primary)' }}>
           Sync Status
@@ -288,25 +301,28 @@ export default function Settings() {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {['all', 'content', 'analytics', 'classify'].map(type => (
-            <button
-              key={type}
-              onClick={() => handleTriggerSync(type)}
-              disabled={triggering}
-              style={{
-                padding: '7px 14px', borderRadius: 4, fontSize: 12,
-                background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
-                opacity: triggering ? 0.6 : 1,
-              }}
-            >
-              Trigger {type} sync
-            </button>
-          ))}
-        </div>
+        {isAdmin && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {['all', 'content', 'analytics', 'classify'].map(type => (
+              <button
+                key={type}
+                onClick={() => handleTriggerSync(type)}
+                disabled={triggering}
+                style={{
+                  padding: '7px 14px', borderRadius: 4, fontSize: 12,
+                  background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
+                  opacity: triggering ? 0.6 : 1,
+                }}
+              >
+                Trigger {type} sync
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Benchmark Recalibration */}
+      {/* Benchmark Recalibration — admin-only */}
+      {isAdmin && (
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, gridColumn: '1 / -1' }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
           Benchmark Recalibration
@@ -401,8 +417,10 @@ export default function Settings() {
           </div>
         )}
       </div>
+      )}
 
-      {/* Scoring Exclusions */}
+      {/* Scoring Exclusions — admin-only */}
+      {isAdmin && (
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, gridColumn: '1 / -1' }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
           Scoring Exclusions
@@ -450,8 +468,10 @@ export default function Settings() {
           )}
         </div>
       </div>
+      )}
 
-      {/* Data Cleanup */}
+      {/* Data Cleanup — admin-only */}
+      {isAdmin && (
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, gridColumn: '1 / -1' }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
           Data Cleanup
@@ -513,8 +533,10 @@ export default function Settings() {
           )}
         </div>
       </div>
+      )}
 
-      {/* Audit Log */}
+      {/* Audit Log — admin-only */}
+      {isAdmin && (
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, gridColumn: '1 / -1' }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 4, color: 'var(--text-primary)' }}>
           Audit Log
@@ -560,6 +582,7 @@ export default function Settings() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
