@@ -1174,15 +1174,32 @@ router.get('/channels', (req, res) => {
   // snapshot-fallback mode it's the older-snapshot cutoff described above.
   const previous_period = range_mode === 'daily' ? previousPeriodRange(dateFrom, dateTo) : null;
   const compared_to = range_mode === 'daily' ? null : (dateFrom || null);
+  let previous_period_coverage = null;
   if (previous_period || compared_to) {
     const prevSourceRows = previous_period
       ? fetchSourceRowsDaily(db, { dateFrom: previous_period.from, dateTo: previous_period.to, snapshotRows: latestSnapshotRows })
       : fetchSourceRows(db, { type, asOf: compared_to });
     const prevTotals = buildChannelTotals(prevSourceRows);
+
+    // source_daily may only have real rows for part of the previous window
+    // (e.g. daily tracking started partway through it) — summing a handful
+    // of real days against a full current period inflates the % by
+    // hundreds/thousands, the same failure mode fixed for Writers/Sections
+    // via matched_count (see attachChanges above). Only show change badges
+    // when at least half of the previous period's days have real data.
+    let coverageOk = true;
+    if (previous_period) {
+      const expectedDays = Math.round((new Date(previous_period.to) - new Date(previous_period.from)) / (24 * 60 * 60 * 1000)) + 1;
+      const covered = db.prepare('SELECT COUNT(DISTINCT date) AS n FROM source_daily WHERE date >= ? AND date <= ?')
+        .get(previous_period.from, previous_period.to).n;
+      previous_period_coverage = expectedDays > 0 ? covered / expectedDays : 0;
+      coverageOk = previous_period_coverage >= 0.5;
+    }
+
     for (const c of channels) {
       const prev = prevTotals[c.key];
       const prevInmarketPct = prev && prev.users > 0 ? (prev.inmarket_pv / prev.users) * 100 : 0;
-      c.changes = prev ? {
+      c.changes = (prev && coverageOk) ? {
         pageviews: pctChange(c.pageviews, prev.pageviews),
         users: pctChange(c.users, prev.users),
         loyal_users: pctChange(c.loyal_users, prev.loyal_users),
@@ -1203,6 +1220,7 @@ router.get('/channels', (req, res) => {
     snapshot_reason,
     daily_coverage: range_mode === 'daily' ? { from: dailyCoverage.from_date, to: dailyCoverage.to_date } : null,
     previous_period,
+    previous_period_coverage,
     type: type || null,
     ga4_snapshot_at: ga4Snapshot?.snapshot_at || null,
     channels,

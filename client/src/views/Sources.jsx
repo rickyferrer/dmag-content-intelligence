@@ -330,9 +330,15 @@ export default function Sources() {
           <>
             Traffic sums real daily pageviews by source{filters.from && filters.to ? <> for <strong style={{ color: 'var(--text-secondary)' }}>{filters.from} – {filters.to}</strong></> : ' across all stored days'} — all traffic on the site, regardless of when articles were published. Users, Loyal Users, In-Market % and Newsletter Signups are estimates (each source's latest per-pageview rate × the range's pageviews).{' '}
             {showComparisons && result?.previous_period && (
-              <>
-                <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges compare to the previous range, <strong style={{ color: 'var(--text-secondary)' }}>{result.previous_period.from} – {result.previous_period.to}</strong>.{' '}
-              </>
+              result.previous_period_coverage != null && result.previous_period_coverage < 0.5 ? (
+                <>
+                  <span style={{ color: 'var(--text-muted)' }}>+/-%</span> badges are hidden — the previous range, <strong style={{ color: 'var(--text-secondary)' }}>{result.previous_period.from} – {result.previous_period.to}</strong>, only has daily data for part of that window, which would inflate the comparison.{' '}
+                </>
+              ) : (
+                <>
+                  <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges compare to the previous range, <strong style={{ color: 'var(--text-secondary)' }}>{result.previous_period.from} – {result.previous_period.to}</strong>.{' '}
+                </>
+              )
             )}
             Daily data is stored from <strong style={{ color: 'var(--text-secondary)' }}>{result.daily_coverage?.from}</strong>{filters.from && result.daily_coverage?.from && filters.from < result.daily_coverage.from ? <> — this range starts earlier, so days before then are missing and totals are understated</> : ''}.{' '}
           </>
