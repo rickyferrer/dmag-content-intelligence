@@ -1,4 +1,6 @@
-import { getSessionUser, countUsers, createUser, touchVisit, SESSION_DAYS } from './authDb.js';
+import {
+  getSessionUser, countUsers, countActiveAdmins, getUserRecordByUsername, createUser, updateUser, touchVisit, SESSION_DAYS,
+} from './authDb.js';
 import { getDb } from './db.js';
 
 const COOKIE = 'dmci_session';
@@ -53,18 +55,38 @@ export function requireAdmin(req, res, next) {
 // DASHBOARD_PASS — the same ones that already guard the app), then hand
 // every pre-existing goal and Insights conversation to that admin so
 // nothing created before individual logins is orphaned.
+// First-run bootstrap, and self-healing recovery: whenever the server starts
+// up with ZERO ACTIVE ADMINS — not just zero accounts — ensure the account
+// named by ADMIN_USER/ADMIN_PASS (else DASHBOARD_USER/DASHBOARD_PASS, the
+// same credentials that guarded the app before individual logins) is an
+// active admin. This is deliberately broader than "no accounts exist":
+// with open sign-up, someone else creating an account first would otherwise
+// permanently skip bootstrap and could leave a deployment with no admin at
+// all and no way back in through the UI (see the incident that prompted
+// this — server/scripts/promote-admin.mjs is the manual fallback for right
+// now; this is what stops it happening again). If that account already
+// exists, this only restores its role/active flag — it never touches an
+// existing password, so it can't be used to silently reset one.
 export function bootstrapAdmin() {
-  if (countUsers() > 0) return;
+  if (countActiveAdmins() > 0) return;
   const username = process.env.ADMIN_USER || process.env.DASHBOARD_USER;
   const password = process.env.ADMIN_PASS || process.env.DASHBOARD_PASS;
   if (!username || !password) {
-    console.error('[Auth] No accounts exist and no ADMIN_USER/ADMIN_PASS (or DASHBOARD_USER/DASHBOARD_PASS) is set — nobody can sign in. Set them and restart to create the first admin.');
+    console.error('[Auth] No active admin exists and no ADMIN_USER/ADMIN_PASS (or DASHBOARD_USER/DASHBOARD_PASS) is set — nobody can reach Settings. Set them and restart, or run server/scripts/promote-admin.mjs <username> to promote someone directly.');
     return;
   }
   if (password.length < 10) {
     console.warn('[Auth] The bootstrap password is shorter than 10 characters — sign in and change it right away.');
   }
-  // createUser doesn't enforce length on purpose here: it must not lock out an existing deployment.
+
+  const existing = getUserRecordByUsername(username);
+  if (existing) {
+    updateUser(existing.id, { role: 'admin', active: true });
+    console.log(`[Auth] No active admin existed — restored admin on the existing account "${username}".`);
+    return;
+  }
+
+  // createUser doesn't enforce password length on purpose here: it must not lock out an existing deployment.
   const admin = createUser({ username, displayName: username, password, role: 'admin' });
   const db = getDb();
   db.prepare('UPDATE goals SET user_id = ? WHERE user_id IS NULL').run(admin.id);
