@@ -7,6 +7,7 @@ import SearchableSelect from '../components/SearchableSelect.jsx';
 import { ChangeBadge } from '../components/KPICard.jsx';
 import { useComparisons } from '../context/ComparisonContext.jsx';
 import { SUBSCRIBE_CLICKS_NOTE, NEWSLETTER_NOTE } from '../constants/dataReliability.js';
+import Spinner from '../components/Spinner.jsx';
 
 const PUB_DISPLAY = { 'd-magazine': 'D Magazine', 'd-home': 'D Home', 'd-ceo': 'D CEO', 'd-weddings': 'D Weddings' };
 
@@ -260,7 +261,7 @@ export default function ContentTable({ onSelect }) {
         />
 
         <div style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 12, display: 'flex', alignItems: 'center', height: 30 }}>
-          {loading ? 'Loading…' : `${pagination.total.toLocaleString()} items`}
+          {loading ? <Spinner label="Loading…" /> : `${pagination.total.toLocaleString()} items`}
         </div>
       </div>
 

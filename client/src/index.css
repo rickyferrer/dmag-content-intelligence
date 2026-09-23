@@ -104,3 +104,19 @@ input:focus, select:focus {
 ::-webkit-scrollbar-track { background: var(--bg-elevated); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Loading spinner (components/Spinner.jsx) */
+.spinner {
+  display: inline-block;
+  box-sizing: border-box;
+  border-style: solid;
+  border-color: var(--border);
+  border-top-color: var(--accent-gold);
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spinner-rotate { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2s; }
+}

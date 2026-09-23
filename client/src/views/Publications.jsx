@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
+import Spinner from '../components/Spinner.jsx';
 
 const PUB_LABELS = {
   'D Magazine': 'd-magazine',
@@ -134,7 +135,7 @@ export default function Publications({ onSelect }) {
       </div>
 
       {loading ? (
-        <div style={{ padding: 40, color: 'var(--text-muted)' }}>Loading...</div>
+        <Spinner block label="Loading…" />
       ) : (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>

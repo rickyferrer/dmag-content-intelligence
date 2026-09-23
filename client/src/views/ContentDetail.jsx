@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { api } from '../api/index.js';
 import NeedBadge from '../components/NeedBadge.jsx';
+import Spinner from '../components/Spinner.jsx';
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -95,7 +96,7 @@ export default function ContentDetail({ wpId, onClose }) {
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ flex: 1 }}>
           {loading ? (
-            <div style={{ color: 'var(--text-muted)' }}>Loading...</div>
+            <Spinner block label="Loading…" />
           ) : (
             <>
               <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, lineHeight: 1.3, color: 'var(--text-primary)', marginBottom: 8 }}>

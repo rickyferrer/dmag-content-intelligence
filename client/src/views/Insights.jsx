@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../api/index.js';
+import Spinner from '../components/Spinner.jsx';
 
 const EXAMPLE_QUESTIONS = [
   'Which sections have the highest content value?',
@@ -223,7 +224,7 @@ export default function Insights() {
       {/* Chat column */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
         {loadingConversation ? (
-          <div style={{ padding: 40, color: 'var(--text-muted)' }}>Loading conversation…</div>
+          <Spinner block label="Loading conversation…" />
         ) : (
           <>
             {/* Intro / empty state */}
@@ -283,7 +284,7 @@ export default function Insights() {
                       }}>
                         {entry.loading && (
                           <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                            Querying the dashboard…
+                            <Spinner label="Querying the dashboard…" />
                           </div>
                         )}
                         {entry.error && (

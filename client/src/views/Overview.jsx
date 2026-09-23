@@ -9,6 +9,7 @@ import ScatterPlot from '../components/ScatterPlot.jsx';
 import { NEED_META } from '../components/NeedBadge.jsx';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 import { useComparisons } from '../context/ComparisonContext.jsx';
+import Spinner from '../components/Spinner.jsx';
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -121,7 +122,7 @@ export default function Overview() {
           ))}
         </select>
 
-        {loading && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</span>}
+        {loading && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}><Spinner label="Loading…" /></span>}
       </div>
 
       {/* Comparison caption — the % badges below are relative to this window,

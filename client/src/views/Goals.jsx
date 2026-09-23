@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
 import { NEED_META } from '../components/NeedBadge.jsx';
+import Spinner from '../components/Spinner.jsx';
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -289,7 +290,7 @@ export default function Goals() {
     ]).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>;
+  if (loading) return <Spinner block label="Loading…" />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

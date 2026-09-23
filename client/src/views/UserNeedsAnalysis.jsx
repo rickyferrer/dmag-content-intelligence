@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
 import { NEED_META, NeedInfoIcon } from '../components/NeedBadge.jsx';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
+import Spinner from '../components/Spinner.jsx';
 
 const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
 
@@ -91,7 +92,7 @@ export default function UserNeedsAnalysis() {
       )}
 
       {loading ? (
-        <div style={{ padding: 40, color: 'var(--text-muted)' }}>Loading...</div>
+        <Spinner block label="Loading…" />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
           {sortedNeeds.map(need => {

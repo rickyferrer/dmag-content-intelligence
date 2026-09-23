@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { api } from '../api/index.js';
 import NeedBadge, { NEED_META } from '../components/NeedBadge.jsx';
+import Spinner from '../components/Spinner.jsx';
 
 const PUB_DISPLAY = { 'd-magazine': 'D Magazine', 'd-home': 'D Home', 'd-ceo': 'D CEO', 'd-weddings': 'D Weddings' };
 const PUB_COLORS = { 'd-magazine': '#c9a84c', 'd-home': '#5b9bd5', 'd-ceo': '#7c5cbf', 'd-weddings': '#c2679e' };
@@ -133,7 +134,7 @@ export default function PublicationDetail({ issue, onClose }) {
             Content by User Need
           </h3>
           {loading ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '20px 0', textAlign: 'center' }}>Loading…</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '20px 0', textAlign: 'center' }}><Spinner label="Loading…" /></div>
           ) : pieData.length === 0 ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '20px 0', textAlign: 'center' }}>No articles found for this issue.</div>
           ) : (
@@ -163,7 +164,7 @@ export default function PublicationDetail({ issue, onClose }) {
             Articles {!loading && `(${articles.length})`}
           </h3>
           {loading ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading…</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}><Spinner label="Loading…" /></div>
           ) : articles.length === 0 ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No articles found for this issue.</div>
           ) : (

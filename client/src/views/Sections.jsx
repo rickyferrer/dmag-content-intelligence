@@ -5,6 +5,7 @@ import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePre
 import { ChangeBadge } from '../components/KPICard.jsx';
 import { useComparisons } from '../context/ComparisonContext.jsx';
 import { SUBSCRIBE_CLICKS_NOTE, NEWSLETTER_NOTE } from '../constants/dataReliability.js';
+import Spinner from '../components/Spinner.jsx';
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -137,7 +138,7 @@ export default function Sections() {
       )}
 
       {loading ? (
-        <div style={{ padding: 40, color: 'var(--text-muted)' }}>Loading...</div>
+        <Spinner block label="Loading…" />
       ) : (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>

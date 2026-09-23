@@ -19,6 +19,7 @@ import Login from './views/Login.jsx';
 import AccountMenu from './components/AccountMenu.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { api } from './api/index.js';
+import Spinner from './components/Spinner.jsx';
 
 const NAV = [
   { id: 'overview',      label: 'Overview' },
@@ -54,7 +55,7 @@ export default function App() {
 
 function AuthGate() {
   const { user } = useAuth();
-  if (user === undefined) return null; // first session check still in flight
+  if (user === undefined) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={28} /></div>; // first session check still in flight
   if (user === null) return <Login />;
   return <Dashboard />;
 }

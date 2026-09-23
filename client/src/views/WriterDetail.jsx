@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { api } from '../api/index.js';
 import NeedBadge, { NEED_META } from '../components/NeedBadge.jsx';
+import Spinner from '../components/Spinner.jsx';
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -104,7 +105,7 @@ export default function WriterDetail({ writer, dateFrom, dateTo, onClose }) {
             Content by User Need
           </h3>
           {loading ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '20px 0', textAlign: 'center' }}>Loading…</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '20px 0', textAlign: 'center' }}><Spinner label="Loading…" /></div>
           ) : pieData.length === 0 ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '20px 0', textAlign: 'center' }}>No articles found for this writer.</div>
           ) : (
@@ -134,7 +135,7 @@ export default function WriterDetail({ writer, dateFrom, dateTo, onClose }) {
             Articles {!loading && `(${articles.length})`}
           </h3>
           {loading ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading…</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}><Spinner label="Loading…" /></div>
           ) : articles.length === 0 ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No articles found for this writer.</div>
           ) : (

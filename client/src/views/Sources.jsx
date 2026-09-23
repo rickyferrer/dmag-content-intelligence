@@ -8,6 +8,7 @@ import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePre
 import { ChangeBadge } from '../components/KPICard.jsx';
 import { useComparisons } from '../context/ComparisonContext.jsx';
 import { NEWSLETTER_NOTE } from '../constants/dataReliability.js';
+import Spinner from '../components/Spinner.jsx';
 
 function fmt(n) {
   if (!n) return '—';
@@ -359,7 +360,7 @@ export default function Sources() {
       </div>
 
       {loading ? (
-        <div style={{ padding: 40, color: 'var(--text-muted)' }}>Loading...</div>
+        <Spinner block label="Loading…" />
       ) : channels.length === 0 ? (
         <div style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ color: 'var(--text-muted)' }}>
