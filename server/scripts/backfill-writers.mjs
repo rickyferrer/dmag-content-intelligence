@@ -6,7 +6,7 @@ const WP_BASE = 'https://www.dmagazine.com/wp-json/wp/v2';
 const UA = 'SEO DMAG Crawl';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-const TYPE_ENDPOINT = { post: 'posts', pages: 'pages', micropost: 'micropost' };
+const TYPE_ENDPOINT = { post: 'posts', pages: 'pages', micropost: 'micropost', video: 'video' };
 
 function decode(s) {
   return (s || '').replace(/&amp;/g, '&').replace(/&#8217;/g, '’').replace(/&#8216;/g, '‘')

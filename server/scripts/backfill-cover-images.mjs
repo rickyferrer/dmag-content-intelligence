@@ -7,7 +7,7 @@ const WP_BASE = 'https://www.dmagazine.com/wp-json/wp/v2';
 const UA = 'SEO DMAG Crawl';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-const TYPE_ENDPOINT = { post: 'posts', pages: 'pages', micropost: 'micropost' };
+const TYPE_ENDPOINT = { post: 'posts', pages: 'pages', micropost: 'micropost', video: 'video' };
 
 const db = getDb();
 const rows = db.prepare('SELECT wp_id, content_type FROM content WHERE cover_image_url IS NULL').all();

@@ -4,7 +4,7 @@ import { stripHtml } from '../utils/stripHtml.js';
 const WP_BASE = process.env.WP_API_BASE || 'https://www.dmagazine.com/wp-json/wp/v2';
 const USER_AGENT = process.env.WP_USER_AGENT || 'SEO DMAG Crawl';
 
-const CONTENT_TYPES = ['posts', 'pages', 'micropost', 'tribe_events'];
+const CONTENT_TYPES = ['posts', 'pages', 'micropost', 'tribe_events', 'video'];
 
 // Limit initial (full) sync to content published within this window.
 // Prevents pulling decades of historical archives on first run.
@@ -223,9 +223,13 @@ async function fetchContentBatch(type, ids) {
   }
 }
 
-export async function syncWordPress() {
+// Options (used for one-off backfills of newly added types):
+//   types — restrict the run to these REST bases (default: all CONTENT_TYPES)
+//   full  — ignore the incremental watermark and pull the full lookback window;
+//           the watermark is left untouched so regular syncs are unaffected
+export async function syncWordPress({ types = CONTENT_TYPES, full = false } = {}) {
   const db = getDb();
-  const lastSync = getSyncState('last_wp_sync');
+  const lastSync = full ? null : getSyncState('last_wp_sync');
   const now = new Date().toISOString();
 
   // Incremental: use modified_after so we only fetch changed/new posts since last sync.
@@ -282,7 +286,7 @@ export async function syncWordPress() {
   let totalMeta = 0;
   const errors = [];
 
-  for (const type of CONTENT_TYPES) {
+  for (const type of types) {
     const exists = await probeType(type);
     if (!exists) {
       console.log(`[WP] Type '${type}' not available — skipping`);
@@ -416,7 +420,9 @@ export async function syncWordPress() {
   // type errored out mid-pagination, its unfetched pages must not be permanently
   // skipped — leaving `last_wp_sync` unchanged means the next run retries the
   // same modified_after window instead of silently moving past the gap.
-  if (errors.length === 0) {
+  if (full) {
+    console.log('[WP] Full/typed backfill — leaving last_wp_sync unchanged.');
+  } else if (errors.length === 0) {
     setSyncState('last_wp_sync', now);
   } else {
     console.warn(`[WP] ${errors.length} error(s) during sync — leaving last_wp_sync at ${lastSync || '(none)'} so the next run retries this window.`);
