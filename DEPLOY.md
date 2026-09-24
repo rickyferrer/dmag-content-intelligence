@@ -1,6 +1,6 @@
 # Deploying to your own VPS
 
-Internal-team dashboard: Node + Express + SQLite + hourly cron, behind a shared
+Internal-team dashboard: Node + Express + SQLite + daily cron, behind a shared
 password, served over HTTPS. Assumes an **Ubuntu 22.04+** server with `sudo` and
 (ideally) a domain or subdomain pointed at it. Substitute your own values for
 `USER`, `SERVER_IP`, and `dashboard.example.com`.
@@ -104,6 +104,13 @@ GSC_SITE_URL=sc-domain:dmagazine.com
 # NLP_KEY_FILE=./credentials/ga4-service-account.json   # optional override
 # NLP_BATCH_SIZE=20                                     # optional override, per cron run
 
+# Cloudflare Stream — minutes viewed per video (Video Min. on the Content tab).
+# Token is an Account API Token with the "Stream:Read" permission (Cloudflare
+# dashboard → Manage Account → API Tokens). Optional: if either is unset, the
+# Stream sync is skipped and everything else runs normally.
+CLOUDFLARE_ACCOUNT_ID=...
+CLOUDFLARE_API_TOKEN=...
+
 # Marfeel
 MARFEEL_EMAIL=...
 MARFEEL_PASSWORD=...
@@ -139,6 +146,28 @@ pm2 status
 curl -s http://localhost:3001/health     # -> {"ok":true,...}
 pm2 logs dmag-dashboard --lines 30        # watch for "[Server] Running" and sync logs
 ```
+
+---
+
+### One-time: backfill video minutes viewed
+
+Only needed the first time Cloudflare is configured on a server (skip if you
+copied over a `content.db` that already has it). The regular content sync only
+fetches recently modified posts, so existing videos' Cloudflare IDs have to be
+pulled once, followed by the minutes-viewed history:
+
+```bash
+node --env-file=.env -e "import('./server/sync/wordpress.js').then(m=>m.syncWordPress({types:['video'],full:true})).then(()=>import('./server/sync/cloudflare.js')).then(m=>m.syncCloudflareStream()).then(console.log)"
+```
+
+Safe to run while the app is up. Do it promptly: Cloudflare only serves about
+92 days of history (the first sync backfills 90), so anything older than that
+when you start can't be recovered. After this the daily sync keeps it current,
+resuming from the latest stored day so a missed run or outage doesn't leave a
+gap. Stored history is never pruned.
+
+To re-run just the Cloudflare part later, an admin can trigger a sync of type
+`stream`, or run `syncCloudflareStream()` from the command above on its own.
 
 ---
 
@@ -196,6 +225,6 @@ ssh USER@SERVER_IP "cd /home/USER/dmag-dashboard && npm ci --omit=dev && pm2 res
 
 - **PM2** keeps the Node process alive, restarts it on crash, and relaunches on reboot.
 - The single Node process serves both the **API** and the **built React app** (because `NODE_ENV=production`).
-- The **cron scheduler** runs inside that process: content sync daily at 2:05am, analytics hourly at :20, classification hourly at :40.
+- The **cron scheduler** runs inside that process: one full sync daily at 6:00am Central, run in order — content, Cloudflare Stream minutes viewed, analytics (GA4/Marfeel/GSC), then classification.
 - **SQLite** (`content.db`) lives on the server's disk — back it up periodically (`cp content.db backups/…`).
 - GA4 uses the **service account**, so auth won't expire.
