@@ -242,6 +242,12 @@ export default function ContentDetail({ wpId, onClose }) {
               <StatRow label="Ad Revenue" value={item.ga4_ad_revenue != null ? '$' + item.ga4_ad_revenue.toFixed(2) : '—'} title="Potential value — ad impressions × $10 CPM, not real tracked revenue" />
               <StatRow label="Marfeel Unique Users" value={fmt(item.mf_unique_users)} />
               <StatRow label="Marfeel Loyal Users" value={fmt(item.mf_loyal_users)} />
+              {item.stream_video_id && (
+                <>
+                  <StatRow label="Video Minutes (lifetime)" value={fmt(item.video_minutes_total)} title="Minutes viewed in Cloudflare Stream, across every day synced" />
+                  <StatRow label="Video Minutes (30-day)" value={fmt(item.video_minutes_30d)} />
+                </>
+              )}
               <StatRow label="Scroll Depth" value={item.mf_scroll_depth != null ? item.mf_scroll_depth.toFixed(0) + '%' : '—'} />
             </div>
           </div>

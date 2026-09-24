@@ -318,6 +318,21 @@ function initSchema() {
       updated_at  TEXT DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_goals_archived ON goals(archived);
+
+    -- Cloudflare Stream minutes viewed, per video per day (see
+    -- sync/cloudflare.js). Keyed by the Stream video UID rather than wp_id:
+    -- content.stream_video_id (from the post's acf.stream_video_id) is the
+    -- join, so a re-published post or a video that isn't in content yet
+    -- doesn't lose its history. Daily grain so any date range can be summed.
+    -- Never pruned: Cloudflare only serves ~92 days back, so this table is the
+    -- only long-term record of video viewing.
+    CREATE TABLE IF NOT EXISTS video_minutes_daily (
+      stream_video_id TEXT NOT NULL,
+      date            TEXT NOT NULL,
+      minutes_viewed  REAL DEFAULT 0,
+      PRIMARY KEY (stream_video_id, date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_video_minutes_date ON video_minutes_daily(date);
   `);
 
   // Schema migrations — safe to run on every startup
@@ -326,6 +341,8 @@ function initSchema() {
   try { db.exec('ALTER TABLE content ADD COLUMN excluded_from_scoring INTEGER DEFAULT 0'); } catch {}
   try { db.exec('ALTER TABLE site_daily_metrics ADD COLUMN newsletter_signups INTEGER DEFAULT 0'); } catch {}
   try { db.exec('ALTER TABLE content ADD COLUMN nlp_classified_at TEXT'); } catch {}
+  try { db.exec('ALTER TABLE content ADD COLUMN stream_video_id TEXT'); } catch {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_content_stream_video ON content(stream_video_id)'); } catch {}
   try { db.exec('ALTER TABLE content ADD COLUMN voice_classified_at TEXT'); } catch {}
   // "Lifetime Content Value" — see utils/trueValue.js's shapeForLifetime().
   // Deliberately a separate column from true_value, not a replacement: this

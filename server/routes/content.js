@@ -85,6 +85,7 @@ router.get('/', (req, res) => {
     email_signups: 'a.ga4_email_signups',
     newsletter: NEWSLETTER_TOTAL_EXPR,
     writer: 'c.writer',
+    video_minutes: 'vm.minutes_total',
   };
   const sortCol = validSorts[sortBy] || 'c.published_at';
   const sortDir = order === 'asc' ? 'ASC' : 'DESC';
@@ -97,7 +98,8 @@ router.get('/', (req, res) => {
       c.wp_id, c.slug, c.url, c.title, c.content_type, c.author, c.writer,
       c.published_at, c.section, c.user_need, c.user_need_secondary,
       c.user_need_confidence, c.user_need_rationale, c.subscription_required,
-      c.cover_image_url,
+      c.cover_image_url, c.stream_video_id,
+      vm.minutes_total AS video_minutes_total, vm.minutes_30d AS video_minutes_30d,
       a.ga4_pageviews, a.ga4_users, a.ga4_loyal_users,
       a.ga4_inmarket_pageviews, a.ga4_loyal_inmarket_pv,
       a.ga4_avg_engagement_time, a.ga4_sessions,
@@ -128,6 +130,15 @@ router.get('/', (req, res) => {
       WHERE date < date('now', '-30 days')
       GROUP BY wp_id
     ) hs ON hs.wp_id = c.wp_id
+    LEFT JOIN (
+      -- Cloudflare Stream minutes viewed (see sync/cloudflare.js): lifetime
+      -- total across all stored days, plus the trailing 30 days.
+      SELECT stream_video_id,
+        SUM(minutes_viewed) AS minutes_total,
+        SUM(CASE WHEN date >= date('now', '-30 days') THEN minutes_viewed END) AS minutes_30d
+      FROM video_minutes_daily
+      GROUP BY stream_video_id
+    ) vm ON vm.stream_video_id = c.stream_video_id
     ${whereClause}
     ORDER BY ${sortCol} ${sortDir}
     LIMIT ? OFFSET ?
@@ -299,7 +310,8 @@ router.get('/:id', (req, res) => {
       a.mf_recirculation_rate, a.mf_newsletter_signups, a.true_value,
       a.lifetime_value, a.snapshot_at,
       (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS newsletter_signups_total,
-      (COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS subscribe_clicks_total
+      (COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS subscribe_clicks_total,
+      vm.minutes_total AS video_minutes_total, vm.minutes_30d AS video_minutes_30d
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots GROUP BY wp_id
@@ -317,6 +329,15 @@ router.get('/:id', (req, res) => {
       WHERE date < date('now', '-30 days')
       GROUP BY wp_id
     ) hs ON hs.wp_id = c.wp_id
+    LEFT JOIN (
+      -- Cloudflare Stream minutes viewed (see sync/cloudflare.js): lifetime
+      -- total across all stored days, plus the trailing 30 days.
+      SELECT stream_video_id,
+        SUM(minutes_viewed) AS minutes_total,
+        SUM(CASE WHEN date >= date('now', '-30 days') THEN minutes_viewed END) AS minutes_30d
+      FROM video_minutes_daily
+      GROUP BY stream_video_id
+    ) vm ON vm.stream_video_id = c.stream_video_id
     WHERE c.wp_id = ?
   `).get(wpId);
 

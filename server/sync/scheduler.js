@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { syncWordPress } from './wordpress.js';
+import { syncCloudflareStream } from './cloudflare.js';
 import { syncGA4 } from './ga4.js';
 import { syncMarfeel } from './marfeel.js';
 import { classifyUnclassified } from '../classify/userNeeds.js';
@@ -96,6 +97,23 @@ export async function runContentSync() {
     setSyncState('last_wp_sync_status', JSON.stringify({ error: err.message, at: new Date().toISOString() }));
   } finally {
     syncRunning = false;
+  }
+}
+
+// Cloudflare Stream minutes viewed per video. Runs after the content sync so
+// newly published videos already have their stream_video_id stored. Skipped
+// quietly when Cloudflare isn't configured, so it never fails the daily run.
+export async function runStreamSync() {
+  if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID) {
+    console.log('[Scheduler] Cloudflare not configured — skipping Stream sync');
+    return;
+  }
+  try {
+    const result = await syncCloudflareStream();
+    setSyncState('last_cloudflare_sync_status', JSON.stringify({ ...result, at: new Date().toISOString() }));
+  } catch (err) {
+    console.error('[Scheduler] Cloudflare Stream sync error:', err.message);
+    setSyncState('last_cloudflare_sync_status', JSON.stringify({ error: err.message, at: new Date().toISOString() }));
   }
 }
 
@@ -616,6 +634,7 @@ export function initScheduler() {
   cron.schedule('0 6 * * *', async () => {
     console.log('[Scheduler] Triggering daily full sync (content → analytics → classification)');
     await runContentSync();
+    await runStreamSync();
     await runAnalyticsSync();
     await runClassification();
     await runCategoryClassification();

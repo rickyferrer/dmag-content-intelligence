@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getSyncStatus, runContentSync, runAnalyticsSync, runClassification, runCategoryClassification, runVoiceClassification } from '../sync/scheduler.js';
+import { getSyncStatus, runContentSync, runStreamSync, runAnalyticsSync, runClassification, runCategoryClassification, runVoiceClassification } from '../sync/scheduler.js';
 import { logAudit } from '../db.js';
 import { requireAdmin } from '../auth.js';
 
@@ -23,6 +23,9 @@ router.post('/trigger', requireAdmin, async (req, res) => {
   const runAll = async () => {
     if (type === 'content' || type === 'all') {
       await runContentSync().catch(err => console.error('[Sync API] Content sync error:', err.message));
+    }
+    if (type === 'stream' || type === 'all') {
+      await runStreamSync().catch(err => console.error('[Sync API] Cloudflare Stream sync error:', err.message));
     }
     if (type === 'analytics' || type === 'all') {
       await runAnalyticsSync().catch(err => console.error('[Sync API] Analytics sync error:', err.message));

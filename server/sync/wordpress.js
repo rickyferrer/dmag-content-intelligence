@@ -12,9 +12,11 @@ const FULL_SYNC_LOOKBACK_YEARS = 2;
 
 // Pass 1: metadata per page — no content, no acf (acf can be enormous with nested custom fields)
 const META_PER_PAGE = 50;
+// acf.stream_video_id is the Cloudflare Stream UID for video posts (empty string
+// on everything else) — the join key to Cloudflare's per-video minutes viewed.
 // We request only the nested acf.writers array (not full ACF, which includes huge
 // hero-image objects). acf.writers[] holds the editorial byline as writer_id refs.
-const META_FIELDS = 'id,slug,link,title,date,modified,author,categories,tags,section,type,acf.writers,featured_media';
+const META_FIELDS = 'id,slug,link,title,date,modified,author,categories,tags,section,type,acf.writers,acf.stream_video_id,featured_media';
 
 // Pass 2: fetch full content in small ID batches to avoid large responses
 const CONTENT_BATCH_SIZE = 10;
@@ -200,6 +202,13 @@ async function fetchMediaUrls(ids) {
   return cache;
 }
 
+// Cloudflare Stream video UID (32-char hex), or null when the post has none.
+// COALESCE in the upsert means a null here never wipes an already-stored ID.
+function parseStreamVideoId(post) {
+  const id = post.acf?.stream_video_id;
+  return typeof id === 'string' && id.trim() ? id.trim() : null;
+}
+
 function parseSubscriptionRequired(post) {
   // acf removed from meta fields to avoid massive response sizes;
   // subscription_required defaults to 0 — update via separate ACF pass if needed
@@ -255,11 +264,11 @@ export async function syncWordPress({ types = CONTENT_TYPES, full = false } = {}
     INSERT INTO content (
       wp_id, slug, url, title, content_text, content_type,
       author, published_at, modified_at, section, categories, tags,
-      subscription_required, updated_at
+      subscription_required, stream_video_id, updated_at
     ) VALUES (
       @wp_id, @slug, @url, @title, '', @content_type,
       @author, @published_at, @modified_at, @section, @categories, @tags,
-      @subscription_required, datetime('now')
+      @subscription_required, @stream_video_id, datetime('now')
     )
     ON CONFLICT(wp_id) DO UPDATE SET
       slug            = excluded.slug,
@@ -273,6 +282,7 @@ export async function syncWordPress({ types = CONTENT_TYPES, full = false } = {}
       categories      = excluded.categories,
       tags            = excluded.tags,
       subscription_required = excluded.subscription_required,
+      stream_video_id = COALESCE(excluded.stream_video_id, content.stream_video_id),
       updated_at      = datetime('now')
   `);
 
@@ -329,6 +339,7 @@ export async function syncWordPress({ types = CONTENT_TYPES, full = false } = {}
               categories: parseCategories(post, catCache),
               tags: parseTags(post, tagCache),
               subscription_required: parseSubscriptionRequired(post),
+              stream_video_id: parseStreamVideoId(post),
             });
             ids.push(post.id);
             const wIds = parseWriterIds(post);
