@@ -547,3 +547,126 @@ export async function syncGA4Sources() {
 
   return [...results.values()].sort((a, b) => b.users - a.users);
 }
+
+// ── Per-article metrics split by device ──────────────────────────────────────
+//
+// Mirrors syncGA4()'s per-article queries (same metric definitions, same
+// trailing 30 days) with GA4's `deviceCategory` added as a dimension, and
+// stores the result in content_device_metrics for the Content tab's device
+// filter. Two differences from syncGA4(): responses are paginated (splitting
+// by device roughly triples the row count, which would silently truncate at a
+// fixed limit), and the DFW city query is filtered to DFW cities server-side
+// rather than pulling every city and filtering here.
+const DEVICES = ['mobile', 'desktop', 'tablet'];
+const DEVICE_PAGE_SIZE = 100000;
+
+async function ga4Paged(body) {
+  const rows = [];
+  for (let offset = 0; ; offset += DEVICE_PAGE_SIZE) {
+    const res = await ga4Request(':runReport', { ...body, limit: DEVICE_PAGE_SIZE, offset });
+    rows.push(...parseRows(res));
+    if (offset + DEVICE_PAGE_SIZE >= (res.rowCount || 0)) break;
+  }
+  return rows;
+}
+
+export async function syncGA4ByDevice() {
+  const db = getDb();
+  const content = db.prepare("SELECT wp_id, url FROM content WHERE url IS NOT NULL AND url != ''").all();
+  if (content.length === 0) return { rows: 0 };
+
+  const pathMap = new Map();
+  for (const row of content) {
+    try {
+      const path = new URL(row.url).pathname.replace(/\/$/, '') || '/';
+      pathMap.set(path, row.wp_id);
+      pathMap.set(path + '/', row.wp_id);
+    } catch { /* unparseable URL — can't match a GA4 pagePath */ }
+  }
+
+  const byKey = new Map(); // `${wp_id}|${device}` → metrics
+  const slot = (row) => {
+    if (!DEVICES.includes(row.deviceCategory)) return null;
+    const path = (row.pagePath || '').replace(/\/$/, '') || '/';
+    const wpId = pathMap.get(path) || pathMap.get(path + '/');
+    if (!wpId) return null;
+    const key = `${wpId}|${row.deviceCategory}`;
+    if (!byKey.has(key)) {
+      byKey.set(key, { wp_id: wpId, device: row.deviceCategory, pageviews: 0, users: 0, loyal_users: 0, inmarket_pageviews: 0, avg_engagement_time: 0, sessions: 0, subscribe_clicks: 0, _engTotal: 0 });
+    }
+    return byKey.get(key);
+  };
+
+  const range = [{ startDate: '30daysAgo', endDate: 'today' }];
+  const dims = [{ name: 'pagePath' }, { name: 'deviceCategory' }];
+
+  for (const row of await ga4Paged({
+    dateRanges: range, dimensions: dims,
+    metrics: [{ name: 'screenPageViews' }, { name: 'activeUsers' }, { name: 'averageSessionDuration' }, { name: 'sessions' }],
+  })) {
+    // Accumulate, don't assign: GA4 can return one article under several
+    // pagePath variants (e.g. with and without a trailing slash) that all
+    // normalize to the same key — assigning let a tiny variant overwrite the
+    // real one. Users are summed across variants (a small overcount if one
+    // person hit two variants); engagement time is averaged weighted by sessions.
+    const m = slot(row); if (!m) continue;
+    const sessions = Math.round(row.sessions || 0);
+    m.pageviews += Math.round(row.screenPageViews || 0);
+    m.users += Math.round(row.activeUsers || 0);
+    m.sessions += sessions;
+    m._engTotal += (row.averageSessionDuration || 0) * sessions;
+  }
+  for (const m of byKey.values()) {
+    m.avg_engagement_time = m.sessions > 0 ? m._engTotal / m.sessions : 0;
+    delete m._engTotal;
+  }
+
+  // DFW in-market users — same city match as isDFW() (case-insensitive contains).
+  for (const row of await ga4Paged({
+    dateRanges: range, dimensions: [...dims, { name: 'city' }], metrics: [{ name: 'activeUsers' }],
+    dimensionFilter: { orGroup: { expressions: DFW_CITIES.map(c => ({
+      filter: { fieldName: 'city', stringFilter: { matchType: 'CONTAINS', value: c } },
+    })) } },
+  })) {
+    if (!isDFW(row.city)) continue;
+    const m = slot(row); if (m) m.inmarket_pageviews += Math.round(row.activeUsers || 0);
+  }
+
+  for (const row of await ga4Paged({
+    dateRanges: range, dimensions: [...dims, { name: 'audienceName' }], metrics: [{ name: 'activeUsers' }],
+    dimensionFilter: { filter: { fieldName: 'audienceName', stringFilter: { matchType: 'EXACT', value: '3 or more sessions, last 30 days' } } },
+  })) {
+    const m = slot(row); if (m) m.loyal_users += Math.round(row.activeUsers || 0);
+  }
+
+  for (const row of await ga4Paged({
+    dateRanges: range, dimensions: [...dims, { name: 'eventName' }], metrics: [{ name: 'eventCount' }],
+    dimensionFilter: { filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'subscribe_click' } } },
+  })) {
+    const m = slot(row); if (m) m.subscribe_clicks += Math.round(row.eventCount || 0);
+  }
+
+  // Same subset caps as syncGA4() — audience/geo dimensions are property-level
+  // and can exceed a URL's own users.
+  for (const m of byKey.values()) {
+    m.loyal_users = Math.min(m.loyal_users, m.users);
+    m.inmarket_pageviews = Math.min(m.inmarket_pageviews, m.users);
+  }
+
+  // Every query succeeded (any failure throws before this point), so replace
+  // the table wholesale — a partial write would mix old and new data.
+  const snapshotAt = new Date().toISOString();
+  const insert = db.prepare(`
+    INSERT INTO content_device_metrics
+      (wp_id, device, pageviews, users, loyal_users, inmarket_pageviews, avg_engagement_time, sessions, subscribe_clicks, snapshot_at)
+    VALUES (@wp_id, @device, @pageviews, @users, @loyal_users, @inmarket_pageviews, @avg_engagement_time, @sessions, @subscribe_clicks, @snapshot_at)
+  `);
+  db.transaction(() => {
+    db.prepare('DELETE FROM content_device_metrics').run();
+    for (const m of byKey.values()) insert.run({ ...m, snapshot_at: snapshotAt });
+  })();
+
+  const perDevice = Object.fromEntries(DEVICES.map(d => [d, [...byKey.values()].filter(m => m.device === d).length]));
+  console.log(`[GA4] Device split: ${byKey.size} article-device rows`, perDevice);
+  return { rows: byKey.size, perDevice };
+}

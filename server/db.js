@@ -333,6 +333,26 @@ function initSchema() {
       PRIMARY KEY (stream_video_id, date)
     );
     CREATE INDEX IF NOT EXISTS idx_video_minutes_date ON video_minutes_daily(date);
+
+    -- Latest trailing-30-day GA4 figures per article split by device category
+    -- (mobile / desktop / tablet), powering the Content tab's device filter
+    -- (see syncGA4ByDevice in sync/ga4.js). Only the latest run is kept — the
+    -- whole table is replaced each sync — since unlike analytics_snapshots
+    -- nothing here needs history. Same metric definitions as the overall
+    -- per-article snapshot, so the two are directly comparable.
+    CREATE TABLE IF NOT EXISTS content_device_metrics (
+      wp_id               INTEGER NOT NULL,
+      device              TEXT NOT NULL,
+      pageviews           INTEGER DEFAULT 0,
+      users               INTEGER DEFAULT 0,
+      loyal_users         INTEGER DEFAULT 0,
+      inmarket_pageviews  INTEGER DEFAULT 0,
+      avg_engagement_time REAL    DEFAULT 0,
+      sessions            INTEGER DEFAULT 0,
+      subscribe_clicks    INTEGER DEFAULT 0,
+      snapshot_at         TEXT,
+      PRIMARY KEY (wp_id, device)
+    );
   `);
 
   // Schema migrations — safe to run on every startup

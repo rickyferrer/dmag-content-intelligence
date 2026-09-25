@@ -9,7 +9,7 @@ import { classifyCategoriesUnclassified } from './nlp.js';
 import { getDb, setSyncState, getSettings } from '../db.js';
 import { getScoreParams, valueToScore, shapeForLifetime } from '../utils/trueValue.js';
 import { runBenchmarkCheck } from '../utils/benchmarkCheck.js';
-import { syncGA4Sources, syncGA4DailyTotals } from './ga4.js';
+import { syncGA4Sources, syncGA4DailyTotals, syncGA4ByDevice } from './ga4.js';
 import { syncGSC, syncGSCTrend } from './gsc.js';
 
 let syncRunning = false;
@@ -319,6 +319,15 @@ export async function runAnalyticsSync() {
     })();
 
     console.log(`[Scheduler] Analytics snapshot complete: ${inserted} rows`);
+
+    // Per-article GA4 split by device (Content tab's device filter). Runs after
+    // the snapshot is safely written, in its own try/catch so a failure here
+    // never costs the main sync — the table just keeps its previous contents.
+    try {
+      await syncGA4ByDevice();
+    } catch (err) {
+      console.error('[Scheduler] GA4 device split error:', err.message);
+    }
 
     // ── Write acquisition source data ─────────────────────────────────────────
     if (marfeelSources.size > 0) {

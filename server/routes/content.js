@@ -58,6 +58,13 @@ router.get('/', (req, res) => {
     page = 1, limit = 50,
   } = req.query;
 
+  // Optional device split (mobile / desktop / tablet). When set, the GA4-derived
+  // per-article columns come from content_device_metrics (that device's trailing
+  // 30 days) instead of the overall snapshot. Whitelisted, so it's safe to
+  // inline into the SQL. Lifetime Value / Newsletter / Video figures are not
+  // split by device and stay overall.
+  const device = ['mobile', 'desktop', 'tablet'].includes(req.query.device) ? req.query.device : null;
+
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit)));
   const offset = (pageNum - 1) * limitNum;
@@ -75,17 +82,19 @@ router.get('/', (req, res) => {
   const validSorts = {
     lifetime_value: 'a.lifetime_value',
     true_value: 'a.true_value',
-    pageviews: 'a.ga4_pageviews',
-    users: 'a.ga4_users',
-    loyal_users: 'a.ga4_loyal_users',
-    inmarket: 'CAST(a.ga4_inmarket_pageviews AS REAL) / NULLIF(a.ga4_users, 0)',
-    engagement: 'a.ga4_avg_engagement_time',
+    pageviews: device ? 'd.pageviews' : 'a.ga4_pageviews',
+    users: device ? 'd.users' : 'a.ga4_users',
+    loyal_users: device ? 'd.loyal_users' : 'a.ga4_loyal_users',
+    inmarket: device
+      ? 'CAST(d.inmarket_pageviews AS REAL) / NULLIF(d.users, 0)'
+      : 'CAST(a.ga4_inmarket_pageviews AS REAL) / NULLIF(a.ga4_users, 0)',
+    engagement: device ? 'd.avg_engagement_time' : 'a.ga4_avg_engagement_time',
     published_at: 'c.published_at',
     title: 'c.title',
     type: 'c.content_type',
     section: 'c.section',
     need: 'c.user_need',
-    subscribe_clicks: SUBCLICKS_TOTAL_EXPR,
+    subscribe_clicks: device ? 'd.subscribe_clicks' : SUBCLICKS_TOTAL_EXPR,
     email_signups: 'a.ga4_email_signups',
     newsletter: NEWSLETTER_TOTAL_EXPR,
     writer: 'c.writer',
@@ -106,14 +115,19 @@ router.get('/', (req, res) => {
       c.cover_image_url, c.stream_video_id,
       vm.minutes_total AS video_minutes_total, vm.minutes_30d AS video_minutes_30d,
       ${VIDEO_MIN_PER_PV_EXPR} AS video_min_per_pageview,
-      a.ga4_pageviews, a.ga4_users, a.ga4_loyal_users,
-      a.ga4_inmarket_pageviews, a.ga4_loyal_inmarket_pv,
-      a.ga4_avg_engagement_time, a.ga4_sessions,
-      a.ga4_subscribe_clicks, a.ga4_email_signups, a.ga4_ad_revenue,
+      ${device ? 'd.pageviews' : 'a.ga4_pageviews'} AS ga4_pageviews,
+      ${device ? 'd.users' : 'a.ga4_users'} AS ga4_users,
+      ${device ? 'd.loyal_users' : 'a.ga4_loyal_users'} AS ga4_loyal_users,
+      ${device ? 'd.inmarket_pageviews' : 'a.ga4_inmarket_pageviews'} AS ga4_inmarket_pageviews,
+      a.ga4_loyal_inmarket_pv,
+      ${device ? 'd.avg_engagement_time' : 'a.ga4_avg_engagement_time'} AS ga4_avg_engagement_time,
+      ${device ? 'd.sessions' : 'a.ga4_sessions'} AS ga4_sessions,
+      ${device ? 'd.subscribe_clicks' : 'a.ga4_subscribe_clicks'} AS ga4_subscribe_clicks,
+      a.ga4_email_signups, a.ga4_ad_revenue,
       a.mf_unique_users, a.mf_pageviews, a.mf_loyal_users,
       a.mf_scroll_depth, a.mf_newsletter_signups, a.true_value, a.lifetime_value, a.snapshot_at,
       ${NEWSLETTER_TOTAL_EXPR} AS newsletter_signups_total,
-      ${SUBCLICKS_TOTAL_EXPR} AS subscribe_clicks_total
+      ${device ? 'd.subscribe_clicks' : SUBCLICKS_TOTAL_EXPR} AS subscribe_clicks_total
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots GROUP BY wp_id
@@ -145,6 +159,7 @@ router.get('/', (req, res) => {
       FROM video_minutes_daily
       GROUP BY stream_video_id
     ) vm ON vm.stream_video_id = c.stream_video_id
+    ${device ? `LEFT JOIN content_device_metrics d ON d.wp_id = c.wp_id AND d.device = '${device}'` : ''}
     ${whereClause}
     ORDER BY ${sortCol} ${sortDir}
     LIMIT ? OFFSET ?

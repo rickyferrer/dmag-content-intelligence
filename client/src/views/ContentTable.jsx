@@ -34,6 +34,12 @@ const VIDEO_COLUMNS = [
   { label: 'Min / PV', key: 'video_min_per_pv', info: 'Minutes watched per pageview: Cloudflare minutes viewed (last 30 days) ÷ GA4 pageviews (last 30 days).' },
 ];
 
+const DEVICE_OPTIONS = [
+  { value: 'mobile', label: 'Mobile' },
+  { value: 'desktop', label: 'Desktop' },
+  { value: 'tablet', label: 'Tablet' },
+];
+
 const USER_NEEDS = [
   'update_me', 'educate_me', 'give_perspective', 'divert_me',
   'inspire_me', 'help_me', 'connect_me', 'keep_me_engaged',
@@ -69,7 +75,7 @@ export default function ContentTable({ onSelect }) {
 
   const [issues, setIssues] = useState([]);
   const [filters, setFilters] = useState({
-    type: '', section: '', category: '', nlpCategory: '', tag: '', need: '', writer: '', issue: '', search: '', voice: '',
+    type: '', section: '', category: '', nlpCategory: '', tag: '', need: '', writer: '', issue: '', search: '', voice: '', device: '',
     datePreset: DEFAULT_PRESET, dateFrom: initFrom, dateTo: initTo,
     sortBy: 'lifetime_value', order: 'desc', page: 1, limit: 50,
   });
@@ -213,6 +219,7 @@ export default function ContentTable({ onSelect }) {
     activeFilters.push({ key: 'voice', label: `Voice: ${v?.label || filters.voice}` });
   }
   if (filters.writer) activeFilters.push({ key: 'writer', label: `Writer: ${filters.writer}` });
+  if (filters.device) activeFilters.push({ key: 'device', label: `Device: ${filters.device.charAt(0).toUpperCase() + filters.device.slice(1)}` });
   if (filters.issue) {
     const opt = issueOptions.find(o => o.value === filters.issue);
     activeFilters.push({ key: 'issue', label: `Issue: ${opt?.label || filters.issue}` });
@@ -254,6 +261,9 @@ export default function ContentTable({ onSelect }) {
           </span>
         )}
         <SearchableSelect value={filters.writer} onChange={v => setFilter('writer', v)} options={writerOptions} placeholder="All Writers" minWidth={180} />
+        <span title="Device — GA4 traffic from this device category only (last 30 days)">
+          <SearchableSelect value={filters.device} onChange={v => setFilter('device', v)} options={DEVICE_OPTIONS} placeholder="All Devices" minWidth={150} />
+        </span>
         {issues.length > 0 && (
           <SearchableSelect value={filters.issue} onChange={v => setFilter('issue', v)} options={issueOptions} placeholder="All Issues" minWidth={190} />
         )}
@@ -338,6 +348,13 @@ export default function ContentTable({ onSelect }) {
               <strong style={{ color: 'var(--text-secondary)' }}>{summary.previous_period.to}</strong>
             </div>
           )}
+        </div>
+      )}
+
+      {filters.device && (
+        <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+          Users, Loyal Users, In-Market %, Sub Clicks and Eng. Time show {filters.device}-only GA4 figures for the last 30 days
+          (Sub Clicks is 30-day only here, not lifetime). Lifetime Value, Newsletter and video figures aren't split by device and stay overall.
         </div>
       )}
 
