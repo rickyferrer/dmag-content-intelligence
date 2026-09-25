@@ -120,6 +120,24 @@ function parseRows(response) {
   });
 }
 
+// Fetch EVERY row of a report, paging with offset until GA4's reported
+// rowCount is exhausted. A fixed `limit` with no paging silently drops
+// everything past it: this property has ~175K distinct pagePaths in a 30-day
+// window, so a 10,000-row read only ever saw the busiest ~6%. Rows are ordered
+// by the dimensions (not a metric) so the order stays stable across pages
+// even though today's counts keep moving between requests.
+const REPORT_PAGE_SIZE = 100000;
+async function ga4ReportAll(body) {
+  const rows = [];
+  const orderBys = body.dimensions.map(d => ({ dimension: { dimensionName: d.name } }));
+  for (let offset = 0; ; offset += REPORT_PAGE_SIZE) {
+    const res = await ga4Request(':runReport', { ...body, orderBys, limit: REPORT_PAGE_SIZE, offset });
+    rows.push(...parseRows(res));
+    if (offset + REPORT_PAGE_SIZE >= (res.rowCount || 0)) break;
+  }
+  return rows;
+}
+
 // ── Sync ──────────────────────────────────────────────────────────────────────
 
 function isDFW(city) {
@@ -155,7 +173,17 @@ export async function syncGA4() {
 
   try {
     // ── Query 1: Main metrics ─────────────────────────────────────────────────
-    const mainData = await ga4Request(':runReport', {
+    // Accumulate, don't assign: GA4 can return one article under several
+    // pagePath variants (`/x/`, `/x`, `/x//`) that all normalize to the same
+    // wp_id. Rows used to arrive pageviews-descending, so the smallest variant
+    // came last and overwrote the real one — an article with 6,882 pageviews on
+    // `/x/` was stored as the 28 on `/x`. Pageviews, sessions, and ad impressions are
+    // additive. Users are summed too, which slightly overcounts a reader who
+    // hit two variants (GA4 can't dedupe across pagePath rows); engagement is
+    // averaged weighted by sessions. Sub-paths (`/x/date/weekend`) are not in
+    // pathMap, so they stay separate pages and don't count toward the article.
+    const engTotal = new Map(); // wp_id → sum(avgSessionDuration × sessions)
+    const mainRows = await ga4ReportAll({
       dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
       dimensions: [{ name: 'pagePath' }],
       metrics: [
@@ -165,36 +193,51 @@ export async function syncGA4() {
         { name: 'sessions' },
         { name: 'publisherAdImpressions' },
       ],
-      limit: 10000,
     });
 
-    for (const row of parseRows(mainData)) {
+    for (const row of mainRows) {
       const path = (row.pagePath || '').replace(/\/$/, '') || '/';
       const wpId = pathMap.get(path) || pathMap.get(path + '/');
       if (!wpId) continue;
-      allMetrics.set(wpId, {
-        ga4_pageviews: Math.round(row.screenPageViews || 0),
-        ga4_users: Math.round(row.activeUsers || 0),
-        ga4_avg_engagement_time: row.averageSessionDuration || 0,
-        ga4_sessions: Math.round(row.sessions || 0),
-        ga4_ad_revenue: adRevenueFromImpressions(row.publisherAdImpressions),
-        ga4_loyal_users: 0,
-        ga4_inmarket_pageviews: 0,
-        ga4_loyal_inmarket_pv: 0,
-        ga4_subscribe_clicks: 0,
-        ga4_email_signups: 0,
-      });
+      if (!allMetrics.has(wpId)) {
+        allMetrics.set(wpId, {
+          ga4_pageviews: 0,
+          ga4_users: 0,
+          ga4_avg_engagement_time: 0,
+          ga4_sessions: 0,
+          ga4_ad_revenue: 0,
+          ga4_loyal_users: 0,
+          ga4_inmarket_pageviews: 0,
+          ga4_loyal_inmarket_pv: 0,
+          ga4_subscribe_clicks: 0,
+          ga4_email_signups: 0,
+        });
+      }
+      const m = allMetrics.get(wpId);
+      const sessions = Math.round(row.sessions || 0);
+      m.ga4_pageviews += Math.round(row.screenPageViews || 0);
+      m.ga4_users += Math.round(row.activeUsers || 0);
+      m.ga4_sessions += sessions;
+      m.ga4_ad_revenue += adRevenueFromImpressions(row.publisherAdImpressions);
+      engTotal.set(wpId, (engTotal.get(wpId) || 0) + (row.averageSessionDuration || 0) * sessions);
+    }
+    for (const [wpId, m] of allMetrics) {
+      m.ga4_avg_engagement_time = m.ga4_sessions > 0 ? engTotal.get(wpId) / m.ga4_sessions : 0;
     }
 
     // ── Query 2: DFW in-market active users ───────────────────────────────────
-    const geoData = await ga4Request(':runReport', {
+    // Filtered to DFW cities server-side (same case-insensitive "contains"
+    // match as isDFW) — every pagePath × city pair is millions of rows.
+    const geoRows = await ga4ReportAll({
       dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
       dimensions: [{ name: 'pagePath' }, { name: 'city' }],
       metrics: [{ name: 'activeUsers' }],
-      limit: 50000,
+      dimensionFilter: { orGroup: { expressions: DFW_CITIES.map(c => ({
+        filter: { fieldName: 'city', stringFilter: { matchType: 'CONTAINS', value: c } },
+      })) } },
     });
 
-    for (const row of parseRows(geoData)) {
+    for (const row of geoRows) {
       if (!isDFW(row.city)) continue;
       const path = (row.pagePath || '').replace(/\/$/, '') || '/';
       const wpId = pathMap.get(path) || pathMap.get(path + '/');
@@ -204,7 +247,7 @@ export async function syncGA4() {
     }
 
     // ── Query 3: Loyal users — GA4 audience "3 or more sessions, last 30 days" ──
-    const loyalData = await ga4Request(':runReport', {
+    const loyalRows = await ga4ReportAll({
       dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
       dimensions: [{ name: 'pagePath' }, { name: 'audienceName' }],
       metrics: [{ name: 'activeUsers' }],
@@ -214,10 +257,9 @@ export async function syncGA4() {
           stringFilter: { matchType: 'EXACT', value: '3 or more sessions, last 30 days' },
         },
       },
-      limit: 10000,
     });
 
-    for (const row of parseRows(loyalData)) {
+    for (const row of loyalRows) {
       const path = (row.pagePath || '').replace(/\/$/, '') || '/';
       const wpId = pathMap.get(path) || pathMap.get(path + '/');
       if (!wpId) continue;
@@ -249,17 +291,16 @@ export async function syncGA4() {
     }
 
     // ── Query 4: subscribe_click events ───────────────────────────────────────
-    const subData = await ga4Request(':runReport', {
+    const subRows = await ga4ReportAll({
       dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
       dimensions: [{ name: 'pagePath' }, { name: 'eventName' }],
       metrics: [{ name: 'eventCount' }],
       dimensionFilter: {
         filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'subscribe_click' } },
       },
-      limit: 10000,
     });
 
-    for (const row of parseRows(subData)) {
+    for (const row of subRows) {
       const path = (row.pagePath || '').replace(/\/$/, '') || '/';
       const wpId = pathMap.get(path) || pathMap.get(path + '/');
       if (!wpId) continue;
@@ -269,17 +310,16 @@ export async function syncGA4() {
     }
 
     // ── Query 5: email_signup events ──────────────────────────────────────────
-    const signupData = await ga4Request(':runReport', {
+    const signupRows = await ga4ReportAll({
       dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
       dimensions: [{ name: 'pagePath' }, { name: 'eventName' }],
       metrics: [{ name: 'eventCount' }],
       dimensionFilter: {
         filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'email_signup' } },
       },
-      limit: 10000,
     });
 
-    for (const row of parseRows(signupData)) {
+    for (const row of signupRows) {
       const path = (row.pagePath || '').replace(/\/$/, '') || '/';
       const wpId = pathMap.get(path) || pathMap.get(path + '/');
       if (!wpId) continue;

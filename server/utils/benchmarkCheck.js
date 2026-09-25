@@ -32,6 +32,13 @@ const TOO_HARD_MAX_RATIO = 0.7;
 // off a handful of data points.
 const MIN_SAMPLE_SIZE = 30;
 
+// Articles with fewer users than this are left out of the distributions. The
+// GA4 sync now covers every article with any traffic (thousands with 1-9
+// users), and on so few readers the per-reader signals are pure noise — one
+// DFW reader out of one is a 100% in-market share. Including them diluted every
+// "share capping" percentage by ~3.5x, blunting the too-soft check.
+const MIN_USERS = 10;
+
 function percentile(sortedArr, p) {
   if (sortedArr.length === 0) return 0;
   return sortedArr[Math.min(sortedArr.length - 1, Math.floor(sortedArr.length * p))];
@@ -44,7 +51,7 @@ function roundTo(value, step) {
 
 // Pulls the same signals dimensionScores() reads (see utils/trueValue.js),
 // scoped to real scored content — matches the manual query run this session:
-// traffic > 0, not excluded_from_scoring (so a homepage/section-front page
+// users >= MIN_USERS, not excluded_from_scoring (so a homepage/section-front page
 // can't single-handedly define "excellent").
 function loadDistributions(db) {
   const rows = db.prepare(`
@@ -53,8 +60,8 @@ function loadDistributions(db) {
     FROM content c
     JOIN (SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots GROUP BY wp_id) lx ON c.wp_id = lx.wp_id
     JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
-    WHERE a.ga4_users > 0 AND c.excluded_from_scoring = 0
-  `).all();
+    WHERE a.ga4_users >= ? AND c.excluded_from_scoring = 0
+  `).all(MIN_USERS);
 
   return {
     subCount:      rows.map(r => r.ga4_subscribe_clicks || 0),
