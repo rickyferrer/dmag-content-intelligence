@@ -246,6 +246,7 @@ export default function ContentDetail({ wpId, onClose }) {
                 <>
                   <StatRow label="Video Minutes (lifetime)" value={fmt(item.video_minutes_total)} title="Minutes viewed in Cloudflare Stream, across every day synced" />
                   <StatRow label="Video Minutes (30-day)" value={fmt(item.video_minutes_30d)} />
+                  <StatRow label="Minutes per Pageview" value={item.video_min_per_pageview != null ? item.video_min_per_pageview.toFixed(2) : '—'} title="Cloudflare minutes viewed (30-day) ÷ GA4 pageviews (30-day)" />
                 </>
               )}
               <StatRow label="Scroll Depth" value={item.mf_scroll_depth != null ? item.mf_scroll_depth.toFixed(0) + '%' : '—'} />

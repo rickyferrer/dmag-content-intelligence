@@ -29,7 +29,10 @@ const COLUMNS = [
 
 // Only meaningful for video posts (Cloudflare Stream), so it's added to the
 // table only while the Type filter is set to "video".
-const VIDEO_COLUMN = { label: 'Video Min.', key: 'video_minutes', info: 'Lifetime minutes viewed in Cloudflare Stream, across every day synced.' };
+const VIDEO_COLUMNS = [
+  { label: 'Video Min.', key: 'video_minutes', info: 'Lifetime minutes viewed in Cloudflare Stream, across every day synced.' },
+  { label: 'Min / PV', key: 'video_min_per_pv', info: 'Minutes watched per pageview: Cloudflare minutes viewed (last 30 days) ÷ GA4 pageviews (last 30 days).' },
+];
 
 const USER_NEEDS = [
   'update_me', 'educate_me', 'give_perspective', 'divert_me',
@@ -173,7 +176,7 @@ export default function ContentTable({ onSelect }) {
   });
 
   const showVideoColumn = filters.type === 'video';
-  const columns = showVideoColumn ? [...COLUMNS, VIDEO_COLUMN] : COLUMNS;
+  const columns = showVideoColumn ? [...COLUMNS, ...VIDEO_COLUMNS] : COLUMNS;
   const typeOptions = types.map(t => ({ value: t.content_type, label: `${t.content_type} (${t.count})` }));
   const sectionOptions = taxonomies.sections.slice(0, 50).map(s => ({ value: s.section, label: `${s.section} (${s.count})` }));
   const categoryOptions = taxonomies.categories.slice(0, 100).map(c => ({ value: c.slug, label: `${c.name} (${c.count})` }));
@@ -418,9 +421,14 @@ export default function ContentTable({ onSelect }) {
                   {row.ga4_avg_engagement_time != null ? row.ga4_avg_engagement_time.toFixed(0) + 's' : '—'}
                 </td>
                 {showVideoColumn && (
-                  <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {fmt(row.video_minutes_total)}
-                  </td>
+                  <>
+                    <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {fmt(row.video_minutes_total)}
+                    </td>
+                    <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {row.video_min_per_pageview != null ? row.video_min_per_pageview.toFixed(2) : '—'}
+                    </td>
+                  </>
                 )}
               </tr>
             ))}

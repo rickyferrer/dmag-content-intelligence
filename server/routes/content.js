@@ -68,6 +68,10 @@ router.get('/', (req, res) => {
   const NEWSLETTER_TOTAL_EXPR = "(COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0))";
   const SUBCLICKS_TOTAL_EXPR = "(COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0))";
 
+  // Minutes watched per GA4 pageview — Cloudflare's trailing-30-day minutes over
+  // GA4's trailing-30-day pageviews, so both sides cover roughly the same window.
+  const VIDEO_MIN_PER_PV_EXPR = "(vm.minutes_30d / NULLIF(a.ga4_pageviews, 0))";
+
   const validSorts = {
     lifetime_value: 'a.lifetime_value',
     true_value: 'a.true_value',
@@ -86,6 +90,7 @@ router.get('/', (req, res) => {
     newsletter: NEWSLETTER_TOTAL_EXPR,
     writer: 'c.writer',
     video_minutes: 'vm.minutes_total',
+    video_min_per_pv: VIDEO_MIN_PER_PV_EXPR,
   };
   const sortCol = validSorts[sortBy] || 'c.published_at';
   const sortDir = order === 'asc' ? 'ASC' : 'DESC';
@@ -100,6 +105,7 @@ router.get('/', (req, res) => {
       c.user_need_confidence, c.user_need_rationale, c.subscription_required,
       c.cover_image_url, c.stream_video_id,
       vm.minutes_total AS video_minutes_total, vm.minutes_30d AS video_minutes_30d,
+      ${VIDEO_MIN_PER_PV_EXPR} AS video_min_per_pageview,
       a.ga4_pageviews, a.ga4_users, a.ga4_loyal_users,
       a.ga4_inmarket_pageviews, a.ga4_loyal_inmarket_pv,
       a.ga4_avg_engagement_time, a.ga4_sessions,
@@ -311,7 +317,8 @@ router.get('/:id', (req, res) => {
       a.lifetime_value, a.snapshot_at,
       (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS newsletter_signups_total,
       (COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS subscribe_clicks_total,
-      vm.minutes_total AS video_minutes_total, vm.minutes_30d AS video_minutes_30d
+      vm.minutes_total AS video_minutes_total, vm.minutes_30d AS video_minutes_30d,
+      (vm.minutes_30d / NULLIF(a.ga4_pageviews, 0)) AS video_min_per_pageview
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots GROUP BY wp_id
