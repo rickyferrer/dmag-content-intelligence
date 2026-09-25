@@ -126,14 +126,14 @@ function parseRows(response) {
 // window, so a 10,000-row read only ever saw the busiest ~6%. Rows are ordered
 // by the dimensions (not a metric) so the order stays stable across pages
 // even though today's counts keep moving between requests.
-const REPORT_PAGE_SIZE = 100000;
-async function ga4ReportAll(body) {
+const PAGE_SIZE = 100000;
+async function ga4Paged(body) {
   const rows = [];
   const orderBys = body.dimensions.map(d => ({ dimension: { dimensionName: d.name } }));
-  for (let offset = 0; ; offset += REPORT_PAGE_SIZE) {
-    const res = await ga4Request(':runReport', { ...body, orderBys, limit: REPORT_PAGE_SIZE, offset });
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const res = await ga4Request(':runReport', { ...body, orderBys, limit: PAGE_SIZE, offset });
     rows.push(...parseRows(res));
-    if (offset + REPORT_PAGE_SIZE >= (res.rowCount || 0)) break;
+    if (offset + PAGE_SIZE >= (res.rowCount || 0)) break;
   }
   return rows;
 }
@@ -183,7 +183,7 @@ export async function syncGA4() {
     // averaged weighted by sessions. Sub-paths (`/x/date/weekend`) are not in
     // pathMap, so they stay separate pages and don't count toward the article.
     const engTotal = new Map(); // wp_id → sum(avgSessionDuration × sessions)
-    const mainRows = await ga4ReportAll({
+    const mainRows = await ga4Paged({
       dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
       dimensions: [{ name: 'pagePath' }],
       metrics: [
@@ -228,7 +228,7 @@ export async function syncGA4() {
     // ── Query 2: DFW in-market active users ───────────────────────────────────
     // Filtered to DFW cities server-side (same case-insensitive "contains"
     // match as isDFW) — every pagePath × city pair is millions of rows.
-    const geoRows = await ga4ReportAll({
+    const geoRows = await ga4Paged({
       dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
       dimensions: [{ name: 'pagePath' }, { name: 'city' }],
       metrics: [{ name: 'activeUsers' }],
@@ -247,7 +247,7 @@ export async function syncGA4() {
     }
 
     // ── Query 3: Loyal users — GA4 audience "3 or more sessions, last 30 days" ──
-    const loyalRows = await ga4ReportAll({
+    const loyalRows = await ga4Paged({
       dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
       dimensions: [{ name: 'pagePath' }, { name: 'audienceName' }],
       metrics: [{ name: 'activeUsers' }],
@@ -291,7 +291,7 @@ export async function syncGA4() {
     }
 
     // ── Query 4: subscribe_click events ───────────────────────────────────────
-    const subRows = await ga4ReportAll({
+    const subRows = await ga4Paged({
       dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
       dimensions: [{ name: 'pagePath' }, { name: 'eventName' }],
       metrics: [{ name: 'eventCount' }],
@@ -310,7 +310,7 @@ export async function syncGA4() {
     }
 
     // ── Query 5: email_signup events ──────────────────────────────────────────
-    const signupRows = await ga4ReportAll({
+    const signupRows = await ga4Paged({
       dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
       dimensions: [{ name: 'pagePath' }, { name: 'eventName' }],
       metrics: [{ name: 'eventCount' }],
@@ -593,22 +593,9 @@ export async function syncGA4Sources() {
 // Mirrors syncGA4()'s per-article queries (same metric definitions, same
 // trailing 30 days) with GA4's `deviceCategory` added as a dimension, and
 // stores the result in content_device_metrics for the Content tab's device
-// filter. Two differences from syncGA4(): responses are paginated (splitting
-// by device roughly triples the row count, which would silently truncate at a
-// fixed limit), and the DFW city query is filtered to DFW cities server-side
-// rather than pulling every city and filtering here.
+// filter. Uses the same paginated ga4Paged() and server-side DFW city filter
+// as syncGA4() (splitting by device roughly triples the row count).
 const DEVICES = ['mobile', 'desktop', 'tablet'];
-const DEVICE_PAGE_SIZE = 100000;
-
-async function ga4Paged(body) {
-  const rows = [];
-  for (let offset = 0; ; offset += DEVICE_PAGE_SIZE) {
-    const res = await ga4Request(':runReport', { ...body, limit: DEVICE_PAGE_SIZE, offset });
-    rows.push(...parseRows(res));
-    if (offset + DEVICE_PAGE_SIZE >= (res.rowCount || 0)) break;
-  }
-  return rows;
-}
 
 export async function syncGA4ByDevice() {
   const db = getDb();
