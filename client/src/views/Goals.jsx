@@ -277,6 +277,44 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
   );
 }
 
+// Short month label for a period_start like "2026-08-01" — the sparkline's
+// per-bar tooltip and (were it ever shown) axis label.
+function monthLabel(periodStart) {
+  const [y, m] = periodStart.split('-');
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
+
+// Six-bar history sparkline for a recurring goal — oldest to newest, left to
+// right, bar height by how close that month came to target (capped at
+// 100%) and color by whether it ultimately hit. Lets someone scanning the
+// Goals grid see a track record at a glance, without opening the goal.
+function HistorySparkline({ history, unit }) {
+  if (!history?.length) return null;
+  const months = [...history].reverse(); // API gives most-recent-first; chart reads left-to-right
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+        Past {months.length} month{months.length === 1 ? '' : 's'}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 28 }}>
+        {months.map(h => {
+          const pct = Math.max(0, Math.min(100, h.target ? (h.final_value / h.target) * 100 : 0));
+          const color = (STATUS_META[h.status] || STATUS_META.not_started).color;
+          return (
+            <div
+              key={h.id}
+              title={`${monthLabel(h.period_start)}: ${fmtValue(h.final_value, unit)} / ${fmtValue(h.target, unit)} · ${(STATUS_META[h.status] || {}).label || h.status}`}
+              style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'flex-end' }}
+            >
+              <div style={{ width: '100%', height: `${Math.max(pct, 6)}%`, background: color, borderRadius: 2, opacity: 0.85 }} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function GoalCard({ goal, catalog, onClick }) {
   const metric = catalog.metrics.find(m => m.key === goal.metric) || {};
   const scope = catalog.scopes.find(s => s.key === goal.scope_type) || {};
@@ -326,6 +364,8 @@ function GoalCard({ goal, catalog, onClick }) {
           <span style={{ color: 'var(--text-muted)' }}>{Math.round(pct)}%</span>
         </div>
       </div>
+
+      <HistorySparkline history={goal.recent_history} unit={metric.unit} />
 
       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
         {goal.progress.days_remaining > 0

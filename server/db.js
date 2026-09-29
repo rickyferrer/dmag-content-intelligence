@@ -652,6 +652,21 @@ export function listGoalHistory(goalId, userId) {
   `).all(goalId, userId);
 }
 
+// The last `limit` closed periods only — what routes/goals.js embeds in
+// every GET /api/goals response (for a recurring goal's card sparkline) so
+// the list view doesn't need one extra request per recurring goal to show
+// history. The full record is still GET /api/goals/:id/history above.
+export function recentGoalHistory(goalId, userId, limit = 6) {
+  const db = getDb();
+  return db.prepare(`
+    SELECT gh.* FROM goal_history gh
+    JOIN goals g ON g.id = gh.goal_id
+    WHERE gh.goal_id = ? AND g.user_id = ?
+    ORDER BY gh.period_start DESC
+    LIMIT ?
+  `).all(goalId, userId, limit);
+}
+
 // Run db init when executed directly
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   getDb();

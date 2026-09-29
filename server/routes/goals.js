@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getDb, listGoals, getGoal, createGoal, updateGoal, setGoalArchived, deleteGoal, listGoalHistory } from '../db.js';
+import { getDb, listGoals, getGoal, createGoal, updateGoal, setGoalArchived, deleteGoal, listGoalHistory, recentGoalHistory } from '../db.js';
 import { METRICS, SCOPES, computeGoalProgress, computeGoalTrend, rollForwardIfDue } from '../utils/goals.js';
 
 const router = Router();
@@ -9,9 +9,18 @@ const router = Router();
 // analytics.js's /summary does rather than letting it 500 the whole route.
 // Rolling forward first means progress is always computed against the
 // goal's CURRENT period for a recurring goal, never a stale closed one.
+//
+// Embeds the last 6 closed periods for a recurring goal (recent_history) so
+// the Goals grid can show a history sparkline on every card without an
+// extra request per goal — a one-off goal always gets an empty array (it
+// never writes to goal_history in the first place).
 async function withProgress(db, goal, userId) {
   const current = await rollForwardIfDue(db, goal, userId);
-  return { ...current, progress: await computeGoalProgress(db, current) };
+  const [progress, recent_history] = await Promise.all([
+    computeGoalProgress(db, current),
+    current.recurrence === 'monthly' ? recentGoalHistory(current.id, userId) : [],
+  ]);
+  return { ...current, progress, recent_history };
 }
 
 function validateGoal(body) {
