@@ -85,6 +85,7 @@ export const api = {
   getGoalMetrics: () => apiFetch('/goals/metrics'),
   getGoals: (params = {}) => apiFetch('/goals?' + new URLSearchParams(params)),
   getGoal: (id) => apiFetch(`/goals/${id}`),
+  getGoalHistory: (id) => apiFetch(`/goals/${id}/history`),
   createGoal: (body) => apiFetch('/goals', { method: 'POST', body: JSON.stringify(body) }),
   updateGoal: (id, body) => apiFetch(`/goals/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   archiveGoal: (id, archived = true) => apiFetch(`/goals/${id}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }),

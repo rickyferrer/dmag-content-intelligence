@@ -304,6 +304,13 @@ function initSchema() {
     -- scope_type are validated against utils/goals.js's METRICS/SCOPES
     -- catalogs in routes/goals.js, not by a DB constraint, so the catalog
     -- can grow without a migration. scope_value is NULL for a site-wide goal.
+    --
+    -- recurrence = 'none' (default) is a plain one-off goal. 'monthly' means
+    -- start_date/end_date are the CURRENT period only — utils/goals.js's
+    -- rollForwardIfDue() advances them to the next calendar month once
+    -- end_date is in the past (logging the closed period to goal_history
+    -- first), so the same goal row keeps tracking "this month" indefinitely
+    -- instead of silently going stale.
     CREATE TABLE IF NOT EXISTS goals (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       name        TEXT NOT NULL,
@@ -313,11 +320,30 @@ function initSchema() {
       target      REAL NOT NULL,
       start_date  TEXT NOT NULL,
       end_date    TEXT NOT NULL,
+      recurrence  TEXT NOT NULL DEFAULT 'none',
       archived    INTEGER DEFAULT 0,
       created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at  TEXT DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_goals_archived ON goals(archived);
+
+    -- One row per closed period of a recurring goal (see rollForwardIfDue in
+    -- utils/goals.js) — the result the goal had when its month ended, kept
+    -- so "recurring" means a real month-over-month record instead of the
+    -- previous period's outcome just disappearing when the goal rolls
+    -- forward. A one-off (non-recurring) goal never writes here.
+    CREATE TABLE IF NOT EXISTS goal_history (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      goal_id      INTEGER NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end   TEXT NOT NULL,
+      target       REAL NOT NULL,
+      final_value  REAL NOT NULL,
+      status       TEXT NOT NULL,
+      closed_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (goal_id) REFERENCES goals(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_goal_history_goal ON goal_history(goal_id);
 
     -- Cloudflare Stream minutes viewed, per video per day (see
     -- sync/cloudflare.js). Keyed by the Stream video UID rather than wp_id:
@@ -378,6 +404,7 @@ function initSchema() {
   // auth.db (see authDb.js). NULL = created before logins existed; bootstrapAdmin()
   // hands those to the first admin.
   try { db.exec('ALTER TABLE goals ADD COLUMN user_id INTEGER'); } catch {}
+  try { db.exec("ALTER TABLE goals ADD COLUMN recurrence TEXT NOT NULL DEFAULT 'none'"); } catch {}
   try { db.exec('ALTER TABLE insight_conversations ADD COLUMN user_id INTEGER'); } catch {}
   db.exec('CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_insight_conv_user ON insight_conversations(user_id)');
@@ -560,9 +587,9 @@ export function getGoal(id, userId) {
 export function createGoal(goal, userId) {
   const db = getDb();
   const result = db.prepare(`
-    INSERT INTO goals (name, metric, scope_type, scope_value, target, start_date, end_date, user_id)
-    VALUES (@name, @metric, @scope_type, @scope_value, @target, @start_date, @end_date, @user_id)
-  `).run({ ...goal, user_id: userId });
+    INSERT INTO goals (name, metric, scope_type, scope_value, target, start_date, end_date, recurrence, user_id)
+    VALUES (@name, @metric, @scope_type, @scope_value, @target, @start_date, @end_date, @recurrence, @user_id)
+  `).run({ recurrence: 'none', ...goal, user_id: userId });
   return getGoal(result.lastInsertRowid, userId);
 }
 
@@ -571,10 +598,10 @@ export function updateGoal(id, goal, userId) {
   db.prepare(`
     UPDATE goals SET
       name = @name, metric = @metric, scope_type = @scope_type, scope_value = @scope_value,
-      target = @target, start_date = @start_date, end_date = @end_date,
+      target = @target, start_date = @start_date, end_date = @end_date, recurrence = @recurrence,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = @id AND user_id = @user_id
-  `).run({ ...goal, id, user_id: userId });
+  `).run({ recurrence: 'none', ...goal, id, user_id: userId });
   return getGoal(id, userId);
 }
 
@@ -586,7 +613,43 @@ export function setGoalArchived(id, archived, userId) {
 
 export function deleteGoal(id, userId) {
   const db = getDb();
-  db.prepare('DELETE FROM goals WHERE id = ? AND user_id = ?').run(id, userId);
+  // A recurring goal can have accumulated goal_history rows (its closed
+  // periods) — the FK has no ON DELETE CASCADE, so those have to go first
+  // or the delete fails outright once a goal has rolled forward even once.
+  db.transaction(() => {
+    db.prepare('DELETE FROM goal_history WHERE goal_id = ? AND goal_id IN (SELECT id FROM goals WHERE id = ? AND user_id = ?)').run(id, id, userId);
+    db.prepare('DELETE FROM goals WHERE id = ? AND user_id = ?').run(id, userId);
+  })();
+}
+
+// Advances a recurring goal to its next period (called by rollForwardIfDue
+// in utils/goals.js once the current period has closed). Ownership-checked
+// via user_id, same as every other goals.* writer here.
+export function setGoalPeriod(id, userId, startDate, endDate) {
+  const db = getDb();
+  db.prepare('UPDATE goals SET start_date = ?, end_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
+    .run(startDate, endDate, id, userId);
+}
+
+// Records a recurring goal's result for the period that just closed.
+export function insertGoalHistory({ goal_id, period_start, period_end, target, final_value, status }) {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO goal_history (goal_id, period_start, period_end, target, final_value, status)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(goal_id, period_start, period_end, target, final_value, status);
+}
+
+// Past closed periods for a recurring goal, most recent first. Joins through
+// goals to enforce the same per-user ownership as every other goals.* reader.
+export function listGoalHistory(goalId, userId) {
+  const db = getDb();
+  return db.prepare(`
+    SELECT gh.* FROM goal_history gh
+    JOIN goals g ON g.id = gh.goal_id
+    WHERE gh.goal_id = ? AND g.user_id = ?
+    ORDER BY gh.period_start DESC
+  `).all(goalId, userId);
 }
 
 // Run db init when executed directly

@@ -12,7 +12,9 @@ function fmt(n) {
 
 function fmtValue(n, unit) {
   if (n === null || n === undefined) return '—';
-  return unit === 'currency' ? '$' + fmt(n) : fmt(n);
+  if (unit === 'currency') return '$' + fmt(n);
+  if (unit === 'seconds') return Math.round(n) + 's';
+  return fmt(n);
 }
 
 const STATUS_META = {
@@ -55,7 +57,13 @@ function fmtDate(d) {
 const EMPTY_FORM = {
   name: '', metric: 'pageviews', scope_type: 'site', scope_value: '',
   target: '', start_date: monthRange().from, end_date: monthRange().to,
+  recurrence: 'none',
 };
+
+// Traffic Source goals only have pageviews data (source_daily has no other
+// breakdown — see utils/goals.js), so the metric select is locked to it
+// whenever this scope is picked, both here and server-side in validateGoal.
+const SOURCE_ONLY_METRIC = 'pageviews';
 
 function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, onDeleted }) {
   const isEdit = !!goal;
@@ -63,12 +71,21 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
     name: goal.name, metric: goal.metric, scope_type: goal.scope_type,
     scope_value: goal.scope_value || '', target: String(goal.target),
     start_date: goal.start_date, end_date: goal.end_date,
+    recurrence: goal.recurrence || 'none',
   } : EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [history, setHistory] = useState(null);
+
+  useEffect(() => {
+    if (isEdit && goal.recurrence === 'monthly') {
+      api.getGoalHistory(goal.id).then(setHistory).catch(console.error);
+    }
+  }, [isEdit, goal]);
 
   const scopeMeta = catalog.scopes.find(s => s.key === form.scope_type);
   const needsScopeValue = scopeMeta?.needsValue;
+  const isSourceScope = form.scope_type === 'source';
 
   const scopeOptions = () => {
     switch (form.scope_type) {
@@ -76,11 +93,17 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
       case 'writer':       return writers.map(w => ({ value: w.writer, label: `${w.writer} (${w.count})` }));
       case 'content_type': return types.map(t => ({ value: t.content_type, label: `${t.content_type} (${t.count})` }));
       case 'user_need':    return Object.entries(NEED_META).map(([key, m]) => ({ value: key, label: m.label }));
+      case 'source':       return (catalog.sources || []).map(s => ({ value: s, label: s }));
       default: return [];
     }
   };
 
   const set = (key, value) => setForm(f => ({ ...f, [key]: value }));
+
+  const setScopeType = (scope_type) => setForm(f => ({
+    ...f, scope_type, scope_value: '',
+    metric: scope_type === 'source' ? SOURCE_ONLY_METRIC : f.metric,
+  }));
 
   const applyPreset = (preset) => {
     const range = preset === 'week' ? weekRange() : preset === 'month' ? monthRange() : preset === 'quarter' ? quarterRange() : yearRange();
@@ -98,6 +121,7 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
       target: parseFloat(form.target),
       start_date: form.start_date,
       end_date: form.end_date,
+      recurrence: form.recurrence,
     };
     try {
       const saved = isEdit ? await api.updateGoal(goal.id, body) : await api.createGoal(body);
@@ -146,9 +170,16 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
 
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
           Metric
-          <select value={form.metric} onChange={e => set('metric', e.target.value)} style={{ padding: '7px 9px' }}>
+          <select
+            value={form.metric} disabled={isSourceScope}
+            onChange={e => set('metric', e.target.value)}
+            style={{ padding: '7px 9px', opacity: isSourceScope ? 0.6 : 1 }}
+          >
             {catalog.metrics.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
           </select>
+          {isSourceScope && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Traffic Source goals only track Pageviews.</span>
+          )}
         </label>
 
         <div style={{ display: 'flex', gap: 10 }}>
@@ -156,7 +187,7 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
             Scope
             <select
               value={form.scope_type}
-              onChange={e => setForm(f => ({ ...f, scope_type: e.target.value, scope_value: '' }))}
+              onChange={e => setScopeType(e.target.value)}
               style={{ padding: '7px 9px' }}
             >
               {catalog.scopes.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
@@ -196,7 +227,34 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
             <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>to</span>
             <input type="date" value={form.end_date} min={form.start_date} onChange={e => set('end_date', e.target.value)} />
           </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 10, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+            <input
+              type="checkbox" checked={form.recurrence === 'monthly'}
+              onChange={e => set('recurrence', e.target.checked ? 'monthly' : 'none')}
+            />
+            Repeat monthly — target and progress reset each calendar month
+          </label>
         </div>
+
+        {history?.length > 0 && (
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Past months</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {history.map(h => {
+                const status = STATUS_META[h.status] || STATUS_META.not_started;
+                return (
+                  <div key={h.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{h.period_start} – {h.period_end}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                      {fmtValue(h.final_value, catalog.metrics.find(m => m.key === form.metric)?.unit)} / {fmtValue(h.target, catalog.metrics.find(m => m.key === form.metric)?.unit)}
+                    </span>
+                    <span style={{ color: status.color, fontWeight: 600 }}>{status.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {error && <div style={{ color: '#e05c5c', fontSize: 12 }}>{error}</div>}
       </div>
@@ -235,12 +293,22 @@ function GoalCard({ goal, catalog, onClick }) {
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.3 }}>{goal.name}</div>
-        <span style={{
-          fontSize: 10, fontWeight: 600, color: status.color, background: status.color + '18',
-          padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap', flexShrink: 0,
-        }}>
-          {status.label}
-        </span>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          {goal.recurrence === 'monthly' && (
+            <span title="Renews every calendar month" style={{
+              fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--bg-elevated)',
+              padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap',
+            }}>
+              ↻ Monthly
+            </span>
+          )}
+          <span style={{
+            fontSize: 10, fontWeight: 600, color: status.color, background: status.color + '18',
+            padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap',
+          }}>
+            {status.label}
+          </span>
+        </div>
       </div>
 
       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>

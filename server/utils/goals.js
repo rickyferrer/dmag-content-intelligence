@@ -39,6 +39,7 @@
 // analytics_snapshots SUM approximation every other scoped goal uses.
 
 import { fetchUsersForRange, fetchLoyalUsersForRange } from '../sync/ga4.js';
+import { setGoalPeriod, insertGoalHistory } from '../db.js';
 
 export const METRICS = {
   pageviews:            { label: 'Pageviews',            unit: 'count',    cumulative: true,  siteDailyCol: 'pageviews' },
@@ -50,14 +51,28 @@ export const METRICS = {
   avg_content_value:    { label: 'Avg Content Value',    unit: 'count',    cumulative: false, siteDailyCol: null },
   users:                { label: 'Total Users',          unit: 'count',    cumulative: true,  siteDailyCol: null, liveRange: true },
   loyal_users:          { label: 'Loyal Users',           unit: 'count',    cumulative: true,  siteDailyCol: null, liveRange: true },
+  // A rate (seconds per pageview), not additive — averaged across the range
+  // like avg_content_value, not summed. See fetchCurrentValue's `cumulative
+  // ? SUM : AVG` and computeGoalTrend's cumulative-only early return, both of
+  // which key off this flag rather than needing metric-specific branches.
+  avg_engagement_time:  { label: 'Avg Engagement Time',  unit: 'seconds',  cumulative: false, siteDailyCol: 'avg_engagement_time' },
 };
 
+// `needsValue` (not `!!column`) is what routes/goals.js uses to decide
+// whether a scope requires scope_value — 'source' has no content column
+// (its data lives in source_daily, not content/analytics_snapshots) but
+// still needs a value, so it can't be inferred from `column` alone.
 export const SCOPES = {
-  site:         { label: 'Site-wide', column: null },
-  section:      { label: 'Section',      column: 'c.section' },
-  writer:       { label: 'Writer',       column: 'c.writer' },
-  user_need:    { label: 'User Need',    column: 'c.user_need' },
-  content_type: { label: 'Content Type', column: 'c.content_type' },
+  site:         { label: 'Site-wide',      column: null,          needsValue: false },
+  section:      { label: 'Section',        column: 'c.section',      needsValue: true },
+  writer:       { label: 'Writer',         column: 'c.writer',       needsValue: true },
+  user_need:    { label: 'User Need',      column: 'c.user_need',    needsValue: true },
+  content_type: { label: 'Content Type',   column: 'c.content_type', needsValue: true },
+  // Site-wide pageviews for one Marfeel-reported traffic source (source_daily
+  // — see sync/marfeel.js), not a content-table column. Only the pageviews
+  // metric has a per-source breakdown, so routes/goals.js's validateGoal
+  // rejects any other metric with this scope.
+  source:       { label: 'Traffic Source', column: null,          needsValue: true, sourceTable: true },
 };
 
 function isoDate(d) { return d.toISOString().slice(0, 10); }
@@ -65,6 +80,15 @@ function daysBetween(a, b) {
   return Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
 }
 function today() { return isoDate(new Date()); }
+
+// First/last day of the calendar month AFTER the one `endDate` falls in —
+// the next period for a monthly-recurring goal once its current one closes.
+function nextMonthBounds(endDate) {
+  const d = new Date(endDate + 'T00:00:00Z');
+  const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+  const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 2, 0));
+  return { start: isoDate(start), end: isoDate(end) };
+}
 
 // Content-based aggregate expression per metric — what to SELECT once the
 // content/analytics_snapshots join and WHERE clause are in place.
@@ -79,6 +103,9 @@ function contentAggExpr(metric) {
     case 'ad_revenue':          return 'SUM(a.ga4_ad_revenue)';
     case 'users':                return 'SUM(a.ga4_users)';
     case 'loyal_users':          return 'SUM(a.ga4_loyal_users)';
+    // Same "skip zero/null rows" convention as avg_content_value above —
+    // an article with no traffic has no real engagement rate to average in.
+    case 'avg_engagement_time': return 'AVG(CASE WHEN a.ga4_avg_engagement_time > 0 THEN a.ga4_avg_engagement_time END)';
     default: throw new Error(`Unknown metric: ${metric}`);
   }
 }
@@ -119,12 +146,24 @@ function fetchContentValue(db, goal, endDate) {
 
 async function fetchCurrentValue(db, goal, endDate) {
   const metric = METRICS[goal.metric];
+  if (goal.scope_type === 'source') {
+    // source_daily is site-wide only (no per-article breakdown), so this is
+    // the one scope that never falls through to fetchContentValue.
+    const row = db.prepare(`
+      SELECT SUM(pageviews) AS v FROM source_daily WHERE date >= ? AND date <= ? AND source = ?
+    `).get(goal.start_date, endDate, goal.scope_value);
+    return row.v || 0;
+  }
   if (goal.scope_type === 'site' && metric.liveRange) {
     return fetchLiveRangeValue(goal.metric, goal.start_date, endDate);
   }
   if (goal.scope_type === 'site' && metric.siteDailyCol) {
+    // Additive metrics (pageviews, subscribe_clicks, ...) sum across days;
+    // a rate like avg_engagement_time has to be averaged instead — summing
+    // ~90 seconds/day over a month would read as ~2,700, not a real average.
+    const aggFn = metric.cumulative ? 'SUM' : 'AVG';
     const row = db.prepare(`
-      SELECT SUM(${metric.siteDailyCol}) AS v FROM site_daily_metrics WHERE date >= ? AND date <= ?
+      SELECT ${aggFn}(${metric.siteDailyCol}) AS v FROM site_daily_metrics WHERE date >= ? AND date <= ?
     `).get(goal.start_date, endDate);
     return row.v || 0;
   }
@@ -210,7 +249,13 @@ export async function computeGoalTrend(db, goal) {
 
   // Build a date -> daily increment map, then walk the range accumulating it.
   const increments = {};
-  if (goal.scope_type === 'site' && metric.siteDailyCol) {
+  if (goal.scope_type === 'source') {
+    const rows = db.prepare(`
+      SELECT date, pageviews AS v FROM source_daily
+      WHERE date >= ? AND date <= ? AND source = ? ORDER BY date
+    `).all(goal.start_date, effectiveEnd, goal.scope_value);
+    for (const r of rows) increments[r.date] = r.v || 0;
+  } else if (goal.scope_type === 'site' && metric.siteDailyCol) {
     const rows = db.prepare(`
       SELECT date, ${metric.siteDailyCol} AS v FROM site_daily_metrics
       WHERE date >= ? AND date <= ? ORDER BY date
@@ -263,4 +308,40 @@ export async function computeGoalTrend(db, goal) {
     cursor = new Date(cursor.getTime() + 86400000);
   }
   return series;
+}
+
+// Advances a `recurrence: 'monthly'` goal past any period(s) that have fully
+// closed (end_date < today), logging each closed period's final result to
+// goal_history before moving start_date/end_date to the next calendar month.
+// A one-off goal, or one still inside its current period, is returned as-is.
+//
+// Bounded to 24 periods (2 years) per call so a goal nobody has opened in a
+// long time can't loop unboundedly — it just catches up in stages across
+// however many times it gets read before it's current, which is harmless
+// since each iteration is a cheap local computation, not a network call.
+const MAX_ROLLFORWARD_PERIODS = 24;
+
+export async function rollForwardIfDue(db, goal, userId) {
+  if (goal.recurrence !== 'monthly' || goal.archived) return goal;
+
+  const now = today();
+  let current = goal;
+  for (let i = 0; i < MAX_ROLLFORWARD_PERIODS && current.end_date < now; i++) {
+    // computeGoalProgress naturally evaluates AT end_date here (its
+    // effectiveEnd is min(end_date, today), and end_date < today), so this
+    // is exactly the period's final result — not a snapshot of "today."
+    const closingProgress = await computeGoalProgress(db, current);
+    insertGoalHistory({
+      goal_id: current.id,
+      period_start: current.start_date,
+      period_end: current.end_date,
+      target: current.target,
+      final_value: closingProgress.current,
+      status: closingProgress.status,
+    });
+    const { start, end } = nextMonthBounds(current.end_date);
+    setGoalPeriod(current.id, userId, start, end);
+    current = { ...current, start_date: start, end_date: end };
+  }
+  return current;
 }
