@@ -93,7 +93,9 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
       case 'writer':       return writers.map(w => ({ value: w.writer, label: `${w.writer} (${w.count})` }));
       case 'content_type': return types.map(t => ({ value: t.content_type, label: `${t.content_type} (${t.count})` }));
       case 'user_need':    return Object.entries(NEED_META).map(([key, m]) => ({ value: key, label: m.label }));
-      case 'source':       return (catalog.sources || []).map(s => ({ value: s, label: s }));
+      // catalog.sources is the curated channel list (search/social/email/...
+      // — see utils/channels.js), not source_daily's raw referrer strings.
+      case 'source':       return (catalog.sources || []).map(c => ({ value: c.key, label: c.label }));
       default: return [];
     }
   };
@@ -320,6 +322,11 @@ function GoalCard({ goal, catalog, onClick }) {
   const scope = catalog.scopes.find(s => s.key === goal.scope_type) || {};
   const status = STATUS_META[goal.progress.status] || STATUS_META.not_started;
   const pct = Math.max(0, Math.min(100, goal.progress.pct_of_target));
+  // Traffic Source's scope_value is a channel key ('search', 'social', ...)
+  // — show its label (catalog.sources), not the raw key.
+  const scopeValueLabel = goal.scope_type === 'source'
+    ? (catalog.sources || []).find(c => c.key === goal.scope_value)?.label || goal.scope_value
+    : goal.scope_value;
 
   return (
     <div
@@ -350,7 +357,7 @@ function GoalCard({ goal, catalog, onClick }) {
       </div>
 
       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-        {metric.label} · {scope.label}{goal.scope_value ? ` (${goal.scope_value})` : ''}
+        {metric.label} · {scope.label}{scopeValueLabel ? ` (${scopeValueLabel})` : ''}
       </div>
 
       <div>

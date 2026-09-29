@@ -40,6 +40,7 @@
 
 import { fetchUsersForRange, fetchLoyalUsersForRange } from '../sync/ga4.js';
 import { setGoalPeriod, insertGoalHistory } from '../db.js';
+import { CUSTOM_CHANNELS, customChannelFor } from './channels.js';
 
 export const METRICS = {
   pageviews:            { label: 'Pageviews',            unit: 'count',    cumulative: true,  siteDailyCol: 'pageviews' },
@@ -68,12 +69,21 @@ export const SCOPES = {
   writer:       { label: 'Writer',         column: 'c.writer',       needsValue: true },
   user_need:    { label: 'User Need',      column: 'c.user_need',    needsValue: true },
   content_type: { label: 'Content Type',   column: 'c.content_type', needsValue: true },
-  // Site-wide pageviews for one Marfeel-reported traffic source (source_daily
-  // — see sync/marfeel.js), not a content-table column. Only the pageviews
-  // metric has a per-source breakdown, so routes/goals.js's validateGoal
-  // rejects any other metric with this scope.
-  source:       { label: 'Traffic Source', column: null,          needsValue: true, sourceTable: true },
+  // Site-wide pageviews for one CUSTOM_CHANNELS bucket (see utils/channels.js)
+  // of source_daily's raw Marfeel `source` values — not a content-table
+  // column. scope_value is a channel KEY ('search', 'social', ...), the same
+  // ones the Sources tab (routes/analytics.js's /channels) already shows, not
+  // a raw source string — source_daily has hundreds of those (literal
+  // referrer domains, app names, tracking artifacts), not something anyone
+  // should have to pick out of a dropdown to set a goal against. Only the
+  // pageviews metric has a per-source breakdown, so routes/goals.js's
+  // validateGoal rejects any other metric with this scope.
+  source:       { label: 'Traffic Source', column: null,          needsValue: true },
 };
+
+// scope_value options for the 'source' scope — every CUSTOM_CHANNELS key,
+// used by routes/goals.js's validateGoal and its /metrics catalog response.
+export const TRAFFIC_SOURCE_CHANNELS = Object.entries(CUSTOM_CHANNELS).map(([key, ch]) => ({ key, label: ch.label }));
 
 function isoDate(d) { return d.toISOString().slice(0, 10); }
 function daysBetween(a, b) {
@@ -148,11 +158,18 @@ async function fetchCurrentValue(db, goal, endDate) {
   const metric = METRICS[goal.metric];
   if (goal.scope_type === 'source') {
     // source_daily is site-wide only (no per-article breakdown), so this is
-    // the one scope that never falls through to fetchContentValue.
-    const row = db.prepare(`
-      SELECT SUM(pageviews) AS v FROM source_daily WHERE date >= ? AND date <= ? AND source = ?
-    `).get(goal.start_date, endDate, goal.scope_value);
-    return row.v || 0;
+    // the one scope that never falls through to fetchContentValue. Bucketed
+    // in JS via customChannelFor rather than a SQL IN/NOT IN — the 'referral'
+    // channel is a catch-all (no fixed source list to filter by), and the
+    // date range here is normally a month or a quarter, not the full history,
+    // so grouping in SQL then summing matching sources in JS stays cheap.
+    const rows = db.prepare(`
+      SELECT source, SUM(pageviews) AS v FROM source_daily
+      WHERE date >= ? AND date <= ? GROUP BY source
+    `).all(goal.start_date, endDate);
+    let total = 0;
+    for (const r of rows) if (customChannelFor(r.source) === goal.scope_value) total += r.v || 0;
+    return total;
   }
   if (goal.scope_type === 'site' && metric.liveRange) {
     return fetchLiveRangeValue(goal.metric, goal.start_date, endDate);
@@ -250,11 +267,15 @@ export async function computeGoalTrend(db, goal) {
   // Build a date -> daily increment map, then walk the range accumulating it.
   const increments = {};
   if (goal.scope_type === 'source') {
+    // Same bucket-in-JS approach as fetchCurrentValue above.
     const rows = db.prepare(`
-      SELECT date, pageviews AS v FROM source_daily
-      WHERE date >= ? AND date <= ? AND source = ? ORDER BY date
-    `).all(goal.start_date, effectiveEnd, goal.scope_value);
-    for (const r of rows) increments[r.date] = r.v || 0;
+      SELECT date, source, pageviews AS v FROM source_daily
+      WHERE date >= ? AND date <= ? ORDER BY date
+    `).all(goal.start_date, effectiveEnd);
+    for (const r of rows) {
+      if (customChannelFor(r.source) !== goal.scope_value) continue;
+      increments[r.date] = (increments[r.date] || 0) + (r.v || 0);
+    }
   } else if (goal.scope_type === 'site' && metric.siteDailyCol) {
     const rows = db.prepare(`
       SELECT date, ${metric.siteDailyCol} AS v FROM site_daily_metrics

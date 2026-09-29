@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb, listGoals, getGoal, createGoal, updateGoal, setGoalArchived, deleteGoal, listGoalHistory, recentGoalHistory } from '../db.js';
-import { METRICS, SCOPES, computeGoalProgress, computeGoalTrend, rollForwardIfDue } from '../utils/goals.js';
+import { METRICS, SCOPES, TRAFFIC_SOURCE_CHANNELS, computeGoalProgress, computeGoalTrend, rollForwardIfDue } from '../utils/goals.js';
 
 const router = Router();
 
@@ -32,6 +32,9 @@ function validateGoal(body) {
   // source_daily (see sync/marfeel.js) only breaks pageviews down by source —
   // no engagement/subscribe-click/etc. per-source data exists to goal against.
   if (scope_type === 'source' && metric !== 'pageviews') return 'Traffic Source goals only support the Pageviews metric';
+  if (scope_type === 'source' && scope_value && !TRAFFIC_SOURCE_CHANNELS.some(c => c.key === scope_value)) {
+    return `scope_value for "source" must be one of: ${TRAFFIC_SOURCE_CHANNELS.map(c => c.key).join(', ')}`;
+  }
   if (typeof target !== 'number' || !(target > 0)) return 'target must be a positive number';
   if (!start_date || !end_date || !/^\d{4}-\d{2}-\d{2}$/.test(start_date) || !/^\d{4}-\d{2}-\d{2}$/.test(end_date)) {
     return 'start_date and end_date must be YYYY-MM-DD';
@@ -42,13 +45,15 @@ function validateGoal(body) {
 }
 
 // GET /api/goals/metrics — catalog for the client's goal-creation form.
+// `sources` is the curated channel list (see utils/channels.js) for the
+// "Traffic Source" scope's value dropdown — the same handful of named
+// channels the Sources tab shows, not source_daily's raw referrer values
+// (hundreds of literal domains/app names, unusable in a picker).
 router.get('/metrics', (req, res) => {
-  const db = getDb();
-  const sources = db.prepare('SELECT DISTINCT source FROM source_daily WHERE source IS NOT NULL ORDER BY source').all().map(r => r.source);
   res.json({
     metrics: Object.entries(METRICS).map(([key, m]) => ({ key, label: m.label, unit: m.unit, cumulative: m.cumulative })),
     scopes: Object.entries(SCOPES).map(([key, s]) => ({ key, label: s.label, needsValue: s.needsValue })),
-    sources,
+    sources: TRAFFIC_SOURCE_CHANNELS,
   });
 });
 

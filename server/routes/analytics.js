@@ -3,6 +3,7 @@ import { getDb } from '../db.js';
 import { fetchUsersForRange, fetchLoyalUsersForRange, fetchInMarketUsersForRange } from '../sync/ga4.js';
 import { computeTrendRisk } from '../utils/gscTrend.js';
 import { pctChange, previousPeriodRange } from '../utils/period.js';
+import { CUSTOM_CHANNELS, customChannelFor } from '../utils/channels.js';
 
 const router = Router();
 
@@ -911,55 +912,9 @@ router.get('/by-traffic-source', (req, res) => {
   res.json(fetchSourceRows(db, { dateFrom, dateTo, type }));
 });
 
-// Custom channel taxonomy — buckets raw Marfeel `source` values (article-level,
-// date-scoped via published_at) into the groups shown in the Sources tab.
-const CUSTOM_CHANNELS = {
-  search: {
-    label: 'Search Engines',
-    color: '#2474bb',
-    sources: new Set(['Google', 'Bing', 'DuckDuckGo', 'Yahoo!', 'Ecosia', 'Google News',
-                      'Yandex', 'Brave', 'Baidu']),
-  },
-  discover: {
-    label: 'Google Discover',
-    color: '#e67e22',
-    sources: new Set(['Google Discover']),
-  },
-  dark_social: {
-    label: 'Dark Social',
-    color: '#8e44ad',
-    sources: new Set(['dark social']),
-  },
-  direct: {
-    label: 'Direct / Bookmark',
-    color: '#27ae60',
-    sources: new Set(['direct', 'bookmark']),
-  },
-  social: {
-    label: 'Social Media',
-    color: '#e74c3c',
-    sources: new Set(['Facebook', 'Reddit', 'Twitter', 'Instagram', 'LinkedIn',
-                      'Bluesky', 'Threads', 'Pinterest', 'Nextdoor', 'nextdoor.com',
-                      'later-linkinbio', 'linkin.bio', 'ig', 'com.reddit.frontpage',
-                      'old.reddit.com', 'linktr.ee']),
-  },
-  email: {
-    label: 'Email',
-    color: '#f39c12',
-    sources: new Set(['hs_email', 'newsletter', 'omnisend', 'Gmail', 'WEBCTA',
-                      'pushengage', 'hub.marfeel.com']),
-  },
-  ai: {
-    label: 'AI Referral',
-    color: '#1abc9c',
-    sources: new Set(['ChatGPT', 'Claude', 'Perplexity', 'perplexity.ai']),
-  },
-  referral: {
-    label: 'Referral',
-    color: '#95a5a6',
-    sources: new Set(), // catch-all for everything else
-  },
-};
+// CUSTOM_CHANNELS/customChannelFor now live in utils/channels.js — shared
+// with utils/goals.js, whose "Traffic Source" goal scope buckets by the
+// same channels rather than duplicating this taxonomy a second time.
 
 // Sums fetchSourceRows() output into per-channel totals for just the
 // metrics that come from the Marfeel-apportioned, per-article snapshot join
@@ -988,14 +943,6 @@ function buildChannelTotals(sourceRows) {
     b.newsletter_signups += row.total_newsletter_signups || 0;
   }
   return buckets;
-}
-
-function customChannelFor(source) {
-  for (const [key, ch] of Object.entries(CUSTOM_CHANNELS)) {
-    if (key === 'referral') continue;
-    if (ch.sources.has(source)) return key;
-  }
-  return 'referral';
 }
 
 // GA4's `sessionDefaultChannelGrouping` is a DIFFERENT taxonomy than the
