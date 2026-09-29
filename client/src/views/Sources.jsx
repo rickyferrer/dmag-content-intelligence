@@ -316,7 +316,7 @@ export default function Sources() {
               style={{
                 padding: '6px 14px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
                 background: viewMode === mode ? 'var(--accent-gold)' : 'var(--bg-elevated)',
-                color: viewMode === mode ? '#0f0f0f' : 'var(--text-secondary)',
+                color: viewMode === mode ? '#fff' : 'var(--text-secondary)',
                 textTransform: 'capitalize',
               }}
             >

@@ -270,7 +270,7 @@ function GoalPanel({ goal, catalog, sections, writers, types, onClose, onSaved, 
         <button
           onClick={save}
           disabled={saving || !form.name.trim() || !form.target || (needsScopeValue && !form.scope_value)}
-          style={{ background: 'var(--accent-gold)', color: '#1a1a1a', border: 'none', borderRadius: 4, padding: '7px 18px', fontWeight: 600 }}
+          style={{ background: 'var(--accent-gold)', color: '#fff', border: 'none', borderRadius: 4, padding: '7px 18px', fontWeight: 600 }}
         >
           {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Goal'}
         </button>
@@ -415,7 +415,7 @@ export default function Goals() {
         </p>
         <button
           onClick={() => setPanel('new')}
-          style={{ background: 'var(--accent-gold)', color: '#1a1a1a', border: 'none', borderRadius: 4, padding: '8px 16px', fontWeight: 600, whiteSpace: 'nowrap' }}
+          style={{ background: 'var(--accent-gold)', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 16px', fontWeight: 600, whiteSpace: 'nowrap' }}
         >
           + New Goal
         </button>

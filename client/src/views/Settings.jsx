@@ -254,7 +254,7 @@ export default function Settings() {
               disabled={saving || Object.keys(dirty).length === 0}
               style={{
                 padding: '8px 18px', borderRadius: 4, fontSize: 13, fontWeight: 500,
-                background: 'var(--accent-gold)', border: 'none', color: '#0f0f0f',
+                background: 'var(--accent-gold)', border: 'none', color: '#fff',
                 opacity: (saving || Object.keys(dirty).length === 0) ? 0.5 : 1,
               }}
             >
@@ -393,7 +393,7 @@ export default function Settings() {
                       disabled={benchmarkBusyId === row.id}
                       style={{
                         padding: '5px 12px', borderRadius: 4, fontSize: 11, fontWeight: 500,
-                        background: 'var(--accent-gold)', border: 'none', color: '#0f0f0f',
+                        background: 'var(--accent-gold)', border: 'none', color: '#fff',
                         opacity: benchmarkBusyId === row.id ? 0.6 : 1,
                       }}
                     >
@@ -448,7 +448,7 @@ export default function Settings() {
             disabled={savingExclusions}
             style={{
               padding: '8px 18px', borderRadius: 4, fontSize: 13, fontWeight: 500,
-              background: 'var(--accent-gold)', border: 'none', color: '#0f0f0f',
+              background: 'var(--accent-gold)', border: 'none', color: '#fff',
               opacity: savingExclusions ? 0.5 : 1,
             }}
           >
