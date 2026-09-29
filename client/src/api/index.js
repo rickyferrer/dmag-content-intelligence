@@ -46,6 +46,7 @@ export const api = {
   reclassify: (id) => apiFetch(`/content/${id}/reclassify`, { method: 'POST' }),
   reclassifyCategories: (id) => apiFetch(`/content/${id}/reclassify-categories`, { method: 'POST' }),
   reclassifyVoice: (id) => apiFetch(`/content/${id}/reclassify-voice`, { method: 'POST' }),
+  setPublicationOverride: (id, publication_override) => apiFetch(`/content/${id}/publication`, { method: 'PUT', body: JSON.stringify({ publication_override }) }),
 
   // Analytics
   getSummary: (params = {}) => apiFetch('/analytics/summary?' + new URLSearchParams(params)),

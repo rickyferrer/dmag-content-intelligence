@@ -400,6 +400,16 @@ function initSchema() {
   // WordPress featured-image URL (a display-size thumbnail, not the full
   // original) — see sync/wordpress.js's fetchMediaUrls().
   try { db.exec('ALTER TABLE content ADD COLUMN cover_image_url TEXT'); } catch {}
+  // Manual issue assignment for reporting — e.g. an annually-updated guide
+  // that lives under /guides/ (deliberately not tied to any one issue) but
+  // should still roll up under a publication for reporting. NULL means "use
+  // the URL" (the normal /publications/{pub}/{year}/{month}/ parse everyone
+  // else gets); when set, it's "{pub}/{year}/{month}" — the exact same
+  // string shape as the `issue` query param and by-issue's grouping key —
+  // and wins over the URL everywhere an issue is derived (routes/content.js's
+  // `issue` filter, routes/analytics.js's /by-issue and Vulnerability's
+  // extractPublication). Set via PUT /api/content/:id/publication.
+  try { db.exec('ALTER TABLE content ADD COLUMN publication_override TEXT'); } catch {}
   // Per-user ownership (individual logins). No FK: users live in the separate
   // auth.db (see authDb.js). NULL = created before logins existed; bootstrapAdmin()
   // hands those to the first admin.

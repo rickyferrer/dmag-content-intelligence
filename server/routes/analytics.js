@@ -625,7 +625,7 @@ router.get('/by-issue', (req, res) => {
   // tab's /api/content merge, so the two views agree instead of one
   // silently showing only the live number for older issues.
   const rows = db.prepare(`
-    SELECT c.wp_id, c.url, c.title, c.published_at, c.cover_image_url,
+    SELECT c.wp_id, c.url, c.title, c.published_at, c.cover_image_url, c.publication_override,
       a.lifetime_value, a.ga4_users, a.ga4_pageviews,
       (COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS ga4_subscribe_clicks,
       (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS mf_newsletter_signups,
@@ -647,20 +647,32 @@ router.get('/by-issue', (req, res) => {
       WHERE date < date('now', '-30 days')
       GROUP BY wp_id
     ) hs ON hs.wp_id = c.wp_id
-    WHERE c.url LIKE '%/publications/%'
-      AND c.published_at >= date('now', '-2 years')
+    -- A manual publication_override (see PUT /api/content/:id/publication)
+    -- always counts, regardless of published_at — the whole point of
+    -- overriding is to fold in something like an annually-updated guide
+    -- post whose actual publish date can be much older than 2 years.
+    WHERE (c.url LIKE '%/publications/%' AND c.published_at >= date('now', '-2 years'))
+      OR c.publication_override IS NOT NULL
   `).all();
 
   const MONTH_ORDER = { january:1, february:2, march:3, april:4, may:5, june:6, july:7, august:8, september:9, october:10, november:11, december:12 };
   const issueMap = {};
 
   for (const row of rows) {
-    // A slug segment after the month is optional, so the issue's own bare
-    // landing page (…/month/ with nothing after it — e.g. a page literally
-    // titled "June") counts as part of the issue too, same as any article.
-    const match = row.url.match(/\/publications\/([^/]+)\/(\d{4})\/([^/]+)\//);
-    if (!match) continue;
-    const [, pub, yr, mo] = match;
+    // A manual override wins over the URL — see the publication_override
+    // column comment in db.js. Falls through to the normal URL parse when
+    // it's not set. A slug segment after the month is optional in the URL
+    // form, so the issue's own bare landing page (…/month/ with nothing
+    // after it — e.g. a page literally titled "June") counts as part of
+    // the issue too, same as any article.
+    let pub, yr, mo, match = null;
+    if (row.publication_override) {
+      [pub, yr, mo] = row.publication_override.split('/');
+    } else {
+      match = row.url.match(/\/publications\/([^/]+)\/(\d{4})\/([^/]+)\//);
+      if (!match) continue;
+      [, pub, yr, mo] = match;
+    }
 
     if (publication && pub !== publication) continue;
     if (year && yr !== year) continue;
@@ -693,8 +705,9 @@ router.get('/by-issue', (req, res) => {
     // The issue's own bare landing page (…/month/ with no slug after it —
     // same page the comment above already treats as part of the issue)
     // carries the actual magazine cover, so prefer it over whichever
-    // individual article happens to score highest.
-    if (!issue.cover_image_url && row.cover_image_url && row.url.slice(match.index + match[0].length) === '') {
+    // individual article happens to score highest. Only meaningful for a
+    // URL-derived issue — an override'd guide post is never that page.
+    if (match && !issue.cover_image_url && row.cover_image_url && row.url.slice(match.index + match[0].length) === '') {
       issue.cover_image_url = row.cover_image_url;
     }
   }
@@ -1402,7 +1415,7 @@ router.get('/vulnerability', (req, res) => {
   if (dateTo)   { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
 
   const articles = db.prepare(`
-    SELECT c.wp_id, c.title, c.url, c.user_need, c.section, c.published_at,
+    SELECT c.wp_id, c.title, c.url, c.user_need, c.section, c.published_at, c.publication_override,
       a.true_value, a.ga4_users, a.ga4_pageviews,
       (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS mf_newsletter_signups
     FROM content c
@@ -1451,8 +1464,10 @@ router.get('/vulnerability', (req, res) => {
   }
 
   // Imprint (D Magazine / D Home / D CEO) parsed from URL, same pattern as
-  // /by-issue — only articles under /publications/{imprint}/... have one.
-  function extractPublication(url) {
+  // /by-issue — only articles under /publications/{imprint}/... have one,
+  // unless a manual publication_override (see db.js) assigns one anyway.
+  function extractPublication(url, override) {
+    if (override) return override.split('/')[0];
     const m = (url || '').match(/\/publications\/([^/]+)\//);
     return m ? m[1] : null;
   }
@@ -1514,7 +1529,7 @@ router.get('/vulnerability', (req, res) => {
       ...art, search_exposure_pct, susceptibility_pct, confidence, impact_priority, risk_source,
       search_pv: s.search_pv, total_source_pv: s.total_pv,
       proper_noun_count, is_listicle, has_local, has_awards_signal, need_mult,
-      publication: extractPublication(art.url),
+      publication: extractPublication(art.url, art.publication_override),
       generic_factor: risk_source === 'estimated' ? generic_factor : null,
       query_categories: queryRisk?.by_category ?? null,
       gsc_click_count: queryRisk?.total_clicks ?? null,

@@ -3,12 +3,32 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 import { api } from '../api/index.js';
 import NeedBadge from '../components/NeedBadge.jsx';
 import Spinner from '../components/Spinner.jsx';
+import SearchableSelect from '../components/SearchableSelect.jsx';
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
   if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
   return String(Math.round(n));
+}
+
+// Same 4 publications as ContentTable/Publications/PublicationDetail.jsx
+// (duplicated per-file rather than shared — matches this app's existing
+// convention for these small display maps).
+const PUB_DISPLAY = { 'd-magazine': 'D Magazine', 'd-home': 'D Home', 'd-ceo': 'D CEO', 'd-weddings': 'D Weddings' };
+
+// Same regex routes/analytics.js's /by-issue uses server-side, for display
+// only — to show which issue a URL would resolve to when there's no manual
+// override yet. The override itself is never parsed with this; it's stored
+// pre-split as "{pub}/{year}/{month}".
+function issueFromUrl(url) {
+  const m = (url || '').match(/\/publications\/([^/]+)\/(\d{4})\/([^/]+)\//);
+  return m ? { publication: m[1], year: m[2], month: m[3] } : null;
+}
+function issueLabel({ publication, year, month }) {
+  const pub = PUB_DISPLAY[publication] || publication;
+  const mo = month.charAt(0).toUpperCase() + month.slice(1);
+  return `${pub} — ${mo} ${year}`;
 }
 
 function StatRow({ label, value, accent, title }) {
@@ -26,6 +46,13 @@ export default function ContentDetail({ wpId, onClose }) {
   const [reclassifying, setReclassifying] = useState(false);
   const [reclassifyingCategories, setReclassifyingCategories] = useState(false);
   const [reclassifyingVoice, setReclassifyingVoice] = useState(false);
+  const [issues, setIssues] = useState([]);
+  const [editingPub, setEditingPub] = useState(false);
+  const [savingPub, setSavingPub] = useState(false);
+
+  useEffect(() => {
+    api.getByIssue().then(setIssues).catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (!wpId) return;
@@ -72,6 +99,20 @@ export default function ContentDetail({ wpId, onClose }) {
       alert('Voice classification error: ' + err.message);
     } finally {
       setReclassifyingVoice(false);
+    }
+  };
+
+  // value is "{pub}/{year}/{month}" from the issue dropdown, or '' to clear.
+  const handlePublicationChange = async (value) => {
+    setSavingPub(true);
+    try {
+      const updated = await api.setPublicationOverride(wpId, value || null);
+      setItem(prev => ({ ...prev, publication_override: updated.publication_override }));
+      setEditingPub(false);
+    } catch (err) {
+      alert('Could not set publication: ' + err.message);
+    } finally {
+      setSavingPub(false);
     }
   };
 
@@ -167,6 +208,60 @@ export default function ContentDetail({ wpId, onClose }) {
               {reclassifyingVoice ? 'Classifying...' : 'Re-classify Voice'}
             </button>
           </div>
+
+          {/* Publication — which issue this article reports under. Normally
+              parsed from the URL; publication_override (see db.js) lets an
+              editor assign one manually, e.g. an annually-updated guide post
+              that deliberately isn't tied to any one issue's URL but should
+              still roll up under a publication for reporting. */}
+          {(() => {
+            const overrideIssue = item.publication_override
+              ? (([pub, year, month]) => ({ publication: pub, year, month }))(item.publication_override.split('/'))
+              : null;
+            const urlIssue = issueFromUrl(item.url);
+            const issueOptions = issues.map(i => ({
+              value: `${i.publication}/${i.year}/${i.month}`,
+              label: issueLabel(i),
+            }));
+            return (
+              <div>
+                <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Publication</h3>
+                {editingPub ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <SearchableSelect
+                      value={item.publication_override || ''}
+                      onChange={handlePublicationChange}
+                      options={issueOptions}
+                      placeholder="No publication"
+                      minWidth={220}
+                    />
+                    <button onClick={() => setEditingPub(false)} disabled={savingPub} style={{ fontSize: 12, padding: '5px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-secondary)' }}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>
+                      {overrideIssue ? issueLabel(overrideIssue) : urlIssue ? issueLabel(urlIssue) : 'Not assigned'}
+                    </span>
+                    {overrideIssue ? (
+                      <span style={{ fontSize: 10, color: 'var(--accent-gold)', background: 'var(--accent-gold-bg)', padding: '2px 6px', borderRadius: 8 }}>manually assigned</span>
+                    ) : urlIssue && (
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>from URL</span>
+                    )}
+                    <button onClick={() => setEditingPub(true)} style={{ fontSize: 12, padding: '3px 9px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-secondary)' }}>
+                      {overrideIssue ? 'Change' : 'Assign'}
+                    </button>
+                    {overrideIssue && (
+                      <button onClick={() => handlePublicationChange('')} disabled={savingPub} style={{ fontSize: 12, padding: '3px 9px', background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-muted)' }}>
+                        {savingPub ? 'Clearing…' : 'Clear override'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Content Value Breakdown — lifetime version: Subscribe Clicks and
               Newsletter factor in this article's FULL historical record, not

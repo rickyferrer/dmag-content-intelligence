@@ -6,6 +6,14 @@ import { classifyVoiceSingle, VOICE_TAXONOMY } from '../classify/voice.js';
 import { getValueBreakdown, shapeForLifetime } from '../utils/trueValue.js';
 import { pctChange, previousPeriodRange } from '../utils/period.js';
 
+// The four real publications (see PUB_DISPLAY/PUB_LABELS duplicated the same
+// way across client/src/views/{ContentTable,Publications,PublicationDetail}.jsx)
+// and the month names /by-issue's MONTH_ORDER (routes/analytics.js) groups
+// by — validated against here so a typo in a manual publication_override
+// can't create a phantom issue nobody else's dropdown will ever show.
+const VALID_PUBLICATIONS = new Set(['d-magazine', 'd-home', 'd-ceo', 'd-weddings']);
+const VALID_MONTHS = new Set(['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']);
+
 // A Google content-category path looks like "/Food & Drink/Restaurants" —
 // the filter dropdown works off the top-level segment (~30 options) since
 // the full taxonomy runs to several hundred leaf nodes, too many for a
@@ -37,7 +45,11 @@ function buildContentWhere(query, dateOverride) {
   if (dateTo) { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
   if (category) { where.push("c.categories LIKE ?"); params.push(`%"slug":"${category}"%`); }
   if (tag) { where.push("c.tags LIKE ?"); params.push(`%"slug":"${tag}"%`); }
-  if (issue) { where.push("c.url LIKE ?"); params.push(`%/publications/${issue}/%`); }
+  // Matches the URL-derived issue OR a manual publication_override (see
+  // PUT /:id/publication below) — both use the same "{pub}/{year}/{month}"
+  // string, so a guide post assigned to an issue shows up here exactly like
+  // a real /publications/ article would.
+  if (issue) { where.push("(c.url LIKE ? OR c.publication_override = ?)"); params.push(`%/publications/${issue}/%`, issue); }
   if (search) { where.push('(c.title LIKE ? OR c.url LIKE ?)'); params.push(`%${search}%`, `%${search}%`); }
   if (nlpCategory) {
     where.push('EXISTS (SELECT 1 FROM content_categories cc WHERE cc.wp_id = c.wp_id AND cc.category LIKE ?)');
@@ -413,6 +425,34 @@ router.get('/:id', (req, res) => {
   `).all(wpId);
 
   res.json({ ...item, history, sources, categories, voices, trueValueBreakdown: breakdown, lifetimeValueBreakdown: lifetimeBreakdown, newsletterHistory });
+});
+
+// PUT /api/content/:id/publication — manually assign (or clear) which
+// issue an article reports under, independent of its actual URL. For
+// content that deliberately lives outside /publications/ (e.g. an
+// annually-updated guide) but should still roll up under a publication for
+// reporting — see the publication_override column comment in db.js.
+// Body: { publication_override: "d-magazine/2026/september" | null }.
+router.put('/:id/publication', (req, res) => {
+  const db = getDb();
+  const wpId = parseInt(req.params.id);
+  const raw = req.body?.publication_override;
+
+  let value = null;
+  if (raw !== null && raw !== undefined && raw !== '') {
+    if (typeof raw !== 'string') return res.status(400).json({ error: 'publication_override must be a string or null' });
+    const parts = raw.split('/');
+    if (parts.length !== 3 || !VALID_PUBLICATIONS.has(parts[0]) || !/^\d{4}$/.test(parts[1]) || !VALID_MONTHS.has(parts[2])) {
+      return res.status(400).json({
+        error: `publication_override must be "{publication}/{year}/{month}" — publication one of ${[...VALID_PUBLICATIONS].join(', ')}, month lowercase full name`,
+      });
+    }
+    value = raw;
+  }
+
+  const result = db.prepare('UPDATE content SET publication_override = ? WHERE wp_id = ?').run(value, wpId);
+  if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+  res.json({ wp_id: wpId, publication_override: value });
 });
 
 // POST /api/content/:id/reclassify
