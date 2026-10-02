@@ -165,8 +165,9 @@ function parseGroupedResponse(response, label) {
 // Newsletter signup data lives on a different endpoint from the main dashboard queries.
 // Marfeel uses /api/traffic/realtime with a "goal::" metric (note the "::" prefix).
 // The per-article signup count is in item.users, not inside item.metrics.
-// D Magazine has two newsletter signup goals — the original form and a newer inline
-// variant — so this is called once per goal and the counts are summed per URL.
+// D Magazine has three newsletter signup goals — the original form, an inline
+// variant, and a modal — so this is called once per goal and the counts are
+// summed per URL.
 async function fetchNewsletterSignupsForGoal(token, goalMetric) {
   const results = new Map(); // normalised url → signup count
   const limit = 500;
@@ -235,7 +236,13 @@ async function fetchNewsletterSignupsForGoal(token, goalMetric) {
   return results;
 }
 
-const NEWSLETTER_GOALS = ['goal::newsletter_signup', 'goal::newsletter_signup_inline'];
+// newsletter_signup_modal is the newest. Checked against the live API when it
+// was added: 27 signups on 12 pages over 30 days, almost all on pages the other
+// two goals had recorded nothing for, so it adds to them rather than
+// double-counting the same signup. Marfeel can't look back past its rolling
+// window, so there's no history before it was added (see the historical CSV
+// import, which has columns only for the first two).
+const NEWSLETTER_GOALS = ['goal::newsletter_signup', 'goal::newsletter_signup_inline', 'goal::newsletter_signup_modal'];
 
 // Site-wide newsletter signups for "the last 1 day" (i.e. today so far),
 // summed across every article rather than kept per-URL. Unlike GA4, Marfeel's
@@ -620,9 +627,9 @@ export async function syncMarfeel() {
     }
 
     // Query 4: Newsletter signups via /api/traffic/realtime
-    // Combines "goal::newsletter_signup" and "goal::newsletter_signup_inline";
+    // Combines every goal in NEWSLETTER_GOALS (original, inline, modal);
     // count lives in item.users of the response.
-    console.log('[Marfeel] Fetching newsletter signup conversions (both goals)...');
+    console.log(`[Marfeel] Fetching newsletter signup conversions (${NEWSLETTER_GOALS.length} goals)...`);
     await sleep(RATE_LIMIT_DELAY);
 
     try {
