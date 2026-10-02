@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
 import Spinner from '../components/Spinner.jsx';
+import { PALETTE, readableInk } from '../constants/palette.js';
 
 const PUB_LABELS = {
   'D Magazine': 'd-magazine',
@@ -10,11 +11,14 @@ const PUB_LABELS = {
 };
 const PUB_DISPLAY = Object.fromEntries(Object.entries(PUB_LABELS).map(([k, v]) => [v, k]));
 
+// Same hue families as before (gold / blue / purple / pink), in the shared
+// Mixpanel palette. Used as a tinted-pill background AND as text, so the
+// text spots below go through readableInk().
 const PUB_COLORS = {
-  'd-magazine': '#c9a84c',
-  'd-home': '#5b9bd5',
-  'd-ceo': '#7c5cbf',
-  'd-weddings': '#c2679e',
+  'd-magazine': PALETTE.amber,
+  'd-home': PALETTE.sky,
+  'd-ceo': PALETTE.violet,
+  'd-weddings': PALETTE.orchid,
 };
 
 function fmt(n) {
@@ -172,7 +176,7 @@ export default function Publications({ onSelect }) {
                     {/* Publication */}
                     <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                       <span style={{
-                        fontSize: 11, fontWeight: 600, color: pubColor,
+                        fontSize: 11, fontWeight: 600, color: readableInk(pubColor),
                         background: pubColor + '18', padding: '2px 7px', borderRadius: 4,
                       }}>
                         {pubName}
@@ -220,7 +224,7 @@ export default function Publications({ onSelect }) {
                         <div>
                           <a href={row.top_article.url} target="_blank" rel="noopener noreferrer"
                             onClick={e => e.stopPropagation()}
-                            style={{ fontSize: 12, color: pubColor, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            style={{ fontSize: 12, color: readableInk(pubColor), display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {row.top_article.title}
                           </a>
                           <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>

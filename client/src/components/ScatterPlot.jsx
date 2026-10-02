@@ -4,6 +4,7 @@ import {
   Tooltip, ResponsiveContainer, Cell, ZAxis,
 } from 'recharts';
 import { NEED_META } from './NeedBadge.jsx';
+import { readableInk } from '../constants/palette.js';
 
 const CustomTooltip = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
@@ -19,7 +20,7 @@ const CustomTooltip = ({ active, payload }) => {
       fontSize: 12,
       lineHeight: 1.8,
     }}>
-      <div style={{ color: meta.color, fontWeight: 600, marginBottom: 4 }}>{meta.label}</div>
+      <div style={{ color: readableInk(meta.color), fontWeight: 600, marginBottom: 4 }}>{meta.label}</div>
       <div style={{ color: 'var(--text-secondary)' }}>Articles: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{d.article_count}</span></div>
       <div style={{ color: 'var(--text-secondary)' }}>Avg Content Value: <span style={{ color: 'var(--accent-gold)', fontFamily: 'var(--font-mono)' }}>{d.avg_true_value?.toFixed(1)}</span></div>
       <div style={{ color: 'var(--text-secondary)' }}>Total Pageviews: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{d.total_pageviews?.toLocaleString()}</span></div>

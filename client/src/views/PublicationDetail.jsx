@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { api } from '../api/index.js';
 import NeedBadge, { NEED_META } from '../components/NeedBadge.jsx';
+import { PALETTE, readableInk } from '../constants/palette.js';
 import Spinner from '../components/Spinner.jsx';
 
 const PUB_DISPLAY = { 'd-magazine': 'D Magazine', 'd-home': 'D Home', 'd-ceo': 'D CEO', 'd-weddings': 'D Weddings' };
-const PUB_COLORS = { 'd-magazine': '#c9a84c', 'd-home': '#5b9bd5', 'd-ceo': '#7c5cbf', 'd-weddings': '#c2679e' };
+const PUB_COLORS = { 'd-magazine': PALETTE.amber, 'd-home': PALETTE.sky, 'd-ceo': PALETTE.violet, 'd-weddings': PALETTE.orchid };
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -100,7 +101,7 @@ export default function PublicationDetail({ issue, onClose }) {
             {capitalize(issue.month)} {issue.year}
           </h2>
           <span style={{
-            fontSize: 11, fontWeight: 600, color: pubColor,
+            fontSize: 11, fontWeight: 600, color: readableInk(pubColor),
             background: pubColor + '18', padding: '2px 7px', borderRadius: 4,
           }}>
             {pubName}

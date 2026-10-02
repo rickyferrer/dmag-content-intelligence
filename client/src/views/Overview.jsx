@@ -7,6 +7,7 @@ import { api } from '../api/index.js';
 import KPICard from '../components/KPICard.jsx';
 import ScatterPlot from '../components/ScatterPlot.jsx';
 import { NEED_META } from '../components/NeedBadge.jsx';
+import { readableInk } from '../constants/palette.js';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 import { useComparisons } from '../context/ComparisonContext.jsx';
 import Spinner from '../components/Spinner.jsx';
@@ -24,7 +25,7 @@ const NeedTooltip = ({ active, payload }) => {
   const meta = NEED_META[d?.user_need] || { label: d?.user_need };
   return (
     <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
-      <div style={{ color: meta.color, fontWeight: 600 }}>{meta.label}</div>
+      <div style={{ color: readableInk(meta.color), fontWeight: 600 }}>{meta.label}</div>
       <div style={{ color: 'var(--text-secondary)' }}>Total Content Value: <b style={{ color: 'var(--accent-gold)' }}>{Math.round(d.total_true_value)}</b></div>
       <div style={{ color: 'var(--text-secondary)' }}>Articles: <b style={{ color: 'var(--text-primary)' }}>{d.article_count}</b></div>
     </div>

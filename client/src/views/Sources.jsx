@@ -9,6 +9,7 @@ import { ChangeBadge } from '../components/KPICard.jsx';
 import { useComparisons } from '../context/ComparisonContext.jsx';
 import { NEWSLETTER_NOTE } from '../constants/dataReliability.js';
 import Spinner from '../components/Spinner.jsx';
+import { readableInk } from '../constants/palette.js';
 
 function fmt(n) {
   if (!n) return '—';
@@ -114,7 +115,7 @@ function ChannelScatter({ channels }) {
     if (!d) return null;
     return (
       <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px', fontSize: 12, lineHeight: 1.8 }}>
-        <div style={{ color: d.color, fontWeight: 600, marginBottom: 4 }}>{d.label}</div>
+        <div style={{ color: readableInk(d.color), fontWeight: 600, marginBottom: 4 }}>{d.label}</div>
         <div style={{ color: 'var(--text-secondary)' }}>Traffic: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{fmt(d.pageviews)}</span></div>
         <div style={{ color: 'var(--text-secondary)' }}>Opportunity: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{d.ga4.opportunity_per_1k.toFixed(2)}/1k</span></div>
         <div style={{ color: 'var(--text-secondary)' }}>Potential Ad Revenue: <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>${Math.round(d.ga4.ad_revenue).toLocaleString()}</span></div>

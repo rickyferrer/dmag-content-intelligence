@@ -11,31 +11,39 @@
 // something anyone should have to pick out of a 400-item dropdown to set a
 // goal against. Bucketing into a handful of named channels is what makes
 // "traffic source" a usable goal scope at all.
+// `color` is a chart FILL from the shared Mixpanel palette — the same hexes as
+// client/src/constants/palette.js (the server sends these down with
+// /api/analytics/channels, so they're mirrored here rather than imported).
+// 'referral' stays a neutral gray on purpose: it's the catch-all for
+// everything not named above, not a category of its own. Same hue families
+// as before (search = blue, social = red, email = amber, ...) so the Sources
+// tab doesn't need relearning. The client darkens these via readableInk()
+// wherever one is used as text.
 export const CUSTOM_CHANNELS = {
   search: {
     label: 'Search Engines',
-    color: '#2474bb',
+    color: '#72bef4',
     sources: new Set(['Google', 'Bing', 'DuckDuckGo', 'Yahoo!', 'Ecosia', 'Google News',
                       'Yandex', 'Brave', 'Baidu']),
   },
   discover: {
     label: 'Google Discover',
-    color: '#e67e22',
+    color: '#ffb27a',
     sources: new Set(['Google Discover']),
   },
   dark_social: {
     label: 'Dark Social',
-    color: '#8e44ad',
+    color: '#7856ff',
     sources: new Set(['dark social']),
   },
   direct: {
     label: 'Direct / Bookmark',
-    color: '#27ae60',
+    color: '#3ca975',
     sources: new Set(['direct', 'bookmark']),
   },
   social: {
     label: 'Social Media',
-    color: '#e74c3c',
+    color: '#ff7558',
     sources: new Set(['Facebook', 'Reddit', 'Twitter', 'Instagram', 'LinkedIn',
                       'Bluesky', 'Threads', 'Pinterest', 'Nextdoor', 'nextdoor.com',
                       'later-linkinbio', 'linkin.bio', 'ig', 'com.reddit.frontpage',
@@ -43,13 +51,13 @@ export const CUSTOM_CHANNELS = {
   },
   email: {
     label: 'Email',
-    color: '#f39c12',
+    color: '#f9bd3c',
     sources: new Set(['hs_email', 'newsletter', 'omnisend', 'Gmail', 'WEBCTA',
                       'pushengage', 'hub.marfeel.com']),
   },
   ai: {
     label: 'AI Referral',
-    color: '#1abc9c',
+    color: '#5cb7af',
     sources: new Set(['ChatGPT', 'Claude', 'Perplexity', 'perplexity.ai']),
   },
   referral: {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
 import { NEED_META, NeedInfoIcon } from '../components/NeedBadge.jsx';
+import { readableInk } from '../constants/palette.js';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 import Spinner from '../components/Spinner.jsx';
 
@@ -82,7 +83,7 @@ export default function UserNeedsAnalysis() {
               const count = dataMap[n]?.article_count || 0;
               return (
                 <span key={n} style={{ display: 'inline-block', marginRight: 12 }}>
-                  <span style={{ color: meta.color }}>{meta.label}</span>
+                  <span style={{ color: readableInk(meta.color) }}>{meta.label}</span>
                   <span style={{ color: 'var(--text-muted)', fontSize: 11 }}> ({count} articles)</span>
                 </span>
               );
@@ -110,7 +111,7 @@ export default function UserNeedsAnalysis() {
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 15, fontFamily: 'var(--font-display)', color: meta.color }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 15, fontFamily: 'var(--font-display)', color: readableInk(meta.color) }}>
                       {meta.label}
                       <NeedInfoIcon need={need} color={meta.color} />
                     </div>
@@ -164,7 +165,7 @@ export default function UserNeedsAnalysis() {
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>Top Article</div>
                     <a href={d.top_article.url} target="_blank" rel="noopener noreferrer"
-                      style={{ fontSize: 12, color: meta.color, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      style={{ fontSize: 12, color: readableInk(meta.color), display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {d.top_article.title}
                     </a>
                     <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 2 }}>

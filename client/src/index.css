@@ -50,15 +50,16 @@
   --accent-gold-bg: #fff2f1;
 
   /* User need colors — see NeedBadge.jsx NEED_META (single source of truth
-     used across badges/charts/bars) */
-  --need-update: #c0392b;
-  --need-educate: #2474bb;
-  --need-perspective: #8e44ad;
-  --need-divert: #9a6f00;
-  --need-inspire: #0e7c8a;
-  --need-help: #1e7a3c;
-  --need-connect: #b5520a;
-  --need-engage: #a93226;
+     used across badges/charts/bars). Fill colors from the Mixpanel palette
+     (constants/palette.js); use readableInk() when a need color is text. */
+  --need-update: #ff7558;
+  --need-educate: #72bef4;
+  --need-perspective: #7856ff;
+  --need-divert: #f9bd3c;
+  --need-inspire: #0f7ea0;
+  --need-help: #3ca975;
+  --need-connect: #ffb27a;
+  --need-engage: #b3596d;
 
   --font-display: 'Founders Grotesk', 'IBM Plex Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
