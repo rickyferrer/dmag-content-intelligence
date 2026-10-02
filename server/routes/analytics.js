@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
-import { fetchUsersForRange, fetchLoyalUsersForRange, fetchInMarketUsersForRange } from '../sync/ga4.js';
+import { fetchUsersForRange, fetchLoyalUsersForRange, fetchInMarketUsersForRange, fetchWeeklyUsers } from '../sync/ga4.js';
 import { computeTrendRisk } from '../utils/gscTrend.js';
 import { pctChange, previousPeriodRange } from '../utils/period.js';
 import { CUSTOM_CHANNELS, customChannelFor } from '../utils/channels.js';
@@ -463,6 +463,178 @@ router.get('/trend', (req, res) => {
   `).all(parseInt(days));
 
   res.json(rows);
+});
+
+// ── Overview card trends ─────────────────────────────────────────────────────
+// GET /api/analytics/overview-trend?metric=<key>[&section=&type=&userNeed=]
+//
+// Weekly trend (Mon–Sun) for one of the Overview tab's top cards, over the
+// last 13 full weeks plus the current partial week. Weekly, not daily: it's
+// smooth enough to read at a glance, and it's the only grain at which the
+// distinct-count metrics (users / loyal / in-market) are exact — each week is
+// its own GA4 query, because summing daily unique-user counts would count a
+// reader once per day they showed up (see computeTrafficSummary's comment).
+//
+// Where each metric's history comes from:
+//   total_content ........ content.published_at (exact, full history)
+//   avg_true_value ....... analytics_snapshots, one row/article/day — only as
+//                          far back as snapshots exist (daily since ~Aug 22,
+//                          2026), so early weeks come back null
+//   total_users, loyal_users, inmarket_pct
+//                          live GA4, one weekly-unique query (cached 10 min)
+//   subscribe_clicks, ad_revenue, newsletter_signups
+//                          site_daily_metrics, summed per week
+//
+// Section/type/need filters apply only to the two content-based metrics —
+// site_daily_metrics and GA4 have no such breakdown. `filters_ignored` tells
+// the client when a filter was sent but couldn't be honored.
+//
+// A point's `value` is null when that week has no data (before history
+// starts), and `partial` is true for the in-progress current week.
+
+// Dates before which a metric has no site-wide history, even though the
+// site_daily_metrics row exists (it defaults to 0). Matches the Overview
+// card's own caption ("tracking began Jul 21, 2026").
+const NEWSLETTER_SITE_TRACKING_START = '2026-07-21';
+
+// A change in HOW a metric is computed, not in what readers did. Drawn as a
+// marker on the chart so a step like Avg Content Value's drop on Sep 25 isn't
+// read as a performance collapse.
+const OVERVIEW_TREND_BREAKS = {
+  avg_true_value: [{
+    date: '2026-09-25',
+    label: 'GA4 sync fix',
+    note: 'From Sep 25 the GA4 sync counts every article with traffic (it used to read only the busiest ~2,000) and adds up duplicate URL variants. That adds thousands of low-scoring articles to the average, so it dropped without reader behavior changing. Compare weeks on the same side of the line.',
+  }],
+};
+
+const OVERVIEW_TREND_METRICS = {
+  total_content:      { label: 'Total Content Items', unit: 'count',    about: 'Articles published per week.', filtersApply: true },
+  avg_true_value:     { label: 'Avg Content Value',   unit: 'score',    about: 'Average Content Value across scored articles, from each day’s snapshot (weekly average of the daily snapshots). Snapshots are only kept from late August, so earlier weeks are blank.', filtersApply: true },
+  total_users:        { label: 'Total Users',         unit: 'count',    about: 'Unique readers per week (Google Analytics). Someone who visits in several weeks counts once in each, so the weeks don’t add up to the card’s period total.', filtersApply: false },
+  loyal_users:        { label: 'Loyal Users',         unit: 'count',    about: 'Unique readers in GA4’s “3 or more sessions, last 30 days” audience who visited that week.', filtersApply: false },
+  inmarket_pct:       { label: 'In-Market %',         unit: 'percent',  about: 'Share of each week’s unique readers located in the DFW area, from GA4 geo data.', filtersApply: false },
+  subscribe_clicks:   { label: 'Subscribe Clicks',    unit: 'count',    about: 'Subscribe-click events per week (GA4), site-wide.', filtersApply: false },
+  newsletter_signups: { label: 'Newsletter Signups',  unit: 'count',    about: 'Newsletter signups per week (Marfeel), site-wide. Site-wide tracking began Jul 21, 2026, so earlier weeks are blank.', filtersApply: false },
+  ad_revenue:         { label: 'Ad Revenue',          unit: 'currency', about: 'Potential ad revenue per week — ad impressions × a flat assumed CPM, not real tracked revenue.', filtersApply: false },
+};
+
+const OVERVIEW_TREND_WEEKS = 13; // full weeks shown before the current partial one
+const DAY_MS = 24 * 60 * 60 * 1000;
+const isoDay = (d) => d.toISOString().slice(0, 10);
+const addDaysISO = (iso, n) => isoDay(new Date(new Date(iso + 'T00:00:00Z').getTime() + n * DAY_MS));
+const mondayOf = (iso) => {
+  const d = new Date(iso + 'T00:00:00Z');
+  return isoDay(new Date(d.getTime() - ((d.getUTCDay() + 6) % 7) * DAY_MS));
+};
+// '202640' (GA4 isoYearIsoWeek) → that ISO week's Monday. ISO week 1 is the
+// week containing Jan 4th.
+const isoWeekToMonday = (isoWeek) => {
+  const year = parseInt(isoWeek.slice(0, 4), 10), week = parseInt(isoWeek.slice(4), 10);
+  return addDaysISO(mondayOf(`${year}-01-04`), (week - 1) * 7);
+};
+
+// Weekly unique-user rows from GA4 are the slow part, and three cards share
+// them — cache so flipping between Total Users / Loyal / In-Market is instant.
+const weeklyUsersCache = new Map();
+async function cachedWeeklyUsers(from, to) {
+  const key = `${from}|${to}`;
+  const hit = weeklyUsersCache.get(key);
+  if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.rows;
+  const rows = await fetchWeeklyUsers(from, to);
+  weeklyUsersCache.set(key, { at: Date.now(), rows });
+  return rows;
+}
+
+router.get('/overview-trend', async (req, res) => {
+  try {
+    const db = getDb();
+    const { metric, section, type, userNeed } = req.query;
+    const def = OVERVIEW_TREND_METRICS[metric];
+    if (!def) return res.status(400).json({ error: `metric must be one of: ${Object.keys(OVERVIEW_TREND_METRICS).join(', ')}` });
+
+    // Week buckets: 13 full weeks + the current one (through today).
+    const today = isoDay(new Date());
+    const currentMonday = mondayOf(today);
+    const firstMonday = addDaysISO(currentMonday, -7 * OVERVIEW_TREND_WEEKS);
+    const weeks = [];
+    for (let start = firstMonday; start <= today; start = addDaysISO(start, 7)) {
+      const fullEnd = addDaysISO(start, 6);
+      const partial = fullEnd > today;
+      weeks.push({ week_start: start, week_end: partial ? today : fullEnd, partial, days_in_bucket: partial ? Math.round((new Date(today) - new Date(start)) / DAY_MS) + 1 : 7 });
+    }
+    const weekIndex = (iso) => weeks.findIndex(w => iso >= w.week_start && iso <= addDaysISO(w.week_start, 6));
+
+    const filtersSent = !!(section || type || userNeed);
+    const filtersApplied = def.filtersApply && filtersSent;
+    const values = weeks.map(() => ({ value: null, days_with_data: 0 }));
+
+    if (metric === 'total_content' || metric === 'avg_true_value') {
+      const where = [], params = [];
+      if (section)  { where.push('c.section = ?');   params.push(section); }
+      if (type)     { where.push('c.content_type = ?'); params.push(type); }
+      if (userNeed) { where.push('c.user_need = ?');  params.push(userNeed); }
+
+      if (metric === 'total_content') {
+        const rows = db.prepare(`
+          SELECT DATE(c.published_at) AS d, COUNT(*) AS n FROM content c
+          WHERE c.published_at >= ? AND c.published_at <= ? ${where.map(w => 'AND ' + w).join(' ')}
+          GROUP BY d
+        `).all(firstMonday, today + 'T23:59:59', ...params);
+        for (const r of rows) { const i = weekIndex(r.d); if (i >= 0) values[i].value = (values[i].value || 0) + r.n; }
+        // Publishing counts are exact for every day, so every week has data.
+        values.forEach((v, i) => { v.value = v.value || 0; v.days_with_data = weeks[i].days_in_bucket; });
+      } else {
+        const rows = db.prepare(`
+          SELECT DATE(a.snapshot_at) AS d, AVG(CASE WHEN a.true_value > 0 THEN a.true_value END) AS v
+          FROM analytics_snapshots a
+          ${where.length ? 'JOIN content c ON c.wp_id = a.wp_id' : ''}
+          WHERE a.snapshot_at >= ? ${where.map(w => 'AND ' + w).join(' ')}
+          GROUP BY d
+        `).all(firstMonday, ...params);
+        const acc = weeks.map(() => ({ sum: 0, n: 0 }));
+        for (const r of rows) { const i = weekIndex(r.d); if (i >= 0 && r.v != null) { acc[i].sum += r.v; acc[i].n++; } }
+        acc.forEach((a, i) => { if (a.n) { values[i].value = a.sum / a.n; values[i].days_with_data = a.n; } });
+      }
+    } else if (metric === 'total_users' || metric === 'loyal_users' || metric === 'inmarket_pct') {
+      const gaRows = await cachedWeeklyUsers(firstMonday, today);
+      for (const r of gaRows) {
+        const i = weekIndex(isoWeekToMonday(r.iso_week));
+        if (i < 0) continue;
+        values[i].value = metric === 'total_users' ? r.users
+          : metric === 'loyal_users' ? r.loyal_users
+          : (r.users > 0 ? (r.inmarket_users / r.users) * 100 : null);
+        values[i].days_with_data = weeks[i].days_in_bucket;
+      }
+    } else {
+      const col = { subscribe_clicks: 'subscribe_clicks', ad_revenue: 'ad_revenue', newsletter_signups: 'newsletter_signups' }[metric];
+      const startFloor = metric === 'newsletter_signups' ? NEWSLETTER_SITE_TRACKING_START : firstMonday;
+      const rows = db.prepare(`SELECT date, ${col} AS v FROM site_daily_metrics WHERE date >= ? AND date <= ?`)
+        .all(startFloor > firstMonday ? startFloor : firstMonday, today);
+      for (const r of rows) {
+        const i = weekIndex(r.date);
+        if (i < 0) continue;
+        values[i].value = (values[i].value || 0) + (r.v || 0);
+        values[i].days_with_data++;
+      }
+    }
+
+    const points = weeks.map((w, i) => ({ ...w, value: values[i].value, days_with_data: values[i].days_with_data }));
+    const firstWithData = points.find(p => p.value != null);
+    res.json({
+      metric, label: def.label, unit: def.unit, granularity: 'week', about: def.about,
+      scope: filtersApplied ? 'filtered' : 'site',
+      filters_ignored: filtersSent && !def.filtersApply,
+      range: { from: firstMonday, to: today },
+      points,
+      breaks: OVERVIEW_TREND_BREAKS[metric] || [],
+      first_data_week: firstWithData?.week_start || null,
+    });
+  } catch (err) {
+    // Same reasoning as /summary: GA4 failing shouldn't take the server down.
+    console.error('[Server] /api/analytics/overview-trend error:', err.message);
+    res.status(500).json({ error: 'Failed to load trend', message: err.message });
+  }
 });
 
 // GET /api/analytics/by-section

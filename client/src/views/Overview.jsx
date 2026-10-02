@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { api } from '../api/index.js';
 import KPICard from '../components/KPICard.jsx';
+import MetricTrendPanel from '../components/MetricTrendPanel.jsx';
 import ScatterPlot from '../components/ScatterPlot.jsx';
 import { NEED_META } from '../components/NeedBadge.jsx';
 import { readableInk } from '../constants/palette.js';
@@ -40,6 +41,7 @@ export default function Overview() {
   const [byNeed, setByNeed] = useState([]);
   const [scatter, setScatter] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [trendMetric, setTrendMetric] = useState(null); // which card's trend panel is open
   const [types, setTypes] = useState([]);
   const [sections, setSections] = useState([]);
   const [filters, setFilters] = useState({ from: initFrom, to: initTo, section: '', type: '', userNeed: '', preset: DEFAULT_PRESET });
@@ -142,11 +144,13 @@ export default function Overview() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gap: 16 }}>
         <KPICard
           label="Total Content Items"
+          onClick={() => setTrendMetric('total_content')}
           value={fmt(summary?.total_content)}
           sub="WordPress-synced content, current filters"
         />
         <KPICard
           label="Avg Content Value"
+          onClick={() => setTrendMetric('avg_true_value')}
           value={summary?.avg_true_value != null ? Math.round(summary.avg_true_value).toString() : '—'}
           gold
           change={summary?.changes?.avg_true_value}
@@ -154,36 +158,42 @@ export default function Overview() {
         />
         <KPICard
           label="Total Users"
+          onClick={() => setTrendMetric('total_users')}
           value={fmt(summary?.total_users)}
           change={summary?.changes?.total_users}
           sub="Live Google Analytics (GA4) query"
         />
         <KPICard
           label="Loyal Users"
+          onClick={() => setTrendMetric('loyal_users')}
           value={fmt(summary?.total_loyal_users)}
           change={summary?.changes?.total_loyal_users}
           sub="GA4's '3 or more sessions, last 30 days' audience"
         />
         <KPICard
           label="In-Market %"
+          onClick={() => setTrendMetric('inmarket_pct')}
           value={summary?.inmarket_pct != null ? summary.inmarket_pct.toFixed(1) + '%' : '—'}
           change={summary?.changes?.inmarket_pct}
           sub="Share of readers in the DFW area, from GA4 geo data"
         />
         <KPICard
           label="Subscribe Clicks"
+          onClick={() => setTrendMetric('subscribe_clicks')}
           value={fmt(summary?.total_subscribe_clicks)}
           change={summary?.changes?.total_subscribe_clicks}
           sub="GA4 'subscribe_click' events, backfill + live"
         />
         <KPICard
           label="Newsletter Signups"
+          onClick={() => setTrendMetric('newsletter_signups')}
           value={fmt(summary?.total_newsletter_signups)}
           change={summary?.changes?.total_newsletter_signups}
           sub="Marfeel events — tracking began Jul 21, 2026"
         />
         <KPICard
           label="Ad Revenue (30d)"
+          onClick={() => setTrendMetric('ad_revenue')}
           value={summary?.total_ad_revenue != null ? '$' + summary.total_ad_revenue.toFixed(0) : '—'}
           change={summary?.changes?.total_ad_revenue}
           sub="Potential value — ad impressions × $10 CPM, not real revenue"
@@ -224,6 +234,14 @@ export default function Overview() {
           <ScatterPlot data={scatter} />
         </div>
       </div>
+
+      {trendMetric && (
+        <MetricTrendPanel
+          metric={trendMetric}
+          filters={{ section: filters.section, type: filters.type, userNeed: filters.userNeed }}
+          onClose={() => setTrendMetric(null)}
+        />
+      )}
     </div>
   );
 }

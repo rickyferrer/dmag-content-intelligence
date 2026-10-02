@@ -64,6 +64,7 @@ export const api = {
   getChannels: (params = {}) => apiFetch('/analytics/channels?' + new URLSearchParams(params)),
   getScatter: (params = {}) => apiFetch('/analytics/scatter?' + new URLSearchParams(params)),
   getTrend: (days = 30) => apiFetch(`/analytics/trend?days=${days}`),
+  getOverviewTrend: (metric, params = {}) => apiFetch('/analytics/overview-trend?' + new URLSearchParams({ metric, ...params })),
 
   // Sync
   getSyncStatus: () => apiFetch('/sync/status'),

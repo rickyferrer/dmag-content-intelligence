@@ -414,6 +414,55 @@ export async function fetchInMarketUsersForRange(dateFrom, dateTo) {
   return total;
 }
 
+// Weekly UNIQUE readers (total, loyal, DFW) for a date range — one GA4 query
+// per metric with GA4's ISO-week dimension, so each week's figure is a true
+// distinct count for that week. Summing daily figures instead would count a
+// reader once per day they showed up (see the comment above
+// fetchUsersForRange), which is why the Overview trend can't just read
+// these off site_daily_metrics. Used by the Overview card trend panels
+// (routes/analytics.js's /overview-trend).
+//
+// Returns [{ iso_week: '202640', users, loyal_users, inmarket_users }] sorted
+// by week. The first/last week are partial if the range doesn't start on a
+// Monday / end on a Sunday — GA4 counts only the days inside the range.
+// loyal and in-market are capped at that week's total, same rationale as
+// every other place these are computed.
+export async function fetchWeeklyUsers(dateFrom, dateTo) {
+  const dateRanges = [{ startDate: dateFrom, endDate: dateTo }];
+  const week = { name: 'isoYearIsoWeek' };
+
+  const [totalRows, loyalRows, geoRows] = await Promise.all([
+    ga4Paged({ dateRanges, dimensions: [week], metrics: [{ name: 'activeUsers' }] }),
+    ga4Paged({
+      dateRanges, dimensions: [week, { name: 'audienceName' }], metrics: [{ name: 'activeUsers' }],
+      dimensionFilter: { filter: { fieldName: 'audienceName', stringFilter: { matchType: 'EXACT', value: '3 or more sessions, last 30 days' } } },
+    }),
+    ga4Paged({
+      dateRanges, dimensions: [week, { name: 'city' }], metrics: [{ name: 'activeUsers' }],
+      dimensionFilter: { orGroup: { expressions: DFW_CITIES.map(c => ({
+        filter: { fieldName: 'city', stringFilter: { matchType: 'CONTAINS', value: c } },
+      })) } },
+    }),
+  ]);
+
+  const byWeek = new Map();
+  const slot = (w) => {
+    if (!byWeek.has(w)) byWeek.set(w, { iso_week: w, users: 0, loyal_users: 0, inmarket_users: 0 });
+    return byWeek.get(w);
+  };
+  for (const r of totalRows) slot(r.isoYearIsoWeek).users += Math.round(r.activeUsers || 0);
+  for (const r of loyalRows) slot(r.isoYearIsoWeek).loyal_users += Math.round(r.activeUsers || 0);
+  for (const r of geoRows) if (isDFW(r.city)) slot(r.isoYearIsoWeek).inmarket_users += Math.round(r.activeUsers || 0);
+
+  return [...byWeek.values()]
+    .map(w => ({
+      ...w,
+      loyal_users: Math.min(w.loyal_users, w.users),
+      inmarket_users: Math.min(w.inmarket_users, w.users),
+    }))
+    .sort((a, b) => a.iso_week.localeCompare(b.iso_week));
+}
+
 // One-off historical backfill of per-article subscribe_click events, keyed
 // by page + day. Unlike Marfeel's newsletter-signup endpoint (no lookback
 // at all, see marfeel.js), GA4's Data API supports arbitrary historical date
