@@ -189,7 +189,7 @@ export default function Overview() {
           onClick={() => setTrendMetric('newsletter_signups')}
           value={fmt(summary?.total_newsletter_signups)}
           change={summary?.changes?.total_newsletter_signups}
-          sub="Marfeel events — tracking began Jul 21, 2026"
+          sub="Marfeel events — tracking began Jul 20, 2026"
         />
         <KPICard
           label="Ad Revenue (30d)"

@@ -60,9 +60,9 @@ function computeContentSummary(db, dateFrom, dateTo, section, type, userNeed, as
     JOIN (${latestSubquery}) lx ON c.wp_id = lx.wp_id
     JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
     LEFT JOIN (
-      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
-      FROM historical_newsletter_signups
-      WHERE week_start < ?
+      SELECT wp_id, SUM(signups) AS hist_newsletter_signups
+      FROM newsletter_history_all
+      WHERE period_start < ?
       GROUP BY wp_id
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
@@ -182,9 +182,9 @@ function fetchGroupedAggregates(db, groupCol, groupAlias, whereSql, params, asOf
     ) lx ON c.wp_id = lx.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
     LEFT JOIN (
-      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
-      FROM historical_newsletter_signups
-      WHERE week_start < ?
+      SELECT wp_id, SUM(signups) AS hist_newsletter_signups
+      FROM newsletter_history_all
+      WHERE period_start < ?
       GROUP BY wp_id
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
@@ -371,9 +371,9 @@ router.get('/by-need', (req, res) => {
     ) lx ON c.wp_id = lx.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
     LEFT JOIN (
-      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
-      FROM historical_newsletter_signups
-      WHERE week_start < date('now', '-30 days')
+      SELECT wp_id, SUM(signups) AS hist_newsletter_signups
+      FROM newsletter_history_all
+      WHERE period_start < date('now', '-30 days')
       GROUP BY wp_id
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
@@ -494,8 +494,10 @@ router.get('/trend', (req, res) => {
 
 // Dates before which a metric has no site-wide history, even though the
 // site_daily_metrics row exists (it defaults to 0). Matches the Overview
-// card's own caption ("tracking began Jul 21, 2026").
-const NEWSLETTER_SITE_TRACKING_START = '2026-07-21';
+// card's own caption ("tracking began Jul 20, 2026"). It was Jul 21 until
+// the daily series was corrected for being labeled one day late (see db.js):
+// the first capture ran Jul 21 but recorded Jul 20.
+const NEWSLETTER_SITE_TRACKING_START = '2026-07-20';
 
 // A change in HOW a metric is computed, not in what readers did, drawn as a
 // marker on the chart (and the panel stops showing a week-over-week % across
@@ -514,7 +516,7 @@ const OVERVIEW_TREND_METRICS = {
   loyal_users:        { label: 'Loyal Users',         unit: 'count',    about: 'Unique readers in GA4’s “3 or more sessions, last 30 days” audience who visited that week.', filtersApply: false },
   inmarket_pct:       { label: 'In-Market %',         unit: 'percent',  about: 'Share of each week’s unique readers located in the DFW area, from GA4 geo data.', filtersApply: false },
   subscribe_clicks:   { label: 'Subscribe Clicks',    unit: 'count',    about: 'Subscribe-click events per week (GA4), site-wide.', filtersApply: false },
-  newsletter_signups: { label: 'Newsletter Signups',  unit: 'count',    about: 'Newsletter signups per week (Marfeel), site-wide. Site-wide tracking began Jul 21, 2026, so earlier weeks are blank.', filtersApply: false },
+  newsletter_signups: { label: 'Newsletter Signups',  unit: 'count',    about: 'Newsletter signups per week (Marfeel), site-wide. Site-wide tracking began Jul 20, 2026, so earlier weeks are blank.', filtersApply: false },
   ad_revenue:         { label: 'Ad Revenue',          unit: 'currency', about: 'Potential ad revenue per week — ad impressions × a flat assumed CPM, not real tracked revenue.', filtersApply: false },
 };
 
@@ -826,9 +828,9 @@ router.get('/by-issue', (req, res) => {
     ) lx ON c.wp_id = lx.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
     LEFT JOIN (
-      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
-      FROM historical_newsletter_signups
-      WHERE week_start < date('now', '-30 days')
+      SELECT wp_id, SUM(signups) AS hist_newsletter_signups
+      FROM newsletter_history_all
+      WHERE period_start < date('now', '-30 days')
       GROUP BY wp_id
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
@@ -1052,9 +1054,9 @@ function fetchSourceRows(db, { dateFrom, dateTo, type, asOf } = {}) {
       -- as the live number above, so old content's newsletter signups don't
       -- vanish from a source's total just because they aged out of the
       -- rolling 30-day window.
-      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
-      FROM historical_newsletter_signups
-      WHERE week_start < ?
+      SELECT wp_id, SUM(signups) AS hist_newsletter_signups
+      FROM newsletter_history_all
+      WHERE period_start < ?
       GROUP BY wp_id
     ) h ON h.wp_id = cs.wp_id
     WHERE ${where.join(' AND ')}
@@ -1614,9 +1616,9 @@ router.get('/vulnerability', (req, res) => {
     ) lx ON c.wp_id = lx.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
     LEFT JOIN (
-      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
-      FROM historical_newsletter_signups
-      WHERE week_start < date('now', '-30 days')
+      SELECT wp_id, SUM(signups) AS hist_newsletter_signups
+      FROM newsletter_history_all
+      WHERE period_start < date('now', '-30 days')
       GROUP BY wp_id
     ) h ON h.wp_id = c.wp_id
     WHERE ${where.join(' AND ')}

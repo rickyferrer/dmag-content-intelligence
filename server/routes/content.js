@@ -149,9 +149,9 @@ router.get('/', (req, res) => {
       -- Only weeks older than the live rolling-30-day window, so this can't
       -- double-count against a.mf_newsletter_signups (which already covers
       -- roughly the last 30 days as of the last sync).
-      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
-      FROM historical_newsletter_signups
-      WHERE week_start < date('now', '-30 days')
+      SELECT wp_id, SUM(signups) AS hist_newsletter_signups
+      FROM newsletter_history_all
+      WHERE period_start < date('now', '-30 days')
       GROUP BY wp_id
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
@@ -352,9 +352,9 @@ router.get('/:id', (req, res) => {
     ) latest_snap ON c.wp_id = latest_snap.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = latest_snap.wp_id AND a.snapshot_at = latest_snap.latest
     LEFT JOIN (
-      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
-      FROM historical_newsletter_signups
-      WHERE week_start < date('now', '-30 days')
+      SELECT wp_id, SUM(signups) AS hist_newsletter_signups
+      FROM newsletter_history_all
+      WHERE period_start < date('now', '-30 days')
       GROUP BY wp_id
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
@@ -413,14 +413,15 @@ router.get('/:id', (req, res) => {
     'SELECT voice, confidence FROM content_voices WHERE wp_id = ? ORDER BY confidence DESC'
   ).all(wpId);
 
-  // One-time historical import (see import-historical-newsletter-signups.mjs)
-  // — weekly, not the rolling-30-day mf_newsletter_signups value above, so
-  // kept as its own field rather than merged into `history`.
+  // Everything stored about past signups (the CSV imports and the daily
+  // capture — see newsletter_history_all in db.js), bucketed by week
+  // (Monday), rather than the rolling-30-day mf_newsletter_signups value
+  // above, so it's kept as its own field instead of merged into `history`.
   const newsletterHistory = db.prepare(`
-    SELECT week_start, newsletter_signup, newsletter_signup_inline, unique_users,
-      (newsletter_signup + newsletter_signup_inline) AS total
-    FROM historical_newsletter_signups
+    SELECT date(period_start, '-6 days', 'weekday 1') AS week_start, SUM(signups) AS total
+    FROM newsletter_history_all
     WHERE wp_id = ?
+    GROUP BY week_start
     ORDER BY week_start ASC
   `).all(wpId);
 

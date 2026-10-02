@@ -419,6 +419,81 @@ function initSchema() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_insight_conv_user ON insight_conversations(user_id)');
 
+  // ── Newsletter signup history ──────────────────────────────────────────────
+  // Marfeel's third newsletter goal (newsletter_signup_modal) — the weekly
+  // CSV-import table only had columns for the first two.
+  try { db.exec('ALTER TABLE historical_newsletter_signups ADD COLUMN newsletter_signup_modal INTEGER DEFAULT 0'); } catch {}
+
+  // Per-article DAILY newsletter signups, captured by the daily sync (see
+  // sync/newsletterDaily.js) and by the CSV importer's daily mode. Exists
+  // because Marfeel's live API only ever reports a rolling 30-day total, so a
+  // signup that isn't captured the day it falls out of that window is gone
+  // for good. (The weekly table above was a one-time export that stopped at
+  // Jul 27, which left a hole between it and the live window.) No FK to
+  // content on purpose — the old-content cleanup deletes content rows.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS newsletter_signups_daily (
+      wp_id                    INTEGER NOT NULL,
+      date                     TEXT NOT NULL,
+      newsletter_signup        INTEGER DEFAULT 0,
+      newsletter_signup_inline INTEGER DEFAULT 0,
+      newsletter_signup_modal  INTEGER DEFAULT 0,
+      PRIMARY KEY (wp_id, date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_newsletter_daily_date ON newsletter_signups_daily(date);
+  `);
+
+  // Everything stored about past newsletter signups, weekly and daily rows
+  // together, as one (wp_id, period_start, signups) shape — what every
+  // "history + live" total reads, so adding a goal or a source of history is a
+  // change here instead of nine copies of the same SQL. period_start is a
+  // week's Monday for the weekly rows and the day itself for the daily ones;
+  // callers filter `period_start < <30 days ago>` so nothing double-counts
+  // against the live rolling window. The two tables never cover the same days:
+  // the importer skips daily rows already inside a stored week. Dropped and
+  // recreated every start so a definition change always takes effect.
+  db.exec('DROP VIEW IF EXISTS newsletter_history_all');
+  db.exec(`
+    CREATE VIEW newsletter_history_all AS
+      SELECT wp_id, week_start AS period_start,
+             COALESCE(newsletter_signup, 0) + COALESCE(newsletter_signup_inline, 0) + COALESCE(newsletter_signup_modal, 0) AS signups
+        FROM historical_newsletter_signups
+      UNION ALL
+      SELECT wp_id, date AS period_start,
+             COALESCE(newsletter_signup, 0) + COALESCE(newsletter_signup_inline, 0) + COALESCE(newsletter_signup_modal, 0) AS signups
+        FROM newsletter_signups_daily
+  `);
+
+  // One-time fix: site_daily_metrics.newsletter_signups has been labeled one
+  // day late since it began. Marfeel's "last 1 day" is YESTERDAY's complete
+  // total (verified: the value stored at 6 am equals what Marfeel reports at
+  // 2 pm for the same call, and nested windows slice into exact calendar days
+  // matching a per-day export), but it was filed under the day the sync ran.
+  // Moving every value back a day makes row D hold what happened on D; the
+  // latest row becomes 0 until the next sync fills it. Guarded by a flag so it
+  // can only ever run once; the capture in scheduler.js now files under
+  // yesterday, so the two changes ship together.
+  if (!db.prepare("SELECT 1 FROM sync_state WHERE key = 'newsletter_daily_shift_v1'").get()) {
+    const nonzero = db.prepare('SELECT date, newsletter_signups AS n FROM site_daily_metrics WHERE newsletter_signups > 0').all();
+    const dayBefore = (iso) => new Date(new Date(iso + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
+    const clear = db.prepare('UPDATE site_daily_metrics SET newsletter_signups = 0 WHERE date = ?');
+    // Upsert, not UPDATE: the day before the very first stored value may have
+    // no row yet. Only the newsletter column is touched on conflict.
+    const refile = db.prepare(`
+      INSERT INTO site_daily_metrics (date, newsletter_signups, updated_at) VALUES (?, ?, datetime('now'))
+      ON CONFLICT(date) DO UPDATE SET newsletter_signups = excluded.newsletter_signups
+    `);
+    db.transaction(() => {
+      // Clear every day first, then re-file — a day's new home can be another
+      // day's old one, so doing both in one pass would overwrite itself.
+      for (const r of nonzero) clear.run(r.date);
+      for (const r of nonzero) refile.run(dayBefore(r.date), r.n);
+      db.prepare("INSERT OR REPLACE INTO sync_state (key, value, updated_at) VALUES ('newsletter_daily_shift_v1', ?, datetime('now'))")
+        .run(`moved ${nonzero.length} nonzero days back one day`);
+    })();
+    if (nonzero.length) console.log(`[DB] Moved ${nonzero.length} site-wide newsletter daily values back one day (they were labeled a day late)`);
+  }
+
   // One-time split of the old combined "loyal in-market" weight into two
   // independent weights (score_w_loyal, score_w_inmarket) — see
   // utils/trueValue.js. Runs exactly once per install: if score_w_inmarket

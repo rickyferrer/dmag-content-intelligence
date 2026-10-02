@@ -1,4 +1,5 @@
 import { getSyncState, setSyncState } from '../db.js';
+import { NEWSLETTER_GOAL_COLUMNS, isProductionUrl } from './newsletterDaily.js';
 
 const API_BASE = process.env.MARFEEL_API_BASE || 'https://api.newsroom.bi/api';
 const AUTH_ENDPOINT = process.env.MARFEEL_AUTH_ENDPOINT || 'https://api.newsroom.bi/api/user/signin';
@@ -168,7 +169,7 @@ function parseGroupedResponse(response, label) {
 // D Magazine has three newsletter signup goals — the original form, an inline
 // variant, and a modal — so this is called once per goal and the counts are
 // summed per URL.
-async function fetchNewsletterSignupsForGoal(token, goalMetric) {
+async function fetchNewsletterSignupsForGoal(token, goalMetric, days = 30) {
   const results = new Map(); // normalised url → signup count
   const limit = 500;
   let from = 0;
@@ -191,7 +192,7 @@ async function fetchNewsletterSignupsForGoal(token, goalMetric) {
           limit,
           from,
           article: null,
-          dates: { last: { number: 30, dimension: 'day' } },
+          dates: { last: { number: days, dimension: 'day' } },
           plotBy: 'medium',
           metrics: [goalMetric],
           model: 'posts',
@@ -244,60 +245,34 @@ async function fetchNewsletterSignupsForGoal(token, goalMetric) {
 // import, which has columns only for the first two).
 const NEWSLETTER_GOALS = ['goal::newsletter_signup', 'goal::newsletter_signup_inline', 'goal::newsletter_signup_modal'];
 
-// Site-wide newsletter signups for "the last 1 day" (i.e. today so far),
-// summed across every article rather than kept per-URL. Unlike GA4, Marfeel's
-// /traffic/realtime endpoint has no absolute date range — every query is
-// relative to "now" (confirmed: an `offset` field is silently ignored,
-// verified by comparing offset=0 vs offset=60 and getting identical results).
-// So there's no way to backfill history here — this can only capture today's
-// total once per day, going forward, the same way analytics_snapshots
-// originally had to accumulate one day at a time before the GA4 daily-totals
-// backfill existed.
-async function fetchSiteWideNewsletterSignupsToday(token) {
+// Yesterday's COMPLETE newsletter signups, per page and site-wide, from one
+// "last 1 day" call per goal. Marfeel's "last N days" means the last N
+// complete calendar days ending yesterday — never today (see
+// sync/newsletterDaily.js for how that was verified) — so this is a finished
+// day, not "today so far". Marfeel's realtime endpoint has no absolute date
+// range (an `offset` is silently ignored), so history can't be fetched after
+// the fact; this is what saves each day as it completes, before it ages out of
+// the rolling 30-day window the per-article numbers use.
+//
+// Returns { total, byUrl: Map<normalizedUrl, { newsletter_signup, ...inline, ...modal }> }.
+// `total` leaves out non-production hosts (a local dev site reports test
+// signups). Throws if any goal fails, so a partial day is never recorded as a
+// whole one.
+async function fetchNewsletterYesterday(token) {
+  const byUrl = new Map();
   let total = 0;
-  for (const goal of NEWSLETTER_GOALS) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-    let res;
-    try {
-      res = await fetch(`${API_BASE}/traffic/realtime`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        signal: controller.signal,
-        body: JSON.stringify({
-          filters: [],
-          limit: 500,
-          from: 0,
-          article: null,
-          dates: { last: { number: 1, dimension: 'day' } },
-          plotBy: 'medium',
-          metrics: [goal],
-          model: 'posts',
-          tagValue: null,
-          version: 2,
-        }),
-      });
-    } catch (err) {
-      const cause = err.cause ? ` (cause: ${err.cause?.code || err.cause?.message || err.cause})` : '';
-      throw new Error(`Marfeel realtime fetch failed: ${err.message}${cause}`);
-    } finally {
-      clearTimeout(timeout);
+  for (let i = 0; i < NEWSLETTER_GOALS.length; i++) {
+    const goal = NEWSLETTER_GOALS[i];
+    const column = NEWSLETTER_GOAL_COLUMNS[goal];
+    const perGoal = await fetchNewsletterSignupsForGoal(token, goal, 1);
+    for (const [url, count] of perGoal) {
+      if (!byUrl.has(url)) byUrl.set(url, {});
+      byUrl.get(url)[column] = (byUrl.get(url)[column] || 0) + count;
+      if (isProductionUrl(url)) total += count;
     }
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Marfeel realtime failed: ${res.status} — ${text.slice(0, 200)}`);
-    }
-
-    const text = await res.text();
-    if (text && text.trim()) {
-      const data = JSON.parse(text);
-      const items = data.main || data.articles || data.data || [];
-      total += items.reduce((sum, item) => sum + (item.users || 0), 0);
-    }
-    await sleep(RATE_LIMIT_DELAY);
+    if (i < NEWSLETTER_GOALS.length - 1) await sleep(RATE_LIMIT_DELAY);
   }
-  return total;
+  return { total, byUrl };
 }
 
 async function fetchNewsletterSignups(token) {
@@ -673,18 +648,19 @@ export async function syncMarfeel() {
     console.warn('[Marfeel] Daily source fetch failed:', err.message);
   }
 
-  // Site-wide newsletter signups for today — separate from the per-article
-  // numbers above; see fetchSiteWideNewsletterSignupsToday for why this can
-  // only ever capture "today", not a backfilled history.
-  let siteWideNewsletterSignupsToday = null;
+  // Yesterday's finished newsletter signups, site-wide and per page — saved
+  // daily so they outlive Marfeel's rolling 30-day window; see
+  // fetchNewsletterYesterday and sync/newsletterDaily.js.
+  let newsletterYesterday = null;
   try {
-    console.log('[Marfeel] Fetching site-wide newsletter signups for today...');
-    siteWideNewsletterSignupsToday = await fetchSiteWideNewsletterSignupsToday(token);
-    console.log(`[Marfeel] Site-wide newsletter signups today: ${siteWideNewsletterSignupsToday}`);
+    await sleep(RATE_LIMIT_DELAY);
+    console.log('[Marfeel] Fetching yesterday\'s newsletter signups (per page + site-wide)...');
+    newsletterYesterday = await fetchNewsletterYesterday(token);
+    console.log(`[Marfeel] Yesterday's newsletter signups: ${newsletterYesterday.total} site-wide across ${newsletterYesterday.byUrl.size} pages`);
   } catch (err) {
-    console.warn('[Marfeel] Site-wide newsletter signup fetch failed:', err.message);
+    console.warn('[Marfeel] Yesterday newsletter signup fetch failed:', err.message);
   }
 
   console.log(`[Marfeel] Sync complete: ${allMetrics.size} URLs`);
-  return { metrics: allMetrics, sourcesByUrl, sourceDaily, siteWideNewsletterSignupsToday };
+  return { metrics: allMetrics, sourcesByUrl, sourceDaily, newsletterYesterday };
 }

@@ -115,6 +115,16 @@ CLOUDFLARE_API_TOKEN=...
 MARFEEL_EMAIL=...
 MARFEEL_PASSWORD=...
 
+# Marfeel newsletter signups — importing an export. Marfeel's API only reports a
+# rolling 30 days, so older history comes from a CSV exported in Marfeel's
+# dashboard (one row per page per day or week; columns: url, date, and any of
+# newsletter_signup, newsletter_signup_inline, newsletter_signup_modal). Run it
+# where the database lives; --dry-run previews without writing; re-running is safe:
+#   node --env-file=.env server/scripts/import-historical-newsletter-signups.mjs report.csv --dry-run
+#   node --env-file=.env server/scripts/import-historical-newsletter-signups.mjs report.csv
+# The daily sync saves each completed day on its own from Oct 2, 2026 onward, so
+# an export is only needed to cover days before that (see server/sync/newsletterDaily.js).
+
 # Anthropic (User Needs classification)
 ANTHROPIC_API_KEY=...
 ```

@@ -10,6 +10,7 @@ import { getDb, setSyncState, getSettings } from '../db.js';
 import { getScoreParams, valueToScore, shapeForLifetime } from '../utils/trueValue.js';
 import { runBenchmarkCheck } from '../utils/benchmarkCheck.js';
 import { syncGA4Sources, syncGA4DailyTotals, syncGA4ByDevice } from './ga4.js';
+import { recordNewsletterYesterday } from './newsletterDaily.js';
 import { syncGSC, syncGSCTrend } from './gsc.js';
 
 let syncRunning = false;
@@ -51,9 +52,9 @@ export function scoreContent(db) {
     ) lx ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
     JOIN content c ON c.wp_id = a.wp_id
     LEFT JOIN (
-      SELECT wp_id, SUM(newsletter_signup + newsletter_signup_inline) AS hist_newsletter_signups
-      FROM historical_newsletter_signups
-      WHERE week_start < date('now', '-30 days')
+      SELECT wp_id, SUM(signups) AS hist_newsletter_signups
+      FROM newsletter_history_all
+      WHERE period_start < date('now', '-30 days')
       GROUP BY wp_id
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
@@ -188,13 +189,13 @@ export async function runAnalyticsSync() {
       setSyncState('last_ga4_sync_error', err.message);
     }
 
-    let siteWideNewsletterSignupsToday = null;
+    let newsletterYesterday = null;
     try {
       const mfResult = await syncMarfeel();
       marfeelMetrics = mfResult.metrics || mfResult; // backward-compat if shape changes
       marfeelSources = mfResult.sourcesByUrl || new Map();
       marfeelSourceDaily = mfResult.sourceDaily || null;
-      siteWideNewsletterSignupsToday = mfResult.siteWideNewsletterSignupsToday;
+      newsletterYesterday = mfResult.newsletterYesterday || null;
       setSyncState('last_marfeel_sync', snapshotAt);
     } catch (err) {
       console.error('[Scheduler] Marfeel sync error:', err.message);
@@ -438,23 +439,22 @@ export async function runAnalyticsSync() {
       console.error('[Scheduler] Site daily metrics error:', err.message);
     }
 
-    // ── Marfeel site-wide newsletter signups — today only ─────────────────────
-    // Unlike GA4, Marfeel's API has no absolute date range (confirmed: an
-    // `offset` param is silently ignored), so there's no way to backfill past
-    // days here — this can only ever capture "today," accumulating one day at
-    // a time from here forward. Uses UPDATE-only semantics (via the ON CONFLICT
-    // clause below only touching this one column) so it never clobbers the
-    // GA4-sourced fields on today's row, regardless of which sync ran first.
-    if (siteWideNewsletterSignupsToday != null) {
-      const today = new Date().toISOString().slice(0, 10);
-      db.prepare(`
-        INSERT INTO site_daily_metrics (date, newsletter_signups, updated_at)
-        VALUES (?, ?, datetime('now'))
-        ON CONFLICT(date) DO UPDATE SET
-          newsletter_signups = excluded.newsletter_signups,
-          updated_at = datetime('now')
-      `).run(today, siteWideNewsletterSignupsToday);
-      console.log(`[Scheduler] Site-wide newsletter signups for ${today}: ${siteWideNewsletterSignupsToday}`);
+    // ── Marfeel newsletter signups — yesterday, site-wide and per page ───────
+    // Marfeel's API has no absolute date range (an `offset` is silently
+    // ignored) and its per-article number is a rolling 30-day total, so a
+    // day's signups are lost unless saved as the day completes. "Last 1 day"
+    // is YESTERDAY'S finished total (never today so far), so that's what gets
+    // recorded, under yesterday's date — see sync/newsletterDaily.js. The
+    // site-wide row's ON CONFLICT only touches the newsletter column, so it
+    // never clobbers the GA4-sourced fields on that date.
+    // Its own try/catch so a failure here never costs the rest of the sync.
+    if (newsletterYesterday) {
+      try {
+        const saved = recordNewsletterYesterday(db, newsletterYesterday, content);
+        console.log(`[Scheduler] Newsletter signups for ${saved.date}: ${saved.site_total} site-wide, ${saved.articles} articles saved (${saved.unmatched} URLs matched no article)`);
+      } catch (err) {
+        console.error('[Scheduler] Saving yesterday\'s newsletter signups failed:', err.message);
+      }
     }
 
     // ── Search Console — real per-page, per-query search performance ─────────

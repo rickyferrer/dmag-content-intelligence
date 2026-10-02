@@ -13,10 +13,14 @@
 export const SUBSCRIBE_CLICKS_NOTE =
   'Live clicks from the last ~30 days, plus historical clicks backfilled from GA4 back to June 30, 2025.';
 
-// Newsletter Signups (per-article, NOT the Overview site-wide card): a
-// one-time Marfeel CSV export backfilled April 6 – July 27, 2026 (Marfeel's
-// live API can't look back in time at all, so this window is fixed unless a
-// new export is imported), continued from July 27 forward by the live
-// rolling ~30-day number.
+// Newsletter Signups (per-article, NOT the Overview site-wide card): the live
+// number is Marfeel's rolling ~30 days (its API can't look back further).
+// History before that is saved two ways: a one-time Marfeel CSV export
+// covering April 6 – August 2, 2026 (weekly), and, from October 2, 2026, the
+// daily sync saves each day as it completes (see sync/newsletterDaily.js). The
+// days in between — August 3 to October 1 — are only included once a Marfeel
+// export covering them has been imported with
+// server/scripts/import-historical-newsletter-signups.mjs; delete that
+// sentence from the note below when it has been.
 export const NEWSLETTER_NOTE =
-  'Live signups from the last ~30 days, plus historical signups backfilled from a one-time Marfeel export (April 6 – July 27, 2026).';
+  'Live signups from the last ~30 days, plus saved history: a Marfeel export (April 6 – Aug 2, 2026) and, from Oct 2, 2026, each day saved as it completes. Aug 3 – Oct 1 is only included once a Marfeel export covering it has been imported.';
