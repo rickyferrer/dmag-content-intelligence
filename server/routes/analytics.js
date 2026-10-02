@@ -497,16 +497,15 @@ router.get('/trend', (req, res) => {
 // card's own caption ("tracking began Jul 21, 2026").
 const NEWSLETTER_SITE_TRACKING_START = '2026-07-21';
 
-// A change in HOW a metric is computed, not in what readers did. Drawn as a
-// marker on the chart so a step like Avg Content Value's drop on Sep 25 isn't
-// read as a performance collapse.
-const OVERVIEW_TREND_BREAKS = {
-  avg_true_value: [{
-    date: '2026-09-25',
-    label: 'GA4 sync fix',
-    note: 'From Sep 25 the GA4 sync counts every article with traffic (it used to read only the busiest ~2,000) and adds up duplicate URL variants. That adds thousands of low-scoring articles to the average, so it dropped without reader behavior changing. Compare weeks on the same side of the line.',
-  }],
-};
+// A change in HOW a metric is computed, not in what readers did, drawn as a
+// marker on the chart (and the panel stops showing a week-over-week % across
+// it). Empty on purpose right now: the Sep 25 GA4 sync fix steps down the
+// all-articles average sharply, but Avg Content Value here is the card's
+// recently-published cohort, which that fix barely touches (21.1 -> 21.2
+// across it in production), so a marker there would claim a drop that isn't
+// there. Add an entry, keyed by metric, when a real discontinuity shows up:
+//   { date: 'YYYY-MM-DD', label: 'short name', note: 'why the numbers jump' }
+const OVERVIEW_TREND_BREAKS = {};
 
 const OVERVIEW_TREND_METRICS = {
   total_content:      { label: 'Total Content Items', unit: 'count',    about: 'Articles published per week.', filtersApply: true },
