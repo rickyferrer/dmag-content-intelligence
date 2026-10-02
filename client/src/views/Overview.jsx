@@ -238,7 +238,14 @@ export default function Overview() {
       {trendMetric && (
         <MetricTrendPanel
           metric={trendMetric}
-          filters={{ section: filters.section, type: filters.type, userNeed: filters.userNeed }}
+          filters={{
+            section: filters.section, type: filters.type, userNeed: filters.userNeed,
+            // Length of the card's "Published" window, so Avg Content Value's trend
+            // measures the same set of articles the card does (none = All time).
+            windowDays: filters.from && filters.to
+              ? Math.round((new Date(filters.to) - new Date(filters.from)) / 86400000) + 1
+              : null,
+          }}
           onClose={() => setTrendMetric(null)}
         />
       )}

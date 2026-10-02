@@ -70,12 +70,13 @@ export default function MetricTrendPanel({ metric, filters, onClose }) {
     if (filters?.section) params.section = filters.section;
     if (filters?.type) params.type = filters.type;
     if (filters?.userNeed) params.userNeed = filters.userNeed;
+    if (filters?.windowDays) params.windowDays = filters.windowDays;
     api.getOverviewTrend(metric, params)
       .then(d => { if (!cancelled) setData(d); })
       .catch(e => { if (!cancelled) setError(e.message || 'Could not load the trend'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [metric, filters?.section, filters?.type, filters?.userNeed]);
+  }, [metric, filters?.section, filters?.type, filters?.userNeed, filters?.windowDays]);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };

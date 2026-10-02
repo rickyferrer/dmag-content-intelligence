@@ -510,7 +510,7 @@ const OVERVIEW_TREND_BREAKS = {
 
 const OVERVIEW_TREND_METRICS = {
   total_content:      { label: 'Total Content Items', unit: 'count',    about: 'Articles published per week.', filtersApply: true },
-  avg_true_value:     { label: 'Avg Content Value',   unit: 'score',    about: 'Average Content Value across scored articles, from each day’s snapshot (weekly average of the daily snapshots). Snapshots are only kept from late August, so earlier weeks are blank.', filtersApply: true },
+  avg_true_value:     { label: 'Avg Content Value',   unit: 'score',    about: null /* built per request — depends on the card's window, see below */, filtersApply: true },
   total_users:        { label: 'Total Users',         unit: 'count',    about: 'Unique readers per week (Google Analytics). Someone who visits in several weeks counts once in each, so the weeks don’t add up to the card’s period total.', filtersApply: false },
   loyal_users:        { label: 'Loyal Users',         unit: 'count',    about: 'Unique readers in GA4’s “3 or more sessions, last 30 days” audience who visited that week.', filtersApply: false },
   inmarket_pct:       { label: 'In-Market %',         unit: 'percent',  about: 'Share of each week’s unique readers located in the DFW area, from GA4 geo data.', filtersApply: false },
@@ -550,6 +550,8 @@ router.get('/overview-trend', async (req, res) => {
   try {
     const db = getDb();
     const { metric, section, type, userNeed } = req.query;
+    // Avg Content Value only: the card's "Published" window length in days (omitted = All time).
+    const windowDays = parseInt(req.query.windowDays, 10) > 0 ? parseInt(req.query.windowDays, 10) : null;
     const def = OVERVIEW_TREND_METRICS[metric];
     if (!def) return res.status(400).json({ error: `metric must be one of: ${Object.keys(OVERVIEW_TREND_METRICS).join(', ')}` });
 
@@ -585,16 +587,30 @@ router.get('/overview-trend', async (req, res) => {
         // Publishing counts are exact for every day, so every week has data.
         values.forEach((v, i) => { v.value = v.value || 0; v.days_with_data = weeks[i].days_in_bucket; });
       } else {
+        // The card shows the average Content Value of articles PUBLISHED in
+        // its window (Last 30 days by default), read from their latest
+        // snapshot. So each point here is what the card would have shown on
+        // that day: only articles published in the `windowDays` days up to
+        // that snapshot's date, valued by that day's snapshot. (Averaging
+        // every article's snapshot instead — ~9,500 mostly old, low-traffic
+        // pieces — lands at a completely different number than the card.)
+        // A week's point is its last snapshot day, i.e. the state at week end.
         const rows = db.prepare(`
           SELECT DATE(a.snapshot_at) AS d, AVG(CASE WHEN a.true_value > 0 THEN a.true_value END) AS v
           FROM analytics_snapshots a
-          ${where.length ? 'JOIN content c ON c.wp_id = a.wp_id' : ''}
-          WHERE a.snapshot_at >= ? ${where.map(w => 'AND ' + w).join(' ')}
+          JOIN content c ON c.wp_id = a.wp_id
+          WHERE a.snapshot_at >= ?
+            AND DATE(c.published_at) <= DATE(a.snapshot_at)
+            ${windowDays ? 'AND julianday(DATE(a.snapshot_at)) - julianday(DATE(c.published_at)) < ?' : ''}
+            ${where.map(w => 'AND ' + w).join(' ')}
           GROUP BY d
-        `).all(firstMonday, ...params);
-        const acc = weeks.map(() => ({ sum: 0, n: 0 }));
-        for (const r of rows) { const i = weekIndex(r.d); if (i >= 0 && r.v != null) { acc[i].sum += r.v; acc[i].n++; } }
-        acc.forEach((a, i) => { if (a.n) { values[i].value = a.sum / a.n; values[i].days_with_data = a.n; } });
+        `).all(firstMonday, ...(windowDays ? [windowDays] : []), ...params);
+        const lastDay = weeks.map(() => null);
+        for (const r of rows) {
+          const i = weekIndex(r.d);
+          if (i >= 0 && r.v != null && (lastDay[i] == null || r.d > lastDay[i].d)) lastDay[i] = r;
+        }
+        lastDay.forEach((r, i) => { if (r) { values[i].value = r.v; values[i].days_with_data = weeks[i].days_in_bucket; } });
       }
     } else if (metric === 'total_users' || metric === 'loyal_users' || metric === 'inmarket_pct') {
       const gaRows = await cachedWeeklyUsers(firstMonday, today);
@@ -622,7 +638,10 @@ router.get('/overview-trend', async (req, res) => {
     const points = weeks.map((w, i) => ({ ...w, value: values[i].value, days_with_data: values[i].days_with_data }));
     const firstWithData = points.find(p => p.value != null);
     res.json({
-      metric, label: def.label, unit: def.unit, granularity: 'week', about: def.about,
+      metric, label: def.label, unit: def.unit, granularity: 'week',
+      about: metric === 'avg_true_value'
+        ? `What the card would have shown at the end of each week: the average Content Value of articles published in the ${windowDays ? `${windowDays} days` : 'whole archive'} up to that day, valued by that day’s snapshot. It follows the Published range selected on the Overview. Snapshots are only kept from late August, so earlier weeks are blank.`
+        : def.about,
       scope: filtersApplied ? 'filtered' : 'site',
       filters_ignored: filtersSent && !def.filtersApply,
       range: { from: firstMonday, to: today },
