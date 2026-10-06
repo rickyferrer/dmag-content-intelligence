@@ -26,11 +26,17 @@ function topLevelCategory(path) {
 
 const router = Router();
 
+// An archival piece can go viral long after the date filter's range, so the
+// list can also pull in older articles that are getting real traffic now
+// (GA4 users in the latest rolling-30-day snapshot). Keep in sync with
+// ARCHIVE_MIN_USERS in client/src/views/ContentTable.jsx.
+const ARCHIVE_MIN_USERS = 500;
+
 // Builds the shared filter WHERE clause used by both the main content list
 // below and the /summary comparison endpoint. `dateOverride` (an
 // {from, to} pair) lets /summary reuse every other active filter while
 // substituting a shifted date range for its previous-period query.
-function buildContentWhere(query, dateOverride) {
+function buildContentWhere(query, dateOverride, { includeTrending = false } = {}) {
   const { type, section, category, tag, need, writer, issue, search, nlpCategory, voice } = query;
   const dateFrom = dateOverride ? dateOverride.from : query.dateFrom;
   const dateTo = dateOverride ? dateOverride.to : query.dateTo;
@@ -41,8 +47,23 @@ function buildContentWhere(query, dateOverride) {
   if (section) { where.push('c.section = ?'); params.push(section); }
   if (need) { where.push('c.user_need = ?'); params.push(need); }
   if (writer) { where.push('c.writer = ?'); params.push(writer); }
-  if (dateFrom) { where.push('c.published_at >= ?'); params.push(dateFrom); }
-  if (dateTo) { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
+  const dateWhere = [];
+  const dateParams = [];
+  if (dateFrom) { dateWhere.push('c.published_at >= ?'); dateParams.push(dateFrom); }
+  if (dateTo) { dateWhere.push('c.published_at <= ?'); dateParams.push(dateTo + 'T23:59:59'); }
+  if (dateWhere.length && includeTrending) {
+    // Published in the range, OR currently drawing real traffic whenever it
+    // was published. The other filters (type, section, ...) still apply.
+    where.push(`(${dateWhere.join(' AND ')} OR EXISTS (
+      SELECT 1 FROM analytics_snapshots s
+      WHERE s.wp_id = c.wp_id AND s.ga4_users >= ?
+        AND s.snapshot_at = (SELECT MAX(snapshot_at) FROM analytics_snapshots WHERE wp_id = c.wp_id)
+    ))`);
+    params.push(...dateParams, ARCHIVE_MIN_USERS);
+  } else {
+    where.push(...dateWhere);
+    params.push(...dateParams);
+  }
   if (category) { where.push("c.categories LIKE ?"); params.push(`%"slug":"${category}"%`); }
   if (tag) { where.push("c.tags LIKE ?"); params.push(`%"slug":"${tag}"%`); }
   // Matches the URL-derived issue OR a manual publication_override (see
@@ -116,7 +137,7 @@ router.get('/', (req, res) => {
   const sortCol = validSorts[sortBy] || 'c.published_at';
   const sortDir = order === 'asc' ? 'ASC' : 'DESC';
 
-  const { where, params } = buildContentWhere(req.query);
+  const { where, params } = buildContentWhere(req.query, null, { includeTrending: req.query.includeTrending === '1' });
   const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
   const rows = db.prepare(`

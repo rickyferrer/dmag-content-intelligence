@@ -63,6 +63,9 @@ function SortArrow({ col, sortBy, order }) {
 
 const { from: initFrom, to: initTo } = resolveDates(DEFAULT_PRESET);
 
+// Keep in sync with ARCHIVE_MIN_USERS in server/routes/content.js.
+const ARCHIVE_MIN_USERS = 500;
+
 export default function ContentTable({ onSelect }) {
   const { showComparisons } = useComparisons();
   const [rows, setRows] = useState([]);
@@ -77,6 +80,7 @@ export default function ContentTable({ onSelect }) {
   const [filters, setFilters] = useState({
     type: '', section: '', category: '', nlpCategory: '', tag: '', need: '', writer: '', issue: '', search: '', voice: '', device: '',
     datePreset: DEFAULT_PRESET, dateFrom: initFrom, dateTo: initTo,
+    includeTrending: '1',
     sortBy: 'lifetime_value', order: 'desc', page: 1, limit: 50,
   });
   const [searchInput, setSearchInput] = useState('');
@@ -146,6 +150,7 @@ export default function ContentTable({ onSelect }) {
       ...filterRef.current,
       type: '', section: '', category: '', nlpCategory: '', tag: '', need: '', writer: '', issue: '', search: '', voice: '',
       datePreset: DEFAULT_PRESET, dateFrom: initFrom, dateTo: initTo,
+      includeTrending: '1',
       page: 1,
     };
     setFilters(next);
@@ -278,6 +283,20 @@ export default function ContentTable({ onSelect }) {
             load(next);
           }}
         />
+
+        {filters.dateFrom && (
+          <label
+            title={`The date filter matches the publish date. With this on, older articles that are drawing ${ARCHIVE_MIN_USERS}+ users right now (GA4, last 30 days) are listed too — e.g. an archive piece that goes viral. Totals above the table still count only articles published in the range.`}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', height: 30 }}
+          >
+            <input
+              type="checkbox"
+              checked={filters.includeTrending === '1'}
+              onChange={e => setFilter('includeTrending', e.target.checked ? '1' : '0')}
+            />
+            Include older articles getting traffic
+          </label>
+        )}
 
         <div style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 12, display: 'flex', alignItems: 'center', height: 30 }}>
           {loading ? <Spinner label="Loading…" /> : `${pagination.total.toLocaleString()} items`}
