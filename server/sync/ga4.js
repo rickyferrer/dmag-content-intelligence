@@ -11,14 +11,16 @@ const DFW_CITIES = [
   'Frisco', 'McKinney', 'Garland', 'Denton', 'Richardson',
   'Lewisville', 'Carrollton', 'Allen', 'Mesquite', 'Grand Prairie',
   // Added Oct 2026: affluent northern/western suburbs the original list missed.
-  // Names that are also common elsewhere (Addison, Mansfield, Bedford,
-  // Highland Park, University Park, DeSoto, Celina) are left out because the
-  // match is a substring on city alone — see isDFW().
+  // Several of these (Addison, Mansfield, Bedford, Highland Park, University
+  // Park, DeSoto, Celina, Westlake) also exist outside Texas; they're included
+  // because the audience is overwhelmingly local — see isDFW().
   'Southlake', 'Grapevine', 'Flower Mound', 'Coppell', 'Colleyville',
   'Keller', 'Euless', 'Rockwall', 'Rowlett', 'Wylie', 'Sachse',
   'The Colony', 'Little Elm', 'Farmers Branch', 'North Richland Hills',
   'Haltom City', 'Cedar Hill', 'Duncanville', 'Waxahachie', 'Burleson',
   'Prosper', 'Trophy Club',
+  'Addison', 'Mansfield', 'Bedford', 'Highland Park', 'University Park',
+  'DeSoto', 'Celina', 'Westlake',
 ];
 
 // Per the executive team: "Ad Revenue" everywhere in this app is now a
