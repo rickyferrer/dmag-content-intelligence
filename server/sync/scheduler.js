@@ -664,9 +664,14 @@ export function initScheduler() {
 const STALE_SYNC_THRESHOLD_HOURS = 36;
 const WATCHED_SYNC_KEYS = ['last_wp_sync', 'last_analytics_sync', 'last_gsc_sync'];
 
+// sync_state also caches API credentials (e.g. marfeel_token). This feeds an
+// endpoint every signed-in user can read, so never include them.
+const SECRET_STATE_KEY = /token|secret|password|credential/i;
+
 export function getSyncStatus() {
   const db = getDb();
-  const state = db.prepare('SELECT key, value, updated_at FROM sync_state').all();
+  const state = db.prepare('SELECT key, value, updated_at FROM sync_state').all()
+    .filter(r => !SECRET_STATE_KEY.test(r.key));
   const result = Object.fromEntries(state.map(r => [r.key, { value: r.value, updated_at: r.updated_at }]));
 
   for (const key of WATCHED_SYNC_KEYS) {
