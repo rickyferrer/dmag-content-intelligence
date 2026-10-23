@@ -199,7 +199,11 @@ upcoming events with nothing scheduled, and D's exclusives.
   Nothing to configure; the first run starts ~30 seconds after boot. The list of
   outlets is `COMPETITORS` in `server/coverage/competitors.js`.
 - **The report** runs automatically Mondays at 7:00am Central and uses
-  `MONDAY_API_TOKEN` + `ANTHROPIC_API_KEY` (about 40K tokens per run). Admins can also
+  `MONDAY_API_TOKEN` + `ANTHROPIC_API_KEY` (two model calls, about 50K tokens per run).
+  The second call re-checks every proposed gap against D's last 30 days of published
+  content — headline, URL slug and full body text — and moves gaps D has already
+  covered into an "Already covered by D" list. That check reads the `content` table,
+  so it is only as current as the last content sync (daily, 6:00am Central). Admins can also
   click **Generate report** on the tab for this week or next week.
 - **First week after enabling it:** let the server run for a day or two first so the
   competitor table has a few days of headlines (the report also refreshes them itself).

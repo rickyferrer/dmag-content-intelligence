@@ -19,9 +19,10 @@ import { fetchAgenda, mondayConfigured, weekEnd } from './monday.js';
 
 const MODEL = process.env.COVERAGE_MODEL || 'claude-sonnet-5';
 const COMPETITOR_WINDOW_DAYS = 7;
-const OWN_PUBLISHED_WINDOW_DAYS = 14;
+const OWN_PUBLISHED_WINDOW_DAYS = 30;
 const MAX_COMPETITOR_ROWS = 900;
-const MAX_OWN_ROWS = 300;
+const MAX_OWN_ROWS = 700;
+const VERIFY_CANDIDATES_PER_GAP = 15;
 const MAX_GAPS = 12;
 const MAX_EXCLUSIVES = 8;
 const STALE_RUN_MS = 20 * 60 * 1000;
@@ -70,7 +71,7 @@ Find coverage gaps and call submit_coverage_report. Rules:
 5. urgency: high = time-sensitive (this week) and significant; medium = worthwhile but not time-bound; low = nice to have.
 6. suggested_angle: one concrete, specific pitch D could run (not "cover this"). section_hint: where it would live (e.g. FrontBurner, Food & Drink, D CEO – Real Estate, Things to Do).
 7. exclusives: agenda items of kind original_story or event_coverage that NO tracked competitor is covering — where D is alone. One short note each (what makes it distinctive and how to promote it). At most ${MAX_EXCLUSIVES}. The competitor list is limited to the outlets provided, so phrase this as "no tracked outlet covered this", never "no one else covered this".
-8. Use only IDs that appear in the input. Every gap needs at least one competitor ID in evidence.`;
+8. Treat abbreviations and wording variants as the same thing ("Prop A" = "Proposition A"). Use only IDs that appear in the input. Every gap needs at least one competitor ID in evidence.`;
 
 const TOOL = {
   name: 'submit_coverage_report',
@@ -171,9 +172,12 @@ function asArray(v) {
 const GENERIC_WORDS = new Set(['dallas', 'texas', 'county', 'north', 'south', 'east', 'west', 'worth', 'fort', 'city', 'about', 'after', 'again', 'their', 'there', 'these', 'those', 'which', 'while', 'where', 'would', 'could', 'should', 'with', 'from', 'that', 'this', 'what', 'will', 'have', 'been', 'into', 'over', 'more', 'than', 'says', 'said', 'news', 'best', 'week', 'weekend', 'first', 'year', 'years', 'new', 'one', 'two']);
 
 function distinctiveTokens(text) {
-  return new Set((text || '').toLowerCase().replace(/&#?\w+;/g, ' ').replace(/[^a-z0-9$]+/g, ' ').split(' ')
+  return new Set((text || '').toLowerCase().replace(/&#?\w+;/g, ' ')
+    .replace(/\b([a-z])-(\d+)\b/g, '$1$2')            // "I-30" → "i30" (a road, not "i" and "30")
+    .replace(/[^a-z0-9$]+/g, ' ').split(' ')
     .map(t => t.replace(/^\$/, ''))
-    .filter(t => t.length >= 4 && !GENERIC_WORDS.has(t)));
+    // 4+ letters, or a 3+ character code containing a digit (i30, 443m)
+    .filter(t => (t.length >= 4 || (t.length >= 3 && /\d/.test(t))) && !GENERIC_WORDS.has(t)));
 }
 
 const MIN_SHARED_WORDS = 3;
@@ -193,6 +197,163 @@ export function likelyCoveredBy(gapText, candidates) {
 const URGENCY_RANK = { high: 0, medium: 1, low: 2 };
 const sentenceCase = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
+
+// ── Pass 2: has D already covered or scheduled each gap? ────────────────────
+// The first pass proposes gaps from headlines alone, and a headline can hide
+// the match. D's "Know Your Proposition A" voter guide was missed against
+// competitor stories about "Prop A", and an I-30 weekend closure D had covered
+// inside its daily "Leading Off" roundup — whose headline says nothing and
+// whose I-30 paragraph starts ~1,700 characters in — was missed too. So every
+// proposed gap is re-checked in a second, narrow call. Candidates come from the
+// FULL text of D's recent items (headline, URL slug, body), ranked with rare
+// words weighted up and abbreviation-tolerant matching, and the model is shown
+// the passage that matched rather than the top of the article.
+const slugWords = (slug) => (slug || '').replace(/-/g, ' ');
+const normalizeCodes = (text) => (text || '').replace(/\b([A-Za-z])-(\d+)\b/g, '$1$2'); // "I-30" → "I30", same as the tokenizer
+
+// Two words match if equal, or if one is a prefix of the other (prop ~
+// proposition, vote ~ voter) — only for words of 4+ letters.
+const wordsMatch = (a, b) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)));
+
+function indexItems(items) {
+  const df = new Map(); // how many items contain each word — rare words are the informative ones
+  for (const it of items) {
+    it.bodyNorm = normalizeCodes(oneLine(it.body));
+    it.tokens = distinctiveTokens(`${it.title} ${it.slugText || ''} ${it.bodyNorm}`);
+    for (const t of it.tokens) df.set(t, (df.get(t) || 0) + 1);
+  }
+  return { df, n: items.length };
+}
+
+const WINDOW_CHARS = 280;
+
+// The stretch of the body (~280 chars) that contains the most of the gap's words.
+function bestExcerpt(bodyNorm, words) {
+  if (!bodyNorm) return '';
+  const lower = bodyNorm.toLowerCase();
+  const hits = [];
+  for (const w of words) {
+    let from = 0;
+    for (let k = 0; k < 6; k++) { // a few occurrences per word is plenty
+      const i = lower.indexOf(w, from);
+      if (i < 0) break;
+      hits.push({ w, i });
+      from = i + w.length;
+    }
+  }
+  if (hits.length === 0) return bodyNorm.slice(0, WINDOW_CHARS);
+  let best = { start: 0, count: -1 };
+  for (const h of hits) {
+    const start = Math.max(0, h.i - 60);
+    const count = new Set(hits.filter(x => x.i >= start && x.i < start + WINDOW_CHARS).map(x => x.w)).size;
+    if (count > best.count) best = { start, count };
+  }
+  const piece = bodyNorm.slice(best.start, best.start + WINDOW_CHARS);
+  return `${best.start > 0 ? '…' : ''}${piece}${best.start + WINDOW_CHARS < bodyNorm.length ? '…' : ''}`;
+}
+
+function topCandidates(gapText, items, index, cap) {
+  const gapWords = [...distinctiveTokens(gapText)];
+  const weight = (w) => Math.log((index.n + 1) / (1 + (index.df.get(w) || 0)));
+  return items
+    .map(item => {
+      let score = 0;
+      const hit = [];
+      for (const g of gapWords) {
+        const found = item.tokens.has(g) || (g.length >= 4 && [...item.tokens].some(t => wordsMatch(t, g)));
+        if (found) { score += weight(g); hit.push(g); }
+      }
+      return { item, score, hit };
+    })
+    .filter(x => x.hit.length >= 1)
+    .sort((a, b) => b.score - a.score || (b.item.sortKey || '').localeCompare(a.item.sortKey || ''))
+    .slice(0, cap)
+    .map(x => ({ ...x.item, excerpt: bestExcerpt(x.item.bodyNorm, x.hit) }));
+}
+
+const VERIFY_TOOL = {
+  name: 'submit_coverage_check',
+  description: 'Report which D items already cover each gap.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      results: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            gap: { type: 'integer', description: 'The gap number as given' },
+            matches: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  ref: { type: 'string', description: 'A candidate ref listed under that gap, such as P12 or A3' },
+                  relation: { type: 'string', enum: ['same_story', 'adjacent'] },
+                },
+                required: ['ref', 'relation'],
+              },
+            },
+          },
+          required: ['gap', 'matches'],
+        },
+      },
+    },
+    required: ['results'],
+  },
+};
+
+const VERIFY_SYSTEM = `You check whether D Magazine has ALREADY covered or scheduled stories that a competitor-comparison flagged as gaps in D's coverage.
+
+Each numbered GAP is followed by candidate D items (published in the last 30 days, or scheduled on this week's agenda) with their headline, URL-slug words, and the passage of their text that best matches the gap. Return the candidates that match:
+- same_story: it covers the SAME story, event, measure, or topic a reader would regard as the same thing, even if the headline, angle, or wording differs. Treat abbreviations and synonyms as equal ("Prop A" = "Proposition A"). A voter guide or explainer on a ballot measure, or a preview of an event, counts as the same story as competitors' coverage of that measure or event.
+- adjacent: a related but different story. Use this sparingly — only when an editor assigning this gap would genuinely want to see that piece first (same issue, same people, same decision). Shared vocabulary alone is NOT adjacency; at most two adjacent per gap.
+Roundup and digest posts (for example the daily "Leading Off" micropost) have headlines that say nothing about their contents and cover several stories in the body. If the shown passage actually covers the gap's story — even as one item among several — it is same_story.
+Omit candidates that are unrelated. Only use refs listed under that gap. Include every gap number in results, with an empty matches list when nothing fits.`;
+
+async function verifyCoverage({ gaps, agenda, own }) {
+  if (gaps.length === 0) return new Map();
+  const pool = [
+    ...agenda.map(a => ({ ref: a.ref, kind: 'scheduled', title: a.title, date: a.date, slugText: '', body: '', sortKey: a.date || '' })),
+    ...own.map(p => ({ ref: p.ref, kind: 'published', title: p.title, date: p.published_at?.slice(0, 10), slugText: slugWords(p.slug), body: p.body || '', sortKey: p.published_at || '' })),
+  ];
+  const index = indexItems(pool);
+
+  const perGap = gaps.map(g => topCandidates([g.topic, g.whyItMatters, ...g.evidence.map(e => e.title)].join(' '), pool, index, VERIFY_CANDIDATES_PER_GAP));
+  if (perGap.every(list => list.length === 0)) return new Map();
+
+  const gapBlocks = gaps.map((g, i) => {
+    const cands = perGap[i].map(c =>
+      `  ${c.ref} | ${c.kind} ${c.date || ''} | ${oneLine(c.title)}${c.slugText ? ` | slug: ${c.slugText}` : ''}${c.excerpt ? ` | text: ${c.excerpt}` : ''}`);
+    return `GAP ${i + 1}: ${g.topic}\n  ${oneLine(g.whyItMatters)}\n  Competitor headlines: ${g.evidence.slice(0, 3).map(e => oneLine(e.title)).join(' || ')}\n  Candidates:\n${cands.join('\n') || '  (none)'}`;
+  });
+
+  const response = await getClient().messages.create({
+    model: MODEL,
+    max_tokens: 4000,
+    system: VERIFY_SYSTEM,
+    tools: [VERIFY_TOOL],
+    tool_choice: { type: 'tool', name: VERIFY_TOOL.name },
+    messages: [{ role: 'user', content: `GAPS\n\n${gapBlocks.join('\n\n')}` }],
+  });
+  const block = response.content.find(b => b.type === 'tool_use');
+  if (!block) throw new Error('no structured coverage check returned');
+
+  const verdicts = new Map();
+  for (const r of asArray(block.input?.results)) {
+    const idx = Number(r?.gap) - 1;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= gaps.length) continue;
+    const allowed = new Set(perGap[idx].map(c => c.ref)); // a ref the model wasn't offered for this gap is ignored
+    const matches = asArray(r.matches)
+      .map(m => ({ ref: String(m?.ref || '').trim().toUpperCase(), relation: m?.relation === 'same_story' ? 'same_story' : 'adjacent' }))
+      .filter(m => allowed.has(m.ref));
+    verdicts.set(idx, matches);
+  }
+  // A response with no usable per-gap results means nothing was actually checked.
+  if (verdicts.size === 0) throw new Error('coverage check returned no usable results');
+  return verdicts;
+}
+
 export async function generateCoverageReport({ weekStart, agendaItems, boardItemCount = null }) {
   const db = getDb();
   const end = weekEnd(weekStart);
@@ -209,7 +370,7 @@ export async function generateCoverageReport({ weekStart, agendaItems, boardItem
 
   const ownSince = new Date(Date.now() - OWN_PUBLISHED_WINDOW_DAYS * 86400000).toISOString().slice(0, 10);
   const own = db.prepare(`
-    SELECT title, url, content_type, section, published_at FROM content
+    SELECT title, url, slug, content_type, section, published_at, substr(content_text, 1, 8000) AS body FROM content
     WHERE published_at >= ? AND title != '' AND content_type != 'tribe_events'
     ORDER BY published_at DESC LIMIT ?
   `).all(ownSince, MAX_OWN_ROWS).map((p, i) => ({ ...p, ref: `P${i + 1}` }));
@@ -270,25 +431,61 @@ export async function generateCoverageReport({ weekStart, agendaItems, boardItem
     return null;
   }).filter(Boolean);
 
-  const gaps = out.gaps
+  const resolveItem = (ref) => {
+    if (agendaByRef.has(ref)) { const a = agendaByRef.get(ref); return { kind: 'agenda', title: a.title, date: a.date, url: a.url }; }
+    if (ownByRef.has(ref)) { const p = ownByRef.get(ref); return { kind: 'published', title: p.title, date: p.published_at?.slice(0, 10), url: p.url }; }
+    return null;
+  };
+
+  const proposed = out.gaps
     .filter(g => g && typeof g === 'object')
     .map(g => ({
       gapType: g.gap_type, topic: g.topic, whyItMatters: g.why_it_matters, suggestedAngle: g.suggested_angle,
-      sectionHint: g.section_hint, urgency: g.urgency, evidence: evidence(g.evidence), related: related(g.related_ids),
+      sectionHint: g.section_hint, urgency: g.urgency, evidence: evidence(g.evidence),
+      related: related(g.related_ids).map(r => ({ ...r, relation: 'adjacent' })),
     }))
-    .filter(g => g.evidence.length > 0 && g.topic)
-    .map(g => {
+    .filter(g => g.evidence.length > 0 && g.topic);
+
+  // Second pass. If it fails the report still ships, with the cruder
+  // word-overlap check from before and a note saying so.
+  let coverageCheck = 'verified';
+  let verdicts = null;
+  try {
+    verdicts = await verifyCoverage({ gaps: proposed, agenda, own });
+  } catch (err) {
+    console.warn('[Coverage] Coverage verification failed, falling back to word overlap:', err.message);
+    coverageCheck = 'word-overlap only';
+  }
+
+  const RELATION_RANK = { same_story: 0, word_overlap: 1, adjacent: 2 };
+  const checked = proposed.map((g, i) => {
+    let rel = g.related;
+    if (verdicts && verdicts.has(i)) {
+      const verified = (verdicts.get(i) || []).map(m => { const item = resolveItem(m.ref); return item && { ...item, relation: m.relation }; }).filter(Boolean);
+      rel = [...verified, ...g.related];
+    } else {
       const text = [g.topic, ...g.evidence.map(e => e.title)].join(' ');
-      const candidates = [
+      const pool = [
         ...agenda.map(a => ({ kind: 'agenda', title: a.title, date: a.date, url: a.url })),
         ...own.map(p => ({ kind: 'published', title: p.title, date: p.published_at?.slice(0, 10), url: p.url })),
       ];
-      const known = new Set(g.related.map(r => r.title));
-      const likely = likelyCoveredBy(text, candidates).filter(c => !known.has(c.title))
-        .map(({ shared, ...c }) => ({ ...c, likelyDuplicate: true }));
-      const flagged = g.related.map(r => ({ ...r, likelyDuplicate: likelyCoveredBy(text, [r]).length > 0 }));
-      return { ...g, related: [...likely, ...flagged] };
-    })
+      const likely = likelyCoveredBy(text, pool).map(({ shared, ...c }) => ({ ...c, relation: 'word_overlap' }));
+      rel = [...likely, ...g.related];
+    }
+    // De-duplicate by title, keeping the strongest relation for each.
+    const best = new Map();
+    for (const r of rel) {
+      const prev = best.get(r.title);
+      if (!prev || (RELATION_RANK[r.relation] ?? 3) < (RELATION_RANK[prev.relation] ?? 3)) best.set(r.title, r);
+    }
+    const related = [...best.values()].sort((a, b) => (RELATION_RANK[a.relation] ?? 3) - (RELATION_RANK[b.relation] ?? 3));
+    return { ...g, related, coveredBy: related.filter(r => r.relation === 'same_story') };
+  });
+
+  // Gaps D has already covered or scheduled aren't gaps — kept in their own
+  // list (not dropped) so editors can see what was filtered and why.
+  const coveredGaps = checked.filter(g => g.coveredBy.length > 0);
+  const gaps = checked.filter(g => g.coveredBy.length === 0)
     .sort((a, b) => (URGENCY_RANK[a.urgency] ?? 3) - (URGENCY_RANK[b.urgency] ?? 3) || b.evidence.length - a.evidence.length)
     .slice(0, MAX_GAPS);
 
@@ -305,11 +502,11 @@ export async function generateCoverageReport({ weekStart, agendaItems, boardItem
     stats: {
       agendaItems: agenda.length, boardItems: boardItemCount,
       competitorHeadlines: competitors.length, ownPublished: own.length,
-      gaps: gaps.length, exclusives: exclusives.length,
+      gaps: gaps.length, alreadyCovered: coveredGaps.length, coverageCheck, exclusives: exclusives.length,
       inputTokens: response.usage?.input_tokens ?? null, outputTokens: response.usage?.output_tokens ?? null,
     },
     sources: competitorHealth(compSince),
-    gaps, exclusives, agenda: agendaOut,
+    gaps, coveredGaps, exclusives, agenda: agendaOut,
   };
 
   db.prepare('INSERT OR REPLACE INTO coverage_reports (week_start, generated_at, model, report_json) VALUES (?, ?, ?, ?)')

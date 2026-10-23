@@ -16,6 +16,14 @@ const GAP_TYPE = {
   upcoming_unscheduled: 'Upcoming, nothing scheduled',
 };
 
+// How a D item relates to a gap. Older stored reports used a likelyDuplicate flag.
+const RELATION = {
+  same_story:   { label: 'D already covered this', bg: '#e6f4ea', color: '#1e7a3c' },
+  word_overlap: { label: 'D may already have this', bg: '#fbf3dc', color: '#7a5800' },
+  adjacent:     { label: 'Adjacent D coverage', bg: 'var(--bg-elevated)', color: 'var(--text-secondary)' },
+};
+const relationOf = (r) => r.relation || (r.likelyDuplicate ? 'word_overlap' : 'adjacent');
+
 const KIND_LABEL = {
   original_story: 'Story',
   event_coverage: 'Event',
@@ -85,20 +93,18 @@ function GapCard({ gap }) {
 
       {gap.related.length > 0 && (
         <div style={{ marginBottom: 12 }}>
-          {gap.related.map((r, i) => (
-            <div key={i} style={{
-              fontSize: 12, padding: '6px 10px', borderRadius: 4, marginBottom: 4,
-              background: r.likelyDuplicate ? '#fbf3dc' : 'var(--bg-elevated)',
-              color: r.likelyDuplicate ? '#7a5800' : 'var(--text-secondary)',
-            }}>
-              <strong style={{ fontWeight: 500 }}>
-                {r.likelyDuplicate ? 'D may already have this' : 'Adjacent D coverage'}
-                {r.kind === 'agenda' ? ' (on the agenda)' : ' (published)'}:
-              </strong>{' '}
-              {r.url ? <a href={r.url} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>{r.title}</a> : r.title}
-              {r.date && <span style={{ opacity: 0.7 }}> · {fmtDay(r.date.slice(0, 10))}</span>}
-            </div>
-          ))}
+          {gap.related.map((r, i) => {
+            const rel = RELATION[relationOf(r)];
+            return (
+              <div key={i} style={{ fontSize: 12, padding: '6px 10px', borderRadius: 4, marginBottom: 4, background: rel.bg, color: rel.color }}>
+                <strong style={{ fontWeight: 500 }}>
+                  {rel.label}{r.kind === 'agenda' ? ' (on the agenda)' : ' (published)'}:
+                </strong>{' '}
+                {r.url ? <a href={r.url} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>{r.title}</a> : r.title}
+                {r.date && <span style={{ opacity: 0.7 }}> · {fmtDay(r.date.slice(0, 10))}</span>}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -252,6 +258,7 @@ export default function CoverageGaps() {
             <Stat label="Agenda items" value={report.stats.agendaItems} />
             <Stat label="Competitor headlines" value={report.stats.competitorHeadlines} />
             <Stat label="Gaps" value={report.stats.gaps} />
+            {report.stats.alreadyCovered > 0 && <Stat label="Already covered" value={report.stats.alreadyCovered} />}
             <Stat label="Exclusives" value={report.stats.exclusives} />
           </div>
 
@@ -271,6 +278,40 @@ export default function CoverageGaps() {
           )}
           {gaps.map((g, i) => <GapCard key={i} gap={g} />)}
           {report.gaps.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No gaps found — nothing competitors covered this week is missing from D's coverage.</div>}
+
+          {/* Competitor stories D already has */}
+          {report.coveredGaps?.length > 0 && (
+            <>
+              <SectionTitle count={report.coveredGaps.length} note="competitors covered these, but D already has them">Already covered by D</SectionTitle>
+              <Panel>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <tbody>
+                    {report.coveredGaps.map((g, i) => (
+                      <tr key={i}>
+                        <td style={{ ...td, borderTop: i === 0 ? 'none' : td.borderTop, width: '38%', color: 'var(--text-primary)' }}>
+                          {g.topic}
+                          <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{[...new Set(g.evidence.map(e => e.source))].join(', ')}</div>
+                        </td>
+                        <td style={{ ...td, borderTop: i === 0 ? 'none' : td.borderTop }}>
+                          {g.coveredBy.map((c, j) => (
+                            <div key={j}>
+                              {c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer" style={linkStyle}>{c.title}</a> : c.title}
+                              {c.date && <span style={{ color: 'var(--text-muted)' }}> · {fmtDay(c.date.slice(0, 10))}{c.kind === 'agenda' ? ' (on the agenda)' : ''}</span>}
+                            </div>
+                          ))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Panel>
+            </>
+          )}
+          {report.stats.coverageCheck && report.stats.coverageCheck !== 'verified' && (
+            <div style={{ fontSize: 12, color: '#7a5800', background: '#fbf3dc', borderRadius: 6, padding: '8px 12px', margin: '12px 0' }}>
+              The "has D already covered this?" check fell back to simple word matching for this report, so some gaps may already be covered. Regenerating usually fixes it.
+            </div>
+          )}
 
           {/* Exclusives */}
           <SectionTitle count={report.exclusives.length} note="agenda items no tracked outlet is covering">Our exclusives</SectionTitle>
