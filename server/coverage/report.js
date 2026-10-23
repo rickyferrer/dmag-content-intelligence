@@ -57,6 +57,7 @@ const SYSTEM_PROMPT = `You are an editorial analyst for D Magazine, the Dallas c
 You will be given:
 - AGENDA: what D plans to publish this week, from the newsroom's Monday.com board. Titles are often terse working slugs ("Oh My Gourd", "Spa Guide"). Status "Published" means it is already live. "PRINT:" items are print-magazine stories being posted online.
 - D_PUBLISHED: what D already published in the last two weeks.
+- D_ROUNDUPS: D's daily "Leading Off" roundup posts (published every weekday), in FULL. Each one covers a range of topics, so read ALL of every post — a story mentioned anywhere in a roundup counts as covered by D.
 - COMPETITORS: headlines competitors published in the last seven days, each with an ID like C123. Titles marked [title from URL] are rewrites of a URL slug, not the real headline.
 
 Find coverage gaps and call submit_coverage_report. Rules:
@@ -64,7 +65,7 @@ Find coverage gaps and call submit_coverage_report. Rules:
 1. Classify EVERY agenda item (kind + a short theme). Kinds: original_story (a reported or written story, INCLUDING "PRINT:" stories being posted online and personality features), event_coverage (a dated event, opening, or contest D is covering), recirculation (re-promoting an older piece), print_or_admin (ONLY page furniture and logistics: table of contents, cover/issue admin), roundup_or_recurring (briefs, deal tickers, guides, recurring franchises). Group names are hints, not definitions: "Recirculation/Date Book" mixes re-promotions with dated event items and fresh news items, so judge each item by its title.
 2. For each agenda item list the competitor IDs (competitor_overlap) that cover the same story, event, or very close topic. Leave it empty if none.
 3. gaps — two types:
-   - competitor_covered: a story competitors published that D has neither published (D_PUBLISHED) nor scheduled (AGENDA). BEFORE reporting any gap, search D_PUBLISHED and AGENDA for the same story or event; if D already covered or scheduled it, even days ago or from a different angle, it is NOT a gap — omit it entirely. Only when D has something merely adjacent (same broad subject, clearly different story) report the gap and list that item in related_ids.
+   - competitor_covered: a story competitors published that D has neither published (D_PUBLISHED) nor scheduled (AGENDA). BEFORE reporting any gap, search D_PUBLISHED, D_ROUNDUPS (the whole text) and AGENDA for the same story or event; if D already covered or scheduled it, even days ago or from a different angle, it is NOT a gap — omit it entirely. Only when D has something merely adjacent (same broad subject, clearly different story) report the gap and list that item in related_ids.
    - upcoming_unscheduled: an event, opening, hearing, election item, announcement, or deadline that competitors are previewing or announcing for this week or just after, with nothing on the AGENDA. It must concern something that has NOT happened yet as of today's date; if it already happened, it is competitor_covered instead. Only state dates that appear in the provided text; otherwise say the date isn't stated. Never invent dates, venues, or facts.
    Merge closely related stories into ONE gap (for example, several election or ballot-measure pieces) instead of listing each separately.
 4. Be selective: at most ${MAX_GAPS} gaps, ranked most important first. Prefer topics several outlets covered, or one outlet's clearly significant, time-sensitive Dallas story squarely in D's beats. SKIP: sports scores and game recaps, routine crime/accident reports, weather, wire or national stories with no Dallas angle, syndicated filler, and pure press-release fluff. Local politics and elections ARE in scope when they are a real local story.
@@ -129,11 +130,20 @@ const TOOL = {
 const md = (iso) => (iso || '').slice(5, 10);
 const oneLine = (s) => (s || '').replace(/\s+/g, ' ').trim();
 
+// D's daily "Leading Off" roundup micropost (weekdays). Its headline says
+// nothing and its body covers a range of topics, so it is always read in full
+// — by both model passes — rather than being matched on a headline or excerpt.
+const ROUNDUP_MAX_CHARS = 12000;
+export const isRoundup = (p) => /^leading-off/i.test(p.slug || '') || /^leading off\b/i.test(p.title || '');
+
 function buildUserPrompt({ weekStart, end, agenda, own, competitors }) {
   const wd = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
   const agendaLines = agenda.map(a =>
     `${a.ref} | ${wd(a.date)} ${md(a.date)} | ${a.pub || 'no pub set'} | ${a.status || 'no status'} | ${a.group || ''} | ${oneLine(a.title)}`);
-  const ownLines = own.map(p => `${p.ref} | ${md(p.published_at)} | ${p.content_type} | ${p.section || ''} | ${oneLine(p.title)}`);
+  const roundups = own.filter(isRoundup).sort((a, b) => a.published_at.localeCompare(b.published_at));
+  const roundupBlocks = roundups.map(p => `${p.ref} | ${wd(p.published_at.slice(0, 10))} ${md(p.published_at)}\n${oneLine(p.body)}`);
+  const regular = own.filter(p => !isRoundup(p));
+  const ownLines = regular.map(p => `${p.ref} | ${md(p.published_at)} | ${p.content_type} | ${p.section || ''} | ${oneLine(p.title)}`);
   const compLines = competitors.map(c => {
     const title = c.title_from_url ? `[title from URL] ${oneLine(c.title)}` : oneLine(c.title);
     const snippet = c.summary ? ` — ${oneLine(c.summary).slice(0, 140)}` : '';
@@ -142,7 +152,8 @@ function buildUserPrompt({ weekStart, end, agenda, own, competitors }) {
   return [
     `Week under review: ${weekStart} (Monday) through ${end} (Sunday). Today is ${centralToday()}.`,
     `\nAGENDA (${agenda.length} items)\n${agendaLines.join('\n')}`,
-    `\nD_PUBLISHED, last ${OWN_PUBLISHED_WINDOW_DAYS} days (${own.length} items)\n${ownLines.join('\n')}`,
+    `\nD_PUBLISHED, last ${OWN_PUBLISHED_WINDOW_DAYS} days (${regular.length} items)\n${ownLines.join('\n')}`,
+    `\nD_ROUNDUPS: D's daily "Leading Off" posts, last ${OWN_PUBLISHED_WINDOW_DAYS} days, FULL TEXT (${roundups.length} posts)\n${roundupBlocks.join('\n\n')}`,
     `\nCOMPETITORS, last ${COMPETITOR_WINDOW_DAYS} days (${competitors.length} headlines)\n${compLines.join('\n')}`,
   ].join('\n');
 }
@@ -188,8 +199,9 @@ export function likelyCoveredBy(gapText, candidates) {
   const gapTokens = distinctiveTokens(gapText);
   const hits = [];
   for (const c of candidates) {
-    const shared = [...distinctiveTokens(c.title)].filter(t => gapTokens.has(t));
-    if (shared.length >= MIN_SHARED_WORDS) hits.push({ ...c, shared: shared.length });
+    const shared = [...distinctiveTokens(c.matchText ?? c.title)].filter(t => gapTokens.has(t));
+    const need = c.matchText ? MIN_SHARED_WORDS + 1 : MIN_SHARED_WORDS; // a long body shares more words by chance
+    if (shared.length >= need) hits.push({ ...c, shared: shared.length });
   }
   return hits.sort((a, b) => b.shared - a.shared).slice(0, 2);
 }
@@ -308,19 +320,21 @@ const VERIFY_SYSTEM = `You check whether D Magazine has ALREADY covered or sched
 Each numbered GAP is followed by candidate D items (published in the last 30 days, or scheduled on this week's agenda) with their headline, URL-slug words, and the passage of their text that best matches the gap. Return the candidates that match:
 - same_story: it covers the SAME story, event, measure, or topic a reader would regard as the same thing, even if the headline, angle, or wording differs. Treat abbreviations and synonyms as equal ("Prop A" = "Proposition A"). A voter guide or explainer on a ballot measure, or a preview of an event, counts as the same story as competitors' coverage of that measure or event.
 - adjacent: a related but different story. Use this sparingly — only when an editor assigning this gap would genuinely want to see that piece first (same issue, same people, same decision). Shared vocabulary alone is NOT adjacency; at most two adjacent per gap.
-Roundup and digest posts (for example the daily "Leading Off" micropost) have headlines that say nothing about their contents and cover several stories in the body. If the shown passage actually covers the gap's story — even as one item among several — it is same_story.
+DAILY ROUNDUPS: before the gaps you are given D's daily "Leading Off" posts in full. Their headlines say nothing and each covers a range of topics. For EVERY gap, read ALL of EVERY roundup: if a roundup covers the gap's story anywhere in its text — even as one short item among many — return that roundup's ref as same_story. Roundup refs are valid for every gap.
 Omit candidates that are unrelated. Only use refs listed under that gap. Include every gap number in results, with an empty matches list when nothing fits.`;
 
 async function verifyCoverage({ gaps, agenda, own }) {
   if (gaps.length === 0) return new Map();
+  const roundups = own.filter(isRoundup).sort((a, b) => a.published_at.localeCompare(b.published_at));
   const pool = [
     ...agenda.map(a => ({ ref: a.ref, kind: 'scheduled', title: a.title, date: a.date, slugText: '', body: '', sortKey: a.date || '' })),
-    ...own.map(p => ({ ref: p.ref, kind: 'published', title: p.title, date: p.published_at?.slice(0, 10), slugText: slugWords(p.slug), body: p.body || '', sortKey: p.published_at || '' })),
+    ...own.filter(p => !isRoundup(p)).map(p => ({ ref: p.ref, kind: 'published', title: p.title, date: p.published_at?.slice(0, 10), slugText: slugWords(p.slug), body: p.body || '', sortKey: p.published_at || '' })),
   ];
   const index = indexItems(pool);
 
   const perGap = gaps.map(g => topCandidates([g.topic, g.whyItMatters, ...g.evidence.map(e => e.title)].join(' '), pool, index, VERIFY_CANDIDATES_PER_GAP));
-  if (perGap.every(list => list.length === 0)) return new Map();
+  if (perGap.every(list => list.length === 0) && roundups.length === 0) return new Map();
+  const roundupRefs = roundups.map(p => p.ref);
 
   const gapBlocks = gaps.map((g, i) => {
     const cands = perGap[i].map(c =>
@@ -334,7 +348,11 @@ async function verifyCoverage({ gaps, agenda, own }) {
     system: VERIFY_SYSTEM,
     tools: [VERIFY_TOOL],
     tool_choice: { type: 'tool', name: VERIFY_TOOL.name },
-    messages: [{ role: 'user', content: `GAPS\n\n${gapBlocks.join('\n\n')}` }],
+    messages: [{
+      role: 'user',
+      content: `DAILY ROUNDUPS — D's "Leading Off" posts, full text. Read every one in full for EVERY gap; each covers many topics.\n\n${
+        roundups.map(p => `${p.ref} | published ${p.published_at.slice(0, 10)}\n${oneLine(p.body)}`).join('\n\n') || '(none in this window)'}\n\nGAPS\n\n${gapBlocks.join('\n\n')}`,
+    }],
   });
   const block = response.content.find(b => b.type === 'tool_use');
   if (!block) throw new Error('no structured coverage check returned');
@@ -343,7 +361,7 @@ async function verifyCoverage({ gaps, agenda, own }) {
   for (const r of asArray(block.input?.results)) {
     const idx = Number(r?.gap) - 1;
     if (!Number.isInteger(idx) || idx < 0 || idx >= gaps.length) continue;
-    const allowed = new Set(perGap[idx].map(c => c.ref)); // a ref the model wasn't offered for this gap is ignored
+    const allowed = new Set([...perGap[idx].map(c => c.ref), ...roundupRefs]); // a ref the model wasn't offered for this gap is ignored
     const matches = asArray(r.matches)
       .map(m => ({ ref: String(m?.ref || '').trim().toUpperCase(), relation: m?.relation === 'same_story' ? 'same_story' : 'adjacent' }))
       .filter(m => allowed.has(m.ref));
@@ -352,6 +370,24 @@ async function verifyCoverage({ gaps, agenda, own }) {
   // A response with no usable per-gap results means nothing was actually checked.
   if (verdicts.size === 0) throw new Error('coverage check returned no usable results');
   return verdicts;
+}
+
+
+// How many Leading Off roundups were read, the newest, and any weekday in the
+// window (up to yesterday) with none — so a missing day (not yet synced, or a
+// holiday) is visible instead of silently leaving a hole in "what D covered".
+function leadingOffStats(own) {
+  const dates = new Set(own.filter(isRoundup).map(p => p.published_at.slice(0, 10)));
+  const today = centralToday();
+  const missing = [];
+  for (let i = OWN_PUBLISHED_WINDOW_DAYS; i >= 1; i--) {
+    const d = new Date(today + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - i);
+    const day = d.toISOString().slice(0, 10);
+    const dow = d.getUTCDay();
+    if (dow >= 1 && dow <= 5 && !dates.has(day)) missing.push(day);
+  }
+  return { read: dates.size, latest: [...dates].sort().pop() || null, missing };
 }
 
 export async function generateCoverageReport({ weekStart, agendaItems, boardItemCount = null }) {
@@ -370,7 +406,7 @@ export async function generateCoverageReport({ weekStart, agendaItems, boardItem
 
   const ownSince = new Date(Date.now() - OWN_PUBLISHED_WINDOW_DAYS * 86400000).toISOString().slice(0, 10);
   const own = db.prepare(`
-    SELECT title, url, slug, content_type, section, published_at, substr(content_text, 1, 8000) AS body FROM content
+    SELECT title, url, slug, content_type, section, published_at, CASE WHEN slug LIKE 'leading-off%' OR title LIKE 'Leading Off%' THEN substr(content_text, 1, ${ROUNDUP_MAX_CHARS}) ELSE substr(content_text, 1, 8000) END AS body FROM content
     WHERE published_at >= ? AND title != '' AND content_type != 'tribe_events'
     ORDER BY published_at DESC LIMIT ?
   `).all(ownSince, MAX_OWN_ROWS).map((p, i) => ({ ...p, ref: `P${i + 1}` }));
@@ -467,7 +503,7 @@ export async function generateCoverageReport({ weekStart, agendaItems, boardItem
       const text = [g.topic, ...g.evidence.map(e => e.title)].join(' ');
       const pool = [
         ...agenda.map(a => ({ kind: 'agenda', title: a.title, date: a.date, url: a.url })),
-        ...own.map(p => ({ kind: 'published', title: p.title, date: p.published_at?.slice(0, 10), url: p.url })),
+        ...own.map(p => ({ kind: 'published', title: p.title, date: p.published_at?.slice(0, 10), url: p.url, ...(isRoundup(p) ? { matchText: p.body } : {}) })),
       ];
       const likely = likelyCoveredBy(text, pool).map(({ shared, ...c }) => ({ ...c, relation: 'word_overlap' }));
       rel = [...likely, ...g.related];
@@ -475,8 +511,9 @@ export async function generateCoverageReport({ weekStart, agendaItems, boardItem
     // De-duplicate by title, keeping the strongest relation for each.
     const best = new Map();
     for (const r of rel) {
-      const prev = best.get(r.title);
-      if (!prev || (RELATION_RANK[r.relation] ?? 3) < (RELATION_RANK[prev.relation] ?? 3)) best.set(r.title, r);
+      const key = r.url || r.title;
+      const prev = best.get(key);
+      if (!prev || (RELATION_RANK[r.relation] ?? 3) < (RELATION_RANK[prev.relation] ?? 3)) best.set(key, r);
     }
     const related = [...best.values()].sort((a, b) => (RELATION_RANK[a.relation] ?? 3) - (RELATION_RANK[b.relation] ?? 3));
     return { ...g, related, coveredBy: related.filter(r => r.relation === 'same_story') };
@@ -502,6 +539,7 @@ export async function generateCoverageReport({ weekStart, agendaItems, boardItem
     stats: {
       agendaItems: agenda.length, boardItems: boardItemCount,
       competitorHeadlines: competitors.length, ownPublished: own.length,
+      leadingOff: leadingOffStats(own),
       gaps: gaps.length, alreadyCovered: coveredGaps.length, coverageCheck, exclusives: exclusives.length,
       inputTokens: response.usage?.input_tokens ?? null, outputTokens: response.usage?.output_tokens ?? null,
     },

@@ -202,7 +202,9 @@ upcoming events with nothing scheduled, and D's exclusives.
   `MONDAY_API_TOKEN` + `ANTHROPIC_API_KEY` (two model calls, about 50K tokens per run).
   The second call re-checks every proposed gap against D's last 30 days of published
   content — headline, URL slug and full body text — and moves gaps D has already
-  covered into an "Already covered by D" list. That check reads the `content` table,
+  covered into an "Already covered by D" list. Both calls always receive the complete
+  text of every daily "Leading Off" roundup (they cover many topics), and the page
+  shows how many were read and flags any weekday with none. That check reads the `content` table,
   so it is only as current as the last content sync (daily, 6:00am Central). Admins can also
   click **Generate report** on the tab for this week or next week.
 - **First week after enabling it:** let the server run for a day or two first so the

@@ -193,7 +193,7 @@ export default function CoverageGaps() {
   const staleSources = (report?.sources || []).filter(s => s.articles === 0);
 
   return (
-    <div style={{ maxWidth: 1100 }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
         <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Week of</label>
@@ -261,6 +261,14 @@ export default function CoverageGaps() {
             {report.stats.alreadyCovered > 0 && <Stat label="Already covered" value={report.stats.alreadyCovered} />}
             <Stat label="Exclusives" value={report.stats.exclusives} />
           </div>
+
+          {report.stats.leadingOff && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+              Read all {report.stats.leadingOff.read} Leading Off roundups from the last 30 days
+              {report.stats.leadingOff.latest ? ` (latest ${fmtDay(report.stats.leadingOff.latest)})` : ''}.
+              {report.stats.leadingOff.missing.length > 0 && ` No Leading Off found for ${report.stats.leadingOff.missing.slice(-6).map(fmtDay).join(', ')} — if that's not a holiday, the content sync may be behind.`}
+            </div>
+          )}
 
           {/* Gaps */}
           <SectionTitle count={report.gaps.length} note="what competitors are covering that D isn't">Coverage gaps</SectionTitle>
