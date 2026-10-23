@@ -10,6 +10,7 @@ import syncRoutes from './routes/sync.js';
 import settingsRoutes from './routes/settings.js';
 import insightsRoutes from './routes/insights.js';
 import goalsRoutes from './routes/goals.js';
+import coverageRoutes from './routes/coverage.js';
 import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
 import { attachUser, requireAuth, requireAdmin, bootstrapAdmin } from './auth.js';
@@ -60,6 +61,7 @@ app.use('/api/content', requireAuth, contentRoutes);
 app.use('/api/analytics', requireAuth, analyticsRoutes);
 app.use('/api/insights', requireAuth, insightsRoutes);
 app.use('/api/goals', requireAuth, goalsRoutes);
+app.use('/api/coverage', requireAuth, coverageRoutes); // run is admin-only inside coverage.js
 app.use('/api/sync', requireAuth, syncRoutes); // trigger is admin-only inside sync.js
 
 // Admin only

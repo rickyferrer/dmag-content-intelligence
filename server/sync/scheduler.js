@@ -1,6 +1,9 @@
 import cron from 'node-cron';
 import { syncWordPress } from './wordpress.js';
 import { syncCloudflareStream } from './cloudflare.js';
+import { syncCompetitors } from '../coverage/competitors.js';
+import { runCoverageReport } from '../coverage/report.js';
+import { mondayConfigured } from '../coverage/monday.js';
 import { syncGA4 } from './ga4.js';
 import { syncMarfeel } from './marfeel.js';
 import { classifyUnclassified } from '../classify/userNeeds.js';
@@ -115,6 +118,36 @@ export async function runStreamSync() {
   } catch (err) {
     console.error('[Scheduler] Cloudflare Stream sync error:', err.message);
     setSyncState('last_cloudflare_sync_status', JSON.stringify({ error: err.message, at: new Date().toISOString() }));
+  }
+}
+
+// Competitor headline ingest for the Coverage Gaps report. Feeds only reach back
+// about a day for the busiest sites, so this runs every few hours and the
+// weekly report reads the accumulated 7-day window out of the table.
+let competitorSyncRunning = false;
+export async function runCompetitorSync() {
+  if (competitorSyncRunning) return;
+  competitorSyncRunning = true;
+  try {
+    await syncCompetitors();
+  } catch (err) {
+    console.error('[Scheduler] Competitor sync error:', err.message);
+  } finally {
+    competitorSyncRunning = false;
+  }
+}
+
+// Monday-morning Coverage Gaps report for the week ahead. Skipped quietly when
+// Monday.com isn't configured, so it never fails the scheduler.
+export async function runWeeklyCoverageReport() {
+  if (!mondayConfigured() || !process.env.ANTHROPIC_API_KEY) {
+    console.log('[Scheduler] Coverage report not configured (MONDAY_API_TOKEN / ANTHROPIC_API_KEY) — skipping');
+    return;
+  }
+  try {
+    await runCoverageReport();
+  } catch (err) {
+    console.error('[Scheduler] Coverage report error:', err.message); // status already recorded by runCoverageReport
   }
 }
 
@@ -655,7 +688,18 @@ export function initScheduler() {
     }
   }, { timezone: 'America/Chicago' });
 
-  console.log('[Scheduler] Cron jobs initialized — daily full sync at 6:00am Central');
+  // Competitor headlines every 3 hours; the Coverage Gaps report Monday 7:00am
+  // Central, after the 6am sync so the week's agenda and our own published
+  // content are fresh.
+  cron.schedule('25 */3 * * *', () => { runCompetitorSync(); }, { timezone: 'America/Chicago' });
+  cron.schedule('0 7 * * 1', () => { runWeeklyCoverageReport(); }, { timezone: 'America/Chicago' });
+
+  // First deploy: don't wait for the next 3-hour tick to start collecting.
+  setTimeout(() => {
+    if (!getDb().prepare('SELECT 1 FROM competitor_articles LIMIT 1').get()) runCompetitorSync();
+  }, 30000);
+
+  console.log('[Scheduler] Cron jobs initialized — daily full sync at 6:00am Central, competitor headlines every 3h, coverage report Mondays 7:00am Central');
 }
 
 // Watermarks that should update roughly daily — flagged stale if older than this,

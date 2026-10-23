@@ -345,6 +345,37 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_goal_history_goal ON goal_history(goal_id);
 
+    -- Competitor headlines for the Coverage Gaps report (see coverage/
+    -- competitors.js). Feeds only reach back ~1 day for the busiest sites, so
+    -- they're ingested every few hours and accumulated here; the weekly report
+    -- then reads a 7-day window. Titles and links plus a short snippet only —
+    -- never article bodies. title_from_url marks sources (the Dallas Morning
+    -- News sitemap) that give no headline, so the title is a slug rewrite.
+    CREATE TABLE IF NOT EXISTS competitor_articles (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      source         TEXT NOT NULL,
+      url            TEXT NOT NULL UNIQUE,
+      title          TEXT NOT NULL,
+      title_from_url INTEGER DEFAULT 0,
+      summary        TEXT,
+      section        TEXT,
+      published_at   TEXT,
+      first_seen_at  TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_competitor_pub ON competitor_articles(published_at);
+    CREATE INDEX IF NOT EXISTS idx_competitor_source ON competitor_articles(source);
+
+    -- One generated Coverage Gaps report per week (keyed by that week's Monday).
+    -- report_json holds the whole report (agenda as read, gaps, exclusives,
+    -- resolved evidence links, source health) so the page renders from one row;
+    -- re-running a week replaces it.
+    CREATE TABLE IF NOT EXISTS coverage_reports (
+      week_start   TEXT PRIMARY KEY,
+      generated_at TEXT,
+      model        TEXT,
+      report_json  TEXT NOT NULL
+    );
+
     -- Cloudflare Stream minutes viewed, per video per day (see
     -- sync/cloudflare.js). Keyed by the Stream video UID rather than wp_id:
     -- content.stream_video_id (from the post's acf.stream_video_id) is the

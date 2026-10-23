@@ -111,6 +111,12 @@ GSC_SITE_URL=sc-domain:dmagazine.com
 CLOUDFLARE_ACCOUNT_ID=...
 CLOUDFLARE_API_TOKEN=...
 
+# Coverage Gaps report — reads the weekly agenda from the Monday.com board and
+# compares it with competitors. Personal API token (monday.com → profile picture →
+# Developers → My access tokens) from someone who can see the board; read-only.
+# Optional: if unset, the report is skipped and everything else runs normally.
+MONDAY_API_TOKEN=...
+
 # Marfeel
 MARFEEL_EMAIL=...
 MARFEEL_PASSWORD=...
@@ -178,6 +184,27 @@ gap. Stored history is never pruned.
 
 To re-run just the Cloudflare part later, an admin can trigger a sync of type
 `stream`, or run `syncCloudflareStream()` from the command above on its own.
+
+---
+
+### Coverage Gaps (competitors vs. the Monday.com agenda)
+
+The **Coverage Gaps** tab compares each week's agenda on the Monday.com board with
+what competitors have published, and lists stories they covered that D hasn't,
+upcoming events with nothing scheduled, and D's exclusives.
+
+- **Competitor headlines** are collected every 3 hours from public RSS feeds (the
+  Dallas Morning News from its sitemap) into `competitor_articles` — the busiest
+  feeds only reach back about a day, so a week of history has to be accumulated.
+  Nothing to configure; the first run starts ~30 seconds after boot. The list of
+  outlets is `COMPETITORS` in `server/coverage/competitors.js`.
+- **The report** runs automatically Mondays at 7:00am Central and uses
+  `MONDAY_API_TOKEN` + `ANTHROPIC_API_KEY` (about 40K tokens per run). Admins can also
+  click **Generate report** on the tab for this week or next week.
+- **First week after enabling it:** let the server run for a day or two first so the
+  competitor table has a few days of headlines (the report also refreshes them itself).
+- Don't deploy or save environment variables while a report is generating (about a
+  minute) — a restart interrupts it; just run it again.
 
 ---
 

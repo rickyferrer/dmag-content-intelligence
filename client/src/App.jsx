@@ -12,6 +12,7 @@ import WriterDetail from './views/WriterDetail.jsx';
 import Vulnerability from './views/Vulnerability.jsx';
 import Goals from './views/Goals.jsx';
 import Insights from './views/Insights.jsx';
+import CoverageGaps from './views/CoverageGaps.jsx';
 import Settings from './views/Settings.jsx';
 import { ComparisonProvider } from './context/ComparisonContext.jsx';
 import ComparisonToggle from './components/ComparisonToggle.jsx';
@@ -32,6 +33,7 @@ const NAV = [
   { id: 'vulnerability',  label: 'AI Vulnerability' },
   { id: 'goals',          label: 'Goals' },
   { id: 'insights',       label: 'Insights' },
+  { id: 'coverage',       label: 'Coverage Gaps' },
   { id: 'settings',       label: 'Settings' },
 ];
 
@@ -217,6 +219,7 @@ function Dashboard() {
         {view === 'vulnerability'  && <Vulnerability />}
         {view === 'goals'          && <Goals />}
         {view === 'insights'       && <Insights />}
+        {view === 'coverage'       && <CoverageGaps />}
         {view === 'settings'  && <Settings />}
       </main>
 

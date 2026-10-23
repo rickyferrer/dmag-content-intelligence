@@ -66,6 +66,10 @@ export const api = {
   getTrend: (days = 30) => apiFetch(`/analytics/trend?days=${days}`),
   getOverviewTrend: (metric, params = {}) => apiFetch('/analytics/overview-trend?' + new URLSearchParams({ metric, ...params })),
 
+  // Coverage gaps (competitor comparison against the Monday.com agenda)
+  getCoverage: (week) => apiFetch('/coverage' + (week ? `?week=${week}` : '')),
+  runCoverage: (weekStart) => apiFetch('/coverage/run', { method: 'POST', body: JSON.stringify({ weekStart }) }),
+
   // Sync
   getSyncStatus: () => apiFetch('/sync/status'),
   triggerSync: (type = 'all') => apiFetch('/sync/trigger', { method: 'POST', body: JSON.stringify({ type }) }),
