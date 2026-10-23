@@ -126,16 +126,16 @@ function Dashboard() {
           </span>
         </div>
 
-        <nav style={{ display: 'flex', gap: 4 }}>
+        <nav style={{ display: 'flex', gap: 3.6 }}>
           {NAV.map(item => (
             <button
               key={item.id}
               onClick={() => { setView(item.id); setSelectedId(null); setSelectedIssue(null); setSelectedWriter(null); }}
               style={{
-                padding: '5px 14px',
+                padding: '4.5px 12.6px',
                 border: 'none',
                 borderRadius: 4,
-                fontSize: 13,
+                fontSize: 11.7,
                 fontWeight: view === item.id ? 500 : 400,
                 background: view === item.id ? 'var(--bg-elevated)' : 'transparent',
                 color: view === item.id ? 'var(--text-primary)' : 'var(--text-muted)',
