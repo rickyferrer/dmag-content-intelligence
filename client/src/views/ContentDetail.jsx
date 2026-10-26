@@ -265,7 +265,7 @@ export default function ContentDetail({ wpId, onClose }) {
 
           {/* Content Value Breakdown — lifetime version: the whole life of this
               article, not the trailing ~30 days — GA4 readers/loyal/in-market/
-              engagement over everything since Jun 30, 2025, plus the full
+              engagement over everything since Jan 1, 2026, plus the full
               Sub Clicks/Newsletter history. Still 0-100 per article; a
               magazine issue's total (Publications) is the sum of its
               articles, so that can pass 100. Sections/Writers/User
@@ -285,7 +285,7 @@ export default function ContentDetail({ wpId, onClose }) {
               <div>
                 <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Content Value Breakdown</h3>
                 <p style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>
-                  Lifetime — everything this article has earned since Jun 30, 2025, not just the last ~30 days.
+                  Lifetime — everything this article has earned since Jan 1, 2026, not just the last ~30 days.
                 </p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
                   <div style={{ fontSize: 33, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-gold)', lineHeight: 1 }}>

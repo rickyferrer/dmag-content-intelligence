@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'fs';
 import { getDb } from '../db.js';
+import { DATA_START } from '../utils/dataStart.js';
 
 const PROPERTY_ID = process.env.GA4_PROPERTY_ID || '320675632';
 const KEY_FILE = process.env.GA4_KEY_FILE || './credentials/ga4-service-account.json';
@@ -476,14 +477,14 @@ export async function fetchWeeklyUsers(dateFrom, dateTo) {
 
 // ── Lifetime totals ───────────────────────────────────────────────────────────
 // Same three per-article queries as syncGA4's Queries 1-3 (main metrics, DFW
-// users, loyal-audience users), but over everything since LIFETIME_FLOOR
-// instead of the trailing 30 days. GA4 dedupes users across a date range, so
-// these are distinct readers over the whole window — and because the start is
-// a fixed date rather than "N days ago", the window only ever grows, so the
-// counts can only go up. The floor matches where the subscribe-click history
-// begins (see SUBSCRIBE_CLICKS_NOTE in client/src/constants/dataReliability.js),
-// so every lifetime input covers the same stretch.
-export const LIFETIME_FLOOR = '2025-06-30';
+// users, loyal-audience users), but over everything since DATA_START instead
+// of the trailing 30 days. GA4 dedupes users across a date range, so these are
+// distinct readers over the whole window — and because the start is a fixed
+// date rather than "N days ago", the window only ever grows, so the counts can
+// only go up. DATA_START is also where the subscribe-click and newsletter
+// history begin (utils/dataStart.js), so every lifetime input covers the same
+// stretch.
+export const LIFETIME_FLOOR = DATA_START;
 
 // Returns Map<wp_id, { users, pageviews, sessions, loyal_users, inmarket_users,
 // avg_engagement_time, ad_revenue }>. Path-variant handling mirrors Query 1:

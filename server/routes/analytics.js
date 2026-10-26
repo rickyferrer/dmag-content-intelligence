@@ -67,7 +67,7 @@ function computeContentSummary(db, dateFrom, dateTo, section, type, userNeed, as
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
       SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
-      FROM historical_subscribe_clicks
+      FROM subscribe_clicks_history
       WHERE date < ?
       GROUP BY wp_id
     ) hs ON hs.wp_id = c.wp_id
@@ -189,7 +189,7 @@ function fetchGroupedAggregates(db, groupCol, groupAlias, whereSql, params, asOf
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
       SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
-      FROM historical_subscribe_clicks
+      FROM subscribe_clicks_history
       WHERE date < ?
       GROUP BY wp_id
     ) hs ON hs.wp_id = c.wp_id
@@ -378,7 +378,7 @@ router.get('/by-need', (req, res) => {
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
       SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
-      FROM historical_subscribe_clicks
+      FROM subscribe_clicks_history
       WHERE date < date('now', '-30 days')
       GROUP BY wp_id
     ) hs ON hs.wp_id = c.wp_id
@@ -845,7 +845,7 @@ router.get('/by-issue', (req, res) => {
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
       SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
-      FROM historical_subscribe_clicks
+      FROM subscribe_clicks_history
       WHERE date < date('now', '-30 days')
       GROUP BY wp_id
     ) hs ON hs.wp_id = c.wp_id

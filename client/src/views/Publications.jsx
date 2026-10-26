@@ -133,7 +133,7 @@ export default function Publications({ onSelect }) {
         </span>
         <span
           style={{ fontSize: 12, color: 'var(--text-muted)', cursor: 'help' }}
-          title="An issue's shelf life is months, so every figure here covers each article's whole life, not a 30-day window: Lifetime Value is the sum of the articles' lifetime scores (each 0-100, so an issue's total can pass 100), and Users, Loyal and Pageviews are distinct readers and views since Jun 30, 2025 (or since publication, if later)."
+          title="An issue's shelf life is months, so every figure here covers each article's whole life, not a 30-day window: Lifetime Value is the sum of the articles' lifetime scores (each 0-100, so an issue's total can pass 100), and Users, Loyal and Pageviews are distinct readers and views since Jan 1, 2026 (or since publication, if later)."
         >
           · Lifetime totals
         </span>

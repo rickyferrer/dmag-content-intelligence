@@ -18,7 +18,7 @@ const COLUMNS = [
   { label: 'Section',       key: 'section' },
   { label: 'Published',     key: 'published_at' },
   { label: 'User Need',     key: 'need' },
-  { label: 'Lifetime Value', key: 'lifetime_value', info: "Everything this article has earned since Jun 30, 2025 — distinct readers, loyal readers, engagement, plus every Sub Click and Newsletter signup — not just the last ~30 days. Still 0-100 per article; a magazine issue's total (Publications) is the sum of its articles, so it can pass 100. Sections/Writers/User Needs show a different, rolling-30-day Content Value on purpose, so those stay a read on CURRENT performance." },
+  { label: 'Lifetime Value', key: 'lifetime_value', info: "Everything this article has earned since Jan 1, 2026 — distinct readers, loyal readers, engagement, plus every Sub Click and Newsletter signup — not just the last ~30 days. Still 0-100 per article; a magazine issue's total (Publications) is the sum of its articles, so it can pass 100. Sections/Writers/User Needs show a different, rolling-30-day Content Value on purpose, so those stay a read on CURRENT performance." },
   { label: 'Users',         key: 'users' },
   { label: 'Loyal Users',   key: 'loyal_users' },
   { label: 'In-Market %',   key: 'inmarket' },

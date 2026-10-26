@@ -71,7 +71,7 @@ const SCHEMA_PROMPT = `You are an analyst answering questions about D Magazine's
     - true_value: rolling ~30 days only, 0-100. This is what every grouped view (by-section,
       by-writer, by-need, Overview, AI Vulnerability) sums/averages — use this for any question
       about sections, writers, user needs, or site-wide current performance.
-    - lifetime_value: the article's WHOLE life (since 2025-06-30, or publication if later), also
+    - lifetime_value: the article's WHOLE life (since 2026-01-01, or publication if later — the dashboard's true start date), also
       0-100 per article, so SUM(lifetime_value) over a magazine issue's articles can exceed 100
       (that sum is what Publications shows). Subscribe Clicks/Newsletter use their full
       historical-backfill + live totals, and readers/loyal/in-market/engagement/ad revenue come

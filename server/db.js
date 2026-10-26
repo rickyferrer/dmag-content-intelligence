@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { DATA_START } from './utils/dataStart.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'content.db');
@@ -445,9 +446,14 @@ function initSchema() {
       inmarket_users      INTEGER DEFAULT 0,
       avg_engagement_time REAL DEFAULT 0,
       ad_revenue          REAL DEFAULT 0,
-      updated_at          TEXT
+      updated_at          TEXT,
+      since               TEXT
     )
   `);
+  // `since` = the DATA_START the counts were taken from. Lets
+  // sync/lifetimeMetrics.js replace (not high-water-mark) rows measured from a
+  // different start date when DATA_START changes.
+  try { db.exec('ALTER TABLE lifetime_metrics ADD COLUMN since TEXT'); } catch {}
   // WordPress featured-image URL (a display-size thumbnail, not the full
   // original) — see sync/wordpress.js's fetchMediaUrls().
   try { db.exec('ALTER TABLE content ADD COLUMN cover_image_url TEXT'); } catch {}
@@ -509,10 +515,26 @@ function initSchema() {
       SELECT wp_id, week_start AS period_start,
              COALESCE(newsletter_signup, 0) + COALESCE(newsletter_signup_inline, 0) + COALESCE(newsletter_signup_modal, 0) AS signups
         FROM historical_newsletter_signups
+        WHERE week_start >= '${DATA_START}'
       UNION ALL
       SELECT wp_id, date AS period_start,
              COALESCE(newsletter_signup, 0) + COALESCE(newsletter_signup_inline, 0) + COALESCE(newsletter_signup_modal, 0) AS signups
         FROM newsletter_signups_daily
+        WHERE date >= '${DATA_START}'
+  `);
+
+  // The subscribe-click history the dashboard actually counts: only days from
+  // DATA_START on (see utils/dataStart.js). The table itself may hold earlier
+  // days from the original backfill; they stay stored but are never read, so
+  // moving DATA_START either way needs no data change. Every "history + live"
+  // total reads this view, not the table — only the writers
+  // (sync/subscribeClicksDaily.js and the backfill script) touch the table.
+  db.exec('DROP VIEW IF EXISTS subscribe_clicks_history');
+  db.exec(`
+    CREATE VIEW subscribe_clicks_history AS
+      SELECT wp_id, date, subscribe_clicks
+        FROM historical_subscribe_clicks
+        WHERE date >= '${DATA_START}'
   `);
 
   // One-time fix: site_daily_metrics.newsletter_signups has been labeled one

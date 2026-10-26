@@ -8,15 +8,15 @@
 // only for a manual deep backfill.
 //
 // Usage: node --env-file=.env server/scripts/backfill-historical-subscribe-clicks.mjs [--days N]
-//   --days: how far back to request (default 400 — GA4 will just return
-//   nothing for dates beyond its own retention window, no harm in asking).
+//   --days: how far back to request (default: back to DATA_START, see
+//   utils/dataStart.js — earlier days are stored but never counted).
 import { getDb } from '../db.js';
 import { fetchHistoricalSubscribeClicks } from '../sync/ga4.js';
-import { saveSubscribeClicks } from '../sync/subscribeClicksDaily.js';
+import { saveSubscribeClicks, daysSinceStart } from '../sync/subscribeClicksDaily.js';
 
 const args = process.argv.slice(2);
 const daysIdx = args.indexOf('--days');
-const days = daysIdx !== -1 ? parseInt(args[daysIdx + 1], 10) : 400;
+const days = daysIdx !== -1 ? parseInt(args[daysIdx + 1], 10) : daysSinceStart();
 
 console.log(`Fetching subscribe_click history for the last ${days} days from GA4...`);
 

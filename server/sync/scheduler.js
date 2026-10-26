@@ -71,7 +71,7 @@ export function scoreContent(db) {
     ) h ON h.wp_id = c.wp_id
     LEFT JOIN (
       SELECT wp_id, SUM(subscribe_clicks) AS hist_subscribe_clicks
-      FROM historical_subscribe_clicks
+      FROM subscribe_clicks_history
       WHERE date < date('now', '-30 days')
       GROUP BY wp_id
     ) hs ON hs.wp_id = c.wp_id

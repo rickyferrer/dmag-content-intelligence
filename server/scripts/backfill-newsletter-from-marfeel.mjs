@@ -6,9 +6,10 @@
 // Safe to re-run (upserts on wp_id+date).
 //
 // Usage: node server/scripts/backfill-newsletter-from-marfeel.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--dry-run]
-//   defaults: --start 2026-08-03 --end 2026-10-01 (the stretch between the
-//   Marfeel CSV export, which stopped Aug 2, and the daily capture, which
-//   began Oct 2). Needs MARFEEL_EMAIL / MARFEEL_PASSWORD in the environment.
+//   defaults: --start DATA_START (utils/dataStart.js) --end 2026-10-01 — i.e.
+//   everything before the daily capture began on Oct 2, with the weeks already
+//   saved from the Marfeel CSV export (Apr 6 - Aug 2) skipped automatically.
+//   Needs MARFEEL_EMAIL / MARFEEL_PASSWORD in the environment.
 //
 // Like the CSV importer, days already inside a stored weekly bucket are
 // skipped (nothing is counted twice) and today is never written. Rows only
@@ -17,13 +18,14 @@
 import { getDb } from '../db.js';
 import { fetchNewsletterSignupsRange } from '../sync/marfeel.js';
 import { centralDate } from '../sync/newsletterDaily.js';
+import { DATA_START } from '../utils/dataStart.js';
 
 const args = process.argv.slice(2);
 const argValue = (name, fallback) => {
   const i = args.indexOf(name);
   return i !== -1 && args[i + 1] ? args[i + 1] : fallback;
 };
-const start = argValue('--start', '2026-08-03');
+const start = argValue('--start', DATA_START);
 const end = argValue('--end', '2026-10-01');
 const dryRun = args.includes('--dry-run');
 
@@ -48,9 +50,13 @@ for (const c of db.prepare('SELECT wp_id, url FROM content WHERE url IS NOT NULL
   urlToWpId.set(norm.endsWith('/') ? norm.slice(0, -1) : norm + '/', c.wp_id);
 }
 
-const lastWeek = db.prepare('SELECT MAX(week_start) AS w FROM historical_newsletter_signups').get().w;
-const coveredThrough = lastWeek ? addDays(lastWeek, 6) : null;
-if (coveredThrough) console.log(`Weekly history already covers through ${coveredThrough} — days on or before that are skipped.`);
+// A day is already covered if it falls inside ANY stored weekly bucket (a week
+// starts on its Monday and runs seven days). Checked per week, not against the
+// newest week, so days before the oldest stored week can still be filled in.
+const weekStarts = db.prepare('SELECT DISTINCT week_start FROM historical_newsletter_signups').all().map(r => r.week_start);
+const coveredDays = new Set();
+for (const w of weekStarts) for (let i = 0; i < 7; i++) coveredDays.add(addDays(w, i));
+if (weekStarts.length) console.log(`Weekly history already covers ${coveredDays.size} days (${weekStarts.length} weeks) — those days are skipped.`);
 const today = centralDate(0);
 
 const upsert = db.prepare(`
@@ -67,7 +73,7 @@ const unmatchedUrls = new Map();
 const toWrite = [];
 for (const r of rows) {
   const n = r.newsletter_signup + r.newsletter_signup_inline + r.newsletter_signup_modal;
-  if (r.date >= today || (coveredThrough && r.date <= coveredThrough)) { skipped++; continue; }
+  if (r.date >= today || coveredDays.has(r.date)) { skipped++; continue; }
   const wpId = urlToWpId.get(r.url);
   if (!wpId) {
     unmatched++;

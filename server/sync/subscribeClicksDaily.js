@@ -15,13 +15,19 @@
 // reaches back to the last stored day, closing the existing gap.
 
 import { fetchHistoricalSubscribeClicks } from './ga4.js';
+import { DATA_START } from '../utils/dataStart.js';
 
 // Always re-read at least this far back. Past the 30-day boundary the history
 // is what counts (callers filter `date < 30 days ago`), and GA4 can revise a
 // recent day slightly, so the overlap keeps those days accurate.
 const MIN_LOOKBACK_DAYS = 35;
-// Same ceiling the one-off script defaults to; GA4 returns nothing older.
-const MAX_LOOKBACK_DAYS = 400;
+// Never ask further back than DATA_START (see utils/dataStart.js): anything
+// earlier is ignored by every reader (the subscribe_clicks_history view), so
+// fetching it is wasted. Also capped at the ceiling GA4 will answer for.
+const MAX_LOOKBACK_DAYS = 800;
+const DAY_MS = 86400000;
+export const daysSinceStart = (today = new Date().toISOString().slice(0, 10)) =>
+  Math.min(MAX_LOOKBACK_DAYS, Math.round((Date.parse(today) - Date.parse(DATA_START)) / DAY_MS) + 1);
 // Re-read from this many days before the newest stored day, since the old
 // script also stored the day it ran (partial) and GA4 settles late.
 const OVERLAP_DAYS = 2;
@@ -71,10 +77,10 @@ export function saveSubscribeClicks(db, rows, contentRows) {
 // stored day is older than that (a gap to close). `today` is injectable for
 // tests; both dates are plain YYYY-MM-DD.
 export function lookbackDaysFor(latestStored, today = new Date().toISOString().slice(0, 10)) {
-  if (!latestStored) return MAX_LOOKBACK_DAYS;
-  const msPerDay = 86400000;
-  const gap = Math.round((Date.parse(today) - Date.parse(latestStored)) / msPerDay) + OVERLAP_DAYS;
-  return Math.min(MAX_LOOKBACK_DAYS, Math.max(MIN_LOOKBACK_DAYS, gap));
+  const limit = daysSinceStart(today);
+  if (!latestStored) return limit;
+  const gap = Math.round((Date.parse(today) - Date.parse(latestStored)) / DAY_MS) + OVERLAP_DAYS;
+  return Math.min(limit, Math.max(MIN_LOOKBACK_DAYS, gap));
 }
 
 // Ends at yesterday so a half-finished day is never stored.
