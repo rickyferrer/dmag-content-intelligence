@@ -16,8 +16,9 @@ export const SUBSCRIBE_CLICKS_NOTE =
 // History before that is saved two ways: a one-time Marfeel CSV export
 // covering April 6 – August 2, 2026 (weekly), and, from October 2, 2026, the
 // daily sync saves each day as it completes (see sync/newsletterDaily.js). The
-// days in between — August 3 to October 1 — are only included once a Marfeel
-// export covering them has been imported with
+// days in between — August 3 to October 1 — are only included once they have
+// been backfilled with server/scripts/backfill-newsletter-from-marfeel.mjs
+// (straight from Marfeel's report API) or a Marfeel export imported with
 // server/scripts/import-historical-newsletter-signups.mjs; delete that
 // sentence from the note below when it has been.
 export const NEWSLETTER_NOTE =

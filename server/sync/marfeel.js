@@ -237,6 +237,74 @@ async function fetchNewsletterSignupsForGoal(token, goalMetric, days = 30) {
   return results;
 }
 
+// Per-page, per-DAY newsletter signups for an arbitrary date range, from the
+// dashboard report endpoint (the one marfeelQuery uses). Unlike the realtime
+// endpoint above, this one DOES take an absolute date range — checked against
+// the realtime number: per-article totals over the last 30 complete days
+// matched the app's live rolling counts exactly. That is what makes a gap in
+// the saved history recoverable without a manual CSV export.
+//
+// Returns [{ url, date, newsletter_signup, newsletter_signup_inline,
+// newsletter_signup_modal }] — only non-zero days, production hosts only,
+// url normalized the same way as the rest of this file. Each metric comes
+// back as its own series keyed by a per-url hash; the page of urls is the
+// same across the three metrics, so they are joined on url.
+export async function fetchNewsletterSignupsRange(startDate, endDate) {
+  const token = await getToken();
+  const metrics = NEWSLETTER_GOALS.map(g => g.replace('goal::', 'conversions::'));
+  const limit = 2000;
+  const byUrlDay = new Map(); // `${url}|${date}` → row
+  let from = 0;
+
+  while (true) {
+    const res = await fetch(`${API_BASE}/dashboard/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        attribution: 'model_score_last_hit',
+        dates: { groupedBy: 'daily', range: { start: startDate, end: endDate } },
+        filters: [],
+        groupBy: ['url'],
+        metrics,
+        order: { metric: metrics[0], sort: 'DESC' },
+        granularity: 'none',
+        discardOld: 'false',
+        from,
+        limit,
+      }),
+    });
+    if (res.status === 204) break; // past the last page
+    if (!res.ok) throw new Error(`Marfeel range query failed: ${res.status} — ${(await res.text()).slice(0, 200)}`);
+
+    const series = await res.json();
+    let pageUrls = 0;
+    for (const m of series) {
+      const column = m.metric.replace('conversions::', '');
+      const keyToUrl = new Map();
+      for (const v of m.actualData?.values || []) keyToUrl.set(v.key, v.items?.[0]?.value);
+      pageUrls = Math.max(pageUrls, keyToUrl.size);
+      for (const row of m.actualData?.data || []) {
+        const date = String(row.label).slice(0, 10);
+        for (const [key, url] of keyToUrl) {
+          const n = row[key] || 0;
+          if (!n || !url || !isProductionUrl(url)) continue;
+          let norm = url;
+          try { const u = new URL(url); norm = u.origin + u.pathname; } catch { /* keep raw */ }
+          const k = `${norm}|${date}`;
+          if (!byUrlDay.has(k)) {
+            byUrlDay.set(k, { url: norm, date, newsletter_signup: 0, newsletter_signup_inline: 0, newsletter_signup_modal: 0 });
+          }
+          byUrlDay.get(k)[column] += n;
+        }
+      }
+    }
+    if (pageUrls < limit) break;
+    from += limit;
+  }
+
+  return [...byUrlDay.values()];
+}
+
 // newsletter_signup_modal is the newest. Checked against the live API when it
 // was added: 27 signups on 12 pages over 30 days, almost all on pages the other
 // two goals had recorded nothing for, so it adds to them rather than
