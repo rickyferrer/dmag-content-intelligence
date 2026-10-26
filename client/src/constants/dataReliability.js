@@ -4,12 +4,10 @@
 // Writers, and Sources all say the same thing instead of drifting — update
 // the dates here if either backfill is ever re-run/extended.
 //
-// Subscribe Clicks: historical_subscribe_clicks is a GA4-sourced backfill
-// (server/scripts/backfill-historical-subscribe-clicks.mjs), safe to re-run
-// periodically since GA4 supports arbitrary historical ranges — but it's a
-// manual script, not on the daily cron, so its floor only moves forward when
-// someone re-runs it. June 30, 2025 was the earliest date GA4 had on hand
-// the last time it ran.
+// Subscribe Clicks: historical_subscribe_clicks is GA4-sourced and kept
+// current by the daily analytics sync (sync/subscribeClicksDaily.js), so only
+// its floor is fixed: June 30, 2025 was the earliest date GA4 had on hand
+// when it was first backfilled.
 export const SUBSCRIBE_CLICKS_NOTE =
   'Live clicks from the last ~30 days, plus historical clicks backfilled from GA4 back to June 30, 2025.';
 

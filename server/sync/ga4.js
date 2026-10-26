@@ -482,14 +482,14 @@ export async function fetchWeeklyUsers(dateFrom, dateTo) {
 // (see the comment above fetchUsersForRange) and GA4 only returns rows that
 // actually had events, so this stays sparse rather than one row per
 // page-per-day regardless of activity.
-export async function fetchHistoricalSubscribeClicks(lookbackDays = 400) {
+export async function fetchHistoricalSubscribeClicks(lookbackDays = 400, endDate = 'today') {
   const rows = [];
   const limit = 100000;
   let offset = 0;
 
   while (true) {
     const data = await ga4Request(':runReport', {
-      dateRanges: [{ startDate: `${lookbackDays}daysAgo`, endDate: 'today' }],
+      dateRanges: [{ startDate: `${lookbackDays}daysAgo`, endDate }],
       dimensions: [{ name: 'pagePath' }, { name: 'date' }],
       metrics: [{ name: 'eventCount' }],
       dimensionFilter: {

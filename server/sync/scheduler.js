@@ -14,6 +14,7 @@ import { getScoreParams, valueToScore, shapeForLifetime } from '../utils/trueVal
 import { runBenchmarkCheck } from '../utils/benchmarkCheck.js';
 import { syncGA4Sources, syncGA4DailyTotals, syncGA4ByDevice } from './ga4.js';
 import { recordNewsletterYesterday } from './newsletterDaily.js';
+import { captureSubscribeClicks } from './subscribeClicksDaily.js';
 import { syncGSC, syncGSCTrend } from './gsc.js';
 
 let syncRunning = false;
@@ -245,6 +246,17 @@ export async function runAnalyticsSync() {
 
     // Get all content with URLs for matching
     const content = db.prepare('SELECT wp_id, url FROM content').all();
+
+    // ── GA4 subscribe-click history — save days before they leave the rolling
+    // 30-day window, so Lifetime Value can't shrink as an issue ages. Must run
+    // before scoreContent() below, which reads historical_subscribe_clicks.
+    // Its own try/catch so a failure never costs the rest of the sync.
+    try {
+      const saved = await captureSubscribeClicks(db, content);
+      console.log(`[Scheduler] Subscribe-click history: re-read ${saved.lookbackDays} days, ${saved.matched} article-days saved (${saved.unmatched} paths matched no article)`);
+    } catch (err) {
+      console.error('[Scheduler] Saving subscribe-click history failed:', err.message);
+    }
 
     // ── Diagnostic: log sample URL formats to diagnose Marfeel matching ──────
     if (marfeelMetrics.size > 0) {
