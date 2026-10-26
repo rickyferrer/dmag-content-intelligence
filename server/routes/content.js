@@ -418,10 +418,10 @@ router.get('/:id', (req, res) => {
   const settings = getSettings();
   const breakdown = getValueBreakdown(item, settings);
 
-  // Lifetime breakdown — the same model over the article's whole life, with
-  // no 100 ceiling on the count dimensions: Subscribe Clicks/Newsletter use
-  // their full historical+rolling totals and Users/Loyal/In-Market/Engagement/
-  // Ad-Revenue come from lifetime_metrics. See utils/trueValue.js's
+  // Lifetime breakdown — the same model and 0-100 scale over the article's
+  // whole life: Subscribe Clicks/Newsletter use their full historical+rolling
+  // totals and Users/Loyal/In-Market/Engagement/Ad-Revenue come from
+  // lifetime_metrics. See utils/trueValue.js's
   // shapeForLifetime() for why this differs from `breakdown` above (which
   // mirrors the rolling true_value every grouped view — Sections, Writers,
   // etc. — uses).
@@ -435,8 +435,7 @@ router.get('/:id', (req, res) => {
       subscribeClicksTotal: item.subscribe_clicks_total,
       newsletterSignupsTotal: item.newsletter_signups_total,
     }, lifetimeMetrics),
-    settings,
-    { lifetime: true }
+    settings
   );
 
   const categories = db.prepare(

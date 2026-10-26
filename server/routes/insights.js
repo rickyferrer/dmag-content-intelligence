@@ -71,16 +71,16 @@ const SCHEMA_PROMPT = `You are an analyst answering questions about D Magazine's
     - true_value: rolling ~30 days only, 0-100. This is what every grouped view (by-section,
       by-writer, by-need, Overview, AI Vulnerability) sums/averages — use this for any question
       about sections, writers, user needs, or site-wide current performance.
-    - lifetime_value: the article's WHOLE life (since 2025-06-30, or publication if later) and
-      OPEN-ENDED — no 0-100 ceiling on the subscribe/newsletter/loyal-reader dimensions, so it
-      works as a running total and can exceed 100. Subscribe Clicks/Newsletter use their full
+    - lifetime_value: the article's WHOLE life (since 2025-06-30, or publication if later), also
+      0-100 per article, so SUM(lifetime_value) over a magazine issue's articles can exceed 100
+      (that sum is what Publications shows). Subscribe Clicks/Newsletter use their full
       historical-backfill + live totals, and readers/loyal/in-market/engagement/ad revenue come
       from the lifetime_metrics table (one row per article: users, pageviews, sessions,
       loyal_users, inmarket_users, avg_engagement_time, ad_revenue — distinct readers over the
       whole period, which only ever grow). Use this for "how has this specific article / issue
       performed" / "what's our best content ever" questions — it's the score the Content tab
       sorts/filters by, and Publications sums it per magazine issue. Don't compare it to
-      true_value: different scale and window.
+      true_value: same scale but a different window.
     Both are 0 for the same reasons: excluded_from_scoring or not enough traffic yet — filter
     > 0 for "best content" questions, matching whichever column the question is actually about.
   - ALWAYS join to only the latest snapshot per article:

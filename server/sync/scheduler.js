@@ -10,7 +10,7 @@ import { classifyUnclassified } from '../classify/userNeeds.js';
 import { classifyVoicesUnclassified } from '../classify/voice.js';
 import { classifyCategoriesUnclassified } from './nlp.js';
 import { getDb, setSyncState, getSettings } from '../db.js';
-import { getScoreParams, valueToScore, lifetimeValueToScore, shapeForLifetime } from '../utils/trueValue.js';
+import { getScoreParams, valueToScore, shapeForLifetime } from '../utils/trueValue.js';
 import { runBenchmarkCheck } from '../utils/benchmarkCheck.js';
 import { syncGA4Sources, syncGA4DailyTotals, syncGA4ByDevice, syncGA4Lifetime } from './ga4.js';
 import { saveLifetimeMetrics } from './lifetimeMetrics.js';
@@ -24,7 +24,7 @@ let classifyRunning = false;
 let categoryClassifyRunning = false;
 let voiceClassifyRunning = false;
 
-// Score all content using the shared strategic-efficiency model (see
+// Score all content on a 0-100 scale using the shared strategic-efficiency model (see
 // utils/trueValue.js): per-reader conversion/quality rates vs. benchmarks,
 // weighted by strategic priority, shrunk by a traffic-confidence factor.
 //
@@ -33,13 +33,12 @@ let voiceClassifyRunning = false;
 //     every grouped rollup (Sections, Writers, User Needs, Overview,
 //     Insights, AI Vulnerability) — kept intentionally "current period" per
 //     the VP of Audience Development's call to keep those views rolling.
-//   - lifetime_value: the same model over the article's whole life, with no
-//     100 ceiling on the count dimensions so it works as a running total.
-//     Users/Loyal/In-Market/Engagement/Ad-Revenue come from lifetime_metrics
-//     (GA4 for the whole date range), and Subscribe Clicks/Newsletter factor
-//     in the full historical-backfill + rolling total (see shapeForLifetime()).
-//     Shown for individual articles (Content tab, article detail) and summed
-//     per magazine issue (Publications).
+//   - lifetime_value: the same model and 0-100 scale over the article's whole
+//     life. Users/Loyal/In-Market/Engagement/Ad-Revenue come from
+//     lifetime_metrics (GA4 for the whole date range), and Subscribe Clicks/
+//     Newsletter factor in the full historical-backfill + rolling total (see
+//     shapeForLifetime()). Shown per article (Content tab, article detail) and
+//     summed per magazine issue (Publications) — the sum can exceed 100.
 //
 // Excluded items (homepage, section fronts) are set to 0 on both so they
 // never appear as top content.
@@ -93,7 +92,7 @@ export function scoreContent(db) {
         loyal_users: row.lm_loyal_users, inmarket_users: row.lm_inmarket_users,
         avg_engagement_time: row.lm_avg_engagement_time, ad_revenue: row.lm_ad_revenue,
       });
-      update.run(valueToScore(row, p), lifetimeValueToScore(lifetimeSnap, p), row.id);
+      update.run(valueToScore(row, p), valueToScore(lifetimeSnap, p), row.id);
       scored++;
     }
   })();

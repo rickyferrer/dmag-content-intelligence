@@ -18,7 +18,7 @@ const COLUMNS = [
   { label: 'Section',       key: 'section' },
   { label: 'Published',     key: 'published_at' },
   { label: 'User Need',     key: 'need' },
-  { label: 'Lifetime Value', key: 'lifetime_value', info: "Everything this article has earned since Jun 30, 2025 — distinct readers, loyal readers, engagement, plus every Sub Click and Newsletter signup — not just the last ~30 days. Open-ended: no 0-100 ceiling, so it keeps growing and an issue's total is a true sum of its articles. Sections/Writers/User Needs show a different, rolling-30-day Content Value on purpose, so those stay a read on CURRENT performance." },
+  { label: 'Lifetime Value', key: 'lifetime_value', info: "Everything this article has earned since Jun 30, 2025 — distinct readers, loyal readers, engagement, plus every Sub Click and Newsletter signup — not just the last ~30 days. Still 0-100 per article; a magazine issue's total (Publications) is the sum of its articles, so it can pass 100. Sections/Writers/User Needs show a different, rolling-30-day Content Value on purpose, so those stay a read on CURRENT performance." },
   { label: 'Users',         key: 'users' },
   { label: 'Loyal Users',   key: 'loyal_users' },
   { label: 'In-Market %',   key: 'inmarket' },
@@ -230,10 +230,6 @@ export default function ContentTable({ onSelect }) {
     activeFilters.push({ key: 'issue', label: `Issue: ${opt?.label || filters.issue}` });
   }
 
-  // Lifetime Value has no 100 ceiling, so scale the bars to the biggest on the
-  // page (never below 100, so a page of small scores doesn't all look full).
-  const lifetimeBarMax = Math.max(100, ...rows.map(r => r.lifetime_value || 0));
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Filter bar */}
@@ -438,7 +434,7 @@ export default function ContentTable({ onSelect }) {
                   <NeedBadge need={row.user_need} />
                 </td>
                 <td style={{ padding: '9px 12px', minWidth: 120 }}>
-                  <TrueValueBar value={row.lifetime_value} max={lifetimeBarMax} />
+                  <TrueValueBar value={row.lifetime_value} max={100} />
                 </td>
                 <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {fmt(row.ga4_users)}

@@ -112,20 +112,13 @@ const cap100 = x => Math.max(0, Math.min(100, x));
 // passes the DB-backed values from getScoreParams()/getBenchmarks() so a
 // recalibration (see utils/benchmarkCheck.js) takes effect without a
 // code deploy.
-//
-// `uncapCounts` (lifetime scoring only) lifts the 100 ceiling on the three raw-
-// count dimensions — subscribe clicks, newsletter signups, loyal readers — so
-// an article that keeps earning keeps scoring higher and an issue's total is a
-// true sum of its articles. The three rate dimensions stay capped: they are
-// per-reader quality signals (a share can't pass 100%), not totals.
-export function dimensionScores(snap, benchmarks = DEFAULT_BENCHMARKS, { uncapCounts = false } = {}) {
+export function dimensionScores(snap, benchmarks = DEFAULT_BENCHMARKS) {
   const s = signals(snap);
   const per1k = s.users > 0 ? 1000 / s.users : 0;
-  const count = uncapCounts ? (x => Math.max(0, x)) : cap100;
   return {
-    subscription: count(s.sub        / benchmarks.subCount   * 100),
-    newsletter:   count(s.newsletter / benchmarks.newsCount  * 100),
-    loyal:        count(s.loyalUsers / benchmarks.loyalCount * 100),
+    subscription: cap100(s.sub        / benchmarks.subCount   * 100),
+    newsletter:   cap100(s.newsletter / benchmarks.newsCount  * 100),
+    loyal:        cap100(s.loyalUsers / benchmarks.loyalCount * 100),
     inmarket:     cap100((s.users > 0 ? s.inmarketUsers / s.users : 0) / benchmarks.inmarketShare * 100),
     engagement:   cap100(s.engagement / benchmarks.engSeconds * 100),
     ad:           cap100((s.ad * per1k) / benchmarks.adRpm * 100),
@@ -156,17 +149,10 @@ export function valueToScore(snap, p) {
   return Math.round(compositeScore(dimensionScores(snap, p.benchmarks), p) * confidence(snap, p.confK));
 }
 
-// Open-ended lifetime score — see shapeForLifetime() below. Same model and
-// weights as valueToScore, but the count dimensions are uncapped.
-export function lifetimeValueToScore(snap, p) {
-  return Math.round(compositeScore(dimensionScores(snap, p.benchmarks, { uncapCounts: true }), p) * confidence(snap, p.confK));
-}
-
 // Full breakdown for the detail panel — reconciles exactly with the table score.
-// Pass { lifetime: true } for the open-ended lifetime version.
-export function getValueBreakdown(snap, settings, { lifetime = false } = {}) {
+export function getValueBreakdown(snap, settings) {
   const p = getScoreParams(settings);
-  const d = dimensionScores(snap, p.benchmarks, { uncapCounts: lifetime });
+  const d = dimensionScores(snap, p.benchmarks);
   const conf = confidence(snap, p.confK);
   const composite = compositeScore(d, p);
   return {
@@ -178,15 +164,16 @@ export function getValueBreakdown(snap, settings, { lifetime = false } = {}) {
   };
 }
 
-// "Lifetime Content Value" — the same model fed an article's WHOLE life
-// instead of the trailing ~30 days, and with no 0-100 ceiling on the count
-// dimensions (see lifetimeValueToScore) so it works as a running total:
-// Subscribe Clicks and Newsletter use their combined historical + live totals,
-// and Users/Loyal/In-Market/Engagement/Ad-Revenue come from `lifetime`
-// (lifetime_metrics, fed by syncGA4Lifetime — GA4 asked for the whole date
-// range at once, so users are distinct readers over the article's life). The
-// counts only move up; engagement and in-market share are rates and can move
-// either way.
+// "Lifetime Content Value" — the same model, weights and 0-100 scale fed an
+// article's WHOLE life instead of the trailing ~30 days: Subscribe Clicks and
+// Newsletter use their combined historical + live totals, and Users/Loyal/
+// In-Market/Engagement/Ad-Revenue come from `lifetime` (lifetime_metrics, fed
+// by syncGA4Lifetime — GA4 asked for the whole date range at once, so users
+// are distinct readers over the article's life). The counts only move up
+// (until an article hits a dimension's ceiling); engagement and in-market
+// share are rates and can move either way. An article's score stays 0-100;
+// it's a magazine issue's TOTAL (the sum over its articles) that can exceed
+// 100 — see /by-issue in routes/analytics.js.
 //
 // Deliberately a SEPARATE score from true_value/dimensionScores() above, not a
 // replacement — true_value stays rolling-only and keeps feeding the grouped

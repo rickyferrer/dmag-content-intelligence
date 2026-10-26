@@ -808,7 +808,7 @@ router.get('/by-writer', (req, res) => {
 // GET /api/analytics/by-issue
 // Groups /publications/{pub}/{year}/{month}/* content into issues. Every figure
 // is a lifetime total for the issue's articles (Lifetime Value is the sum of
-// their open-ended lifetime scores) — a magazine issue's shelf life is months,
+// their lifetime scores, each 0-100, so the total can pass 100) — a magazine issue's shelf life is months,
 // not the 30-day window the rest of the dashboard reads.
 router.get('/by-issue', (req, res) => {
   const db = getDb();
