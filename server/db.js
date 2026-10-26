@@ -428,6 +428,26 @@ function initSchema() {
   // for individual articles (Content tab, article detail) — true_value keeps
   // feeding every grouped rollup (Sections, Writers, User Needs, etc.).
   try { db.exec('ALTER TABLE analytics_snapshots ADD COLUMN lifetime_value REAL'); } catch {}
+  // Per-article LIFETIME GA4 totals (since LIFETIME_FLOOR in sync/ga4.js) — the
+  // inputs to lifetime_value. Unlike analytics_snapshots' rolling-30-day
+  // numbers, GA4 is asked for the whole date range at once, so users/loyal/
+  // in-market are distinct readers over the article's life (never a sum of
+  // days). One row per article, refreshed by the daily sync; the count
+  // columns only ever move up (see sync/lifetimeMetrics.js), engagement is a
+  // rate and just takes the latest value.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS lifetime_metrics (
+      wp_id               INTEGER PRIMARY KEY,
+      users               INTEGER DEFAULT 0,
+      pageviews           INTEGER DEFAULT 0,
+      sessions            INTEGER DEFAULT 0,
+      loyal_users         INTEGER DEFAULT 0,
+      inmarket_users      INTEGER DEFAULT 0,
+      avg_engagement_time REAL DEFAULT 0,
+      ad_revenue          REAL DEFAULT 0,
+      updated_at          TEXT
+    )
+  `);
   // WordPress featured-image URL (a display-size thumbnail, not the full
   // original) — see sync/wordpress.js's fetchMediaUrls().
   try { db.exec('ALTER TABLE content ADD COLUMN cover_image_url TEXT'); } catch {}

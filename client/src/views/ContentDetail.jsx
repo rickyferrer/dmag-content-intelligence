@@ -263,12 +263,14 @@ export default function ContentDetail({ wpId, onClose }) {
             );
           })()}
 
-          {/* Content Value Breakdown — lifetime version: Subscribe Clicks and
-              Newsletter factor in this article's FULL historical record, not
-              just the trailing ~30 days, since this panel is about judging
-              one specific piece's track record. Sections/Writers/User Needs/
-              Publications use a different, rolling-only version of this same
-              score on purpose — see item.true_value below for that number. */}
+          {/* Content Value Breakdown — lifetime version: the whole life of this
+              article, not the trailing ~30 days — GA4 readers/loyal/in-market/
+              engagement over everything since Jun 30, 2025, plus the full
+              Sub Clicks/Newsletter history. Open-ended: the count dimensions
+              have no 100 ceiling, so this number is a running total that
+              sums cleanly across a magazine issue. Sections/Writers/User
+              Needs use a different, rolling-only version of this same score
+              on purpose — see item.true_value below for that number. */}
           {item.lifetimeValueBreakdown && (() => {
             const bd = item.lifetimeValueBreakdown;
             const DIMS = [
@@ -283,13 +285,13 @@ export default function ContentDetail({ wpId, onClose }) {
               <div>
                 <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Content Value Breakdown</h3>
                 <p style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>
-                  Lifetime — Sub Clicks/Newsletter count this article's full history, not just the last ~30 days.
+                  Lifetime — everything this article has earned since Jun 30, 2025, not just the last ~30 days. Open-ended: it keeps growing as the article keeps earning.
                 </p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
                   <div style={{ fontSize: 33, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-gold)', lineHeight: 1 }}>
                     {bd.score}
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>/ 100</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>lifetime value</div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {DIMS.map(({ key, label, info }) => {
@@ -302,19 +304,28 @@ export default function ContentDetail({ wpId, onClose }) {
                           <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{sub}</span>
                         </div>
                         <div style={{ height: 4, background: 'var(--bg-elevated)', borderRadius: 2 }}>
-                          <div style={{ height: '100%', width: `${sub}%`, background: 'var(--accent-gold)', opacity: 0.8, borderRadius: 2 }} />
+                          <div style={{ height: '100%', width: `${Math.min(100, sub)}%`, background: 'var(--accent-gold)', opacity: 0.8, borderRadius: 2 }} />
                         </div>
                       </div>
                     );
                   })}
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
-                  Weighted blend = {bd.composite}/100, × {(bd.confidence * 100).toFixed(0)}% traffic confidence = {bd.score}.
+                  Weighted blend = {bd.composite}, × {(bd.confidence * 100).toFixed(0)}% traffic confidence = {bd.score}. A dimension can pass 100 here — bars stop at 100, the score doesn't.
                 </div>
                 {item.true_value != null && (
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
                     Rolling (last ~30 days) Content Value — the number Sections/Writers/User Needs total up — is{' '}
                     <strong style={{ color: 'var(--text-secondary)' }}>{item.true_value}</strong>.
+                  </div>
+                )}
+                {item.lifetimeMetrics && (
+                  <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '4px 0', marginTop: 10 }}>
+                    <StatRow label="Lifetime Pageviews" value={fmt(item.lifetimeMetrics.pageviews)} />
+                    <StatRow label="Lifetime Readers" value={fmt(item.lifetimeMetrics.users)} />
+                    <StatRow label="Lifetime Loyal Readers" value={fmt(item.lifetimeMetrics.loyal_users)} />
+                    <StatRow label="Lifetime In-Market (DFW)" value={fmt(item.lifetimeMetrics.inmarket_users)} />
+                    <StatRow label="Avg Engagement" value={item.lifetimeMetrics.avg_engagement_time ? Math.round(item.lifetimeMetrics.avg_engagement_time) + 's' : '—'} />
                   </div>
                 )}
               </div>

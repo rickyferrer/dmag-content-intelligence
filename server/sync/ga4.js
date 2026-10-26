@@ -474,6 +474,113 @@ export async function fetchWeeklyUsers(dateFrom, dateTo) {
     .sort((a, b) => a.iso_week.localeCompare(b.iso_week));
 }
 
+// ── Lifetime totals ───────────────────────────────────────────────────────────
+// Same three per-article queries as syncGA4's Queries 1-3 (main metrics, DFW
+// users, loyal-audience users), but over everything since LIFETIME_FLOOR
+// instead of the trailing 30 days. GA4 dedupes users across a date range, so
+// these are distinct readers over the whole window — and because the start is
+// a fixed date rather than "N days ago", the window only ever grows, so the
+// counts can only go up. The floor matches where the subscribe-click history
+// begins (see SUBSCRIBE_CLICKS_NOTE in client/src/constants/dataReliability.js),
+// so every lifetime input covers the same stretch.
+export const LIFETIME_FLOOR = '2025-06-30';
+
+// Returns Map<wp_id, { users, pageviews, sessions, loyal_users, inmarket_users,
+// avg_engagement_time, ad_revenue }>. Path-variant handling mirrors Query 1:
+// several pagePath spellings can normalize to one article, so values are
+// accumulated, not assigned.
+export async function syncGA4Lifetime() {
+  const db = getDb();
+  const content = db.prepare("SELECT wp_id, url FROM content WHERE url IS NOT NULL AND url != ''").all();
+  const pathMap = new Map();
+  for (const row of content) {
+    try {
+      const path = new URL(row.url).pathname.replace(/\/$/, '') || '/';
+      pathMap.set(path, row.wp_id);
+      pathMap.set(path + '/', row.wp_id);
+    } catch {
+      pathMap.set(row.url, row.wp_id);
+    }
+  }
+  const wpIdFor = (pagePath) => {
+    const path = (pagePath || '').replace(/\/$/, '') || '/';
+    return pathMap.get(path) || pathMap.get(path + '/');
+  };
+
+  const dateRanges = [{ startDate: LIFETIME_FLOOR, endDate: 'today' }];
+  const result = new Map();
+  const entry = (wpId) => {
+    if (!result.has(wpId)) {
+      result.set(wpId, { users: 0, pageviews: 0, sessions: 0, loyal_users: 0, inmarket_users: 0, avg_engagement_time: 0, ad_revenue: 0 });
+    }
+    return result.get(wpId);
+  };
+
+  const engTotal = new Map(); // wp_id → sum(avgSessionDuration × sessions)
+  const mainRows = await ga4Paged({
+    dateRanges,
+    dimensions: [{ name: 'pagePath' }],
+    metrics: [
+      { name: 'screenPageViews' },
+      { name: 'activeUsers' },
+      { name: 'averageSessionDuration' },
+      { name: 'sessions' },
+      { name: 'publisherAdImpressions' },
+    ],
+  });
+  for (const row of mainRows) {
+    const wpId = wpIdFor(row.pagePath);
+    if (!wpId) continue;
+    const m = entry(wpId);
+    const sessions = Math.round(row.sessions || 0);
+    m.pageviews += Math.round(row.screenPageViews || 0);
+    m.users += Math.round(row.activeUsers || 0);
+    m.sessions += sessions;
+    m.ad_revenue += adRevenueFromImpressions(row.publisherAdImpressions);
+    engTotal.set(wpId, (engTotal.get(wpId) || 0) + (row.averageSessionDuration || 0) * sessions);
+  }
+  for (const [wpId, m] of result) {
+    m.avg_engagement_time = m.sessions > 0 ? engTotal.get(wpId) / m.sessions : 0;
+  }
+
+  const geoRows = await ga4Paged({
+    dateRanges,
+    dimensions: [{ name: 'pagePath' }, { name: 'city' }],
+    metrics: [{ name: 'activeUsers' }],
+    dimensionFilter: { orGroup: { expressions: DFW_CITIES.map(c => ({
+      filter: { fieldName: 'city', stringFilter: { matchType: 'CONTAINS', value: c } },
+    })) } },
+  });
+  for (const row of geoRows) {
+    if (!isDFW(row.city)) continue;
+    const wpId = wpIdFor(row.pagePath);
+    if (wpId && result.has(wpId)) result.get(wpId).inmarket_users += Math.round(row.activeUsers || 0);
+  }
+
+  const loyalRows = await ga4Paged({
+    dateRanges,
+    dimensions: [{ name: 'pagePath' }, { name: 'audienceName' }],
+    metrics: [{ name: 'activeUsers' }],
+    dimensionFilter: {
+      filter: {
+        fieldName: 'audienceName',
+        stringFilter: { matchType: 'EXACT', value: '3 or more sessions, last 30 days' },
+      },
+    },
+  });
+  for (const row of loyalRows) {
+    const wpId = wpIdFor(row.pagePath);
+    if (wpId && result.has(wpId)) result.get(wpId).loyal_users += Math.round(row.activeUsers || 0);
+  }
+
+  // Both are subsets of total users — same reasoning as the cap in syncGA4.
+  for (const m of result.values()) {
+    m.loyal_users = Math.min(m.loyal_users, m.users);
+    m.inmarket_users = Math.min(m.inmarket_users, m.users);
+  }
+  return result;
+}
+
 // One-off historical backfill of per-article subscribe_click events, keyed
 // by page + day. Unlike Marfeel's newsletter-signup endpoint (no lookback
 // at all, see marfeel.js), GA4's Data API supports arbitrary historical date

@@ -806,7 +806,10 @@ router.get('/by-writer', (req, res) => {
 });
 
 // GET /api/analytics/by-issue
-// Groups /publications/{pub}/{year}/{month}/* content into issues
+// Groups /publications/{pub}/{year}/{month}/* content into issues. Every figure
+// is a lifetime total for the issue's articles (Lifetime Value is the sum of
+// their open-ended lifetime scores) — a magazine issue's shelf life is months,
+// not the 30-day window the rest of the dashboard reads.
 router.get('/by-issue', (req, res) => {
   const db = getDb();
   const { publication, year } = req.query;
@@ -818,15 +821,22 @@ router.get('/by-issue', (req, res) => {
   // silently showing only the live number for older issues.
   const rows = db.prepare(`
     SELECT c.wp_id, c.url, c.title, c.published_at, c.cover_image_url, c.publication_override,
-      a.lifetime_value, a.ga4_users, a.ga4_pageviews,
+      a.lifetime_value,
+      COALESCE(lm.users, a.ga4_users) AS ga4_users,
+      COALESCE(lm.pageviews, a.ga4_pageviews) AS ga4_pageviews,
       (COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS ga4_subscribe_clicks,
       (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS mf_newsletter_signups,
-      a.ga4_loyal_users, a.ga4_avg_engagement_time
+      COALESCE(lm.loyal_users, a.ga4_loyal_users) AS ga4_loyal_users,
+      COALESCE(lm.avg_engagement_time, a.ga4_avg_engagement_time) AS ga4_avg_engagement_time
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest FROM analytics_snapshots GROUP BY wp_id
     ) lx ON c.wp_id = lx.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
+    -- Lifetime users/pageviews/loyal/engagement (see sync/ga4.js's
+    -- syncGA4Lifetime). An article the lifetime pass hasn't reached yet falls
+    -- back to its rolling numbers rather than showing nothing.
+    LEFT JOIN lifetime_metrics lm ON lm.wp_id = c.wp_id
     LEFT JOIN (
       SELECT wp_id, SUM(signups) AS hist_newsletter_signups
       FROM newsletter_history_all

@@ -116,6 +116,9 @@ export default function PublicationDetail({ issue, onClose }) {
           <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
             Issue Summary
           </h3>
+          <p style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 8 }}>
+            Lifetime totals across the issue's articles (since Jun 30, 2025, or publication if later) — not a 30-day window.
+          </p>
           <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '4px 0' }}>
             <StatRow label="Articles" value={issue.article_count} />
             <StatRow label="Lifetime Value" value={issue.total_lifetime_value != null ? Math.round(issue.total_lifetime_value) : '—'} accent />

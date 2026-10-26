@@ -10,9 +10,10 @@ import { classifyUnclassified } from '../classify/userNeeds.js';
 import { classifyVoicesUnclassified } from '../classify/voice.js';
 import { classifyCategoriesUnclassified } from './nlp.js';
 import { getDb, setSyncState, getSettings } from '../db.js';
-import { getScoreParams, valueToScore, shapeForLifetime } from '../utils/trueValue.js';
+import { getScoreParams, valueToScore, lifetimeValueToScore, shapeForLifetime } from '../utils/trueValue.js';
 import { runBenchmarkCheck } from '../utils/benchmarkCheck.js';
-import { syncGA4Sources, syncGA4DailyTotals, syncGA4ByDevice } from './ga4.js';
+import { syncGA4Sources, syncGA4DailyTotals, syncGA4ByDevice, syncGA4Lifetime } from './ga4.js';
+import { saveLifetimeMetrics } from './lifetimeMetrics.js';
 import { recordNewsletterYesterday } from './newsletterDaily.js';
 import { captureSubscribeClicks } from './subscribeClicksDaily.js';
 import { syncGSC, syncGSCTrend } from './gsc.js';
@@ -23,18 +24,22 @@ let classifyRunning = false;
 let categoryClassifyRunning = false;
 let voiceClassifyRunning = false;
 
-// Score all content on a 0-100 scale using the shared strategic-efficiency model
-// (see utils/trueValue.js): per-reader conversion/quality rates vs. benchmarks,
+// Score all content using the shared strategic-efficiency model (see
+// utils/trueValue.js): per-reader conversion/quality rates vs. benchmarks,
 // weighted by strategic priority, shrunk by a traffic-confidence factor.
 //
 // Computes TWO scores per article:
-//   - true_value: rolling ~30-day performance only. Feeds every grouped
-//     rollup (Sections, Writers, User Needs, Publications, Overview,
+//   - true_value: rolling ~30-day performance only, on a 0-100 scale. Feeds
+//     every grouped rollup (Sections, Writers, User Needs, Overview,
 //     Insights, AI Vulnerability) — kept intentionally "current period" per
 //     the VP of Audience Development's call to keep those views rolling.
-//   - lifetime_value: same model, but Subscribe Clicks/Newsletter factor in
-//     the full historical-backfill + rolling total (see shapeForLifetime()).
-//     Only ever shown for individual articles (Content tab, article detail).
+//   - lifetime_value: the same model over the article's whole life, with no
+//     100 ceiling on the count dimensions so it works as a running total.
+//     Users/Loyal/In-Market/Engagement/Ad-Revenue come from lifetime_metrics
+//     (GA4 for the whole date range), and Subscribe Clicks/Newsletter factor
+//     in the full historical-backfill + rolling total (see shapeForLifetime()).
+//     Shown for individual articles (Content tab, article detail) and summed
+//     per magazine issue (Publications).
 //
 // Excluded items (homepage, section fronts) are set to 0 on both so they
 // never appear as top content.
@@ -48,13 +53,17 @@ export function scoreContent(db) {
       a.ga4_users, a.ga4_pageviews, a.ga4_subscribe_clicks, a.mf_newsletter_signups,
       a.ga4_loyal_users, a.ga4_inmarket_pageviews, a.ga4_avg_engagement_time, a.ga4_ad_revenue,
       (COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS subscribe_clicks_total,
-      (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS newsletter_signups_total
+      (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS newsletter_signups_total,
+      lm.wp_id AS lm_wp_id, lm.users AS lm_users, lm.pageviews AS lm_pageviews, lm.sessions AS lm_sessions,
+      lm.loyal_users AS lm_loyal_users, lm.inmarket_users AS lm_inmarket_users,
+      lm.avg_engagement_time AS lm_avg_engagement_time, lm.ad_revenue AS lm_ad_revenue
     FROM analytics_snapshots a
     JOIN (
       SELECT wp_id, MAX(snapshot_at) AS latest
       FROM analytics_snapshots GROUP BY wp_id
     ) lx ON a.wp_id = lx.wp_id AND a.snapshot_at = lx.latest
     JOIN content c ON c.wp_id = a.wp_id
+    LEFT JOIN lifetime_metrics lm ON lm.wp_id = a.wp_id
     LEFT JOIN (
       SELECT wp_id, SUM(signups) AS hist_newsletter_signups
       FROM newsletter_history_all
@@ -79,13 +88,17 @@ export function scoreContent(db) {
       const lifetimeSnap = shapeForLifetime(row, {
         subscribeClicksTotal: row.subscribe_clicks_total,
         newsletterSignupsTotal: row.newsletter_signups_total,
+      }, row.lm_wp_id == null ? null : {
+        users: row.lm_users, pageviews: row.lm_pageviews, sessions: row.lm_sessions,
+        loyal_users: row.lm_loyal_users, inmarket_users: row.lm_inmarket_users,
+        avg_engagement_time: row.lm_avg_engagement_time, ad_revenue: row.lm_ad_revenue,
       });
-      update.run(valueToScore(row, p), valueToScore(lifetimeSnap, p), row.id);
+      update.run(valueToScore(row, p), lifetimeValueToScore(lifetimeSnap, p), row.id);
       scored++;
     }
   })();
 
-  console.log(`[Scheduler] Scored ${scored} items 0-100 (strategic efficiency model)`);
+  console.log(`[Scheduler] Scored ${scored} items (strategic efficiency model)`);
 }
 
 export async function runContentSync() {
@@ -246,6 +259,18 @@ export async function runAnalyticsSync() {
 
     // Get all content with URLs for matching
     const content = db.prepare('SELECT wp_id, url FROM content').all();
+
+    // ── GA4 lifetime totals — distinct readers over each article's whole life,
+    // the inputs to lifetime_value. Must run before scoreContent() below. Its
+    // own try/catch: if it fails, the previous lifetime_metrics rows stand
+    // (the counts only ever move up) and the rest of the sync carries on.
+    try {
+      const lifetime = await syncGA4Lifetime();
+      const saved = saveLifetimeMetrics(db, lifetime);
+      console.log(`[Scheduler] Lifetime metrics: ${saved} articles saved`);
+    } catch (err) {
+      console.error('[Scheduler] Lifetime GA4 pass failed:', err.message);
+    }
 
     // ── GA4 subscribe-click history — save days before they leave the rolling
     // 30-day window, so Lifetime Value can't shrink as an issue ages. Must run

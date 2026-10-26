@@ -112,13 +112,20 @@ const cap100 = x => Math.max(0, Math.min(100, x));
 // passes the DB-backed values from getScoreParams()/getBenchmarks() so a
 // recalibration (see utils/benchmarkCheck.js) takes effect without a
 // code deploy.
-export function dimensionScores(snap, benchmarks = DEFAULT_BENCHMARKS) {
+//
+// `uncapCounts` (lifetime scoring only) lifts the 100 ceiling on the three raw-
+// count dimensions — subscribe clicks, newsletter signups, loyal readers — so
+// an article that keeps earning keeps scoring higher and an issue's total is a
+// true sum of its articles. The three rate dimensions stay capped: they are
+// per-reader quality signals (a share can't pass 100%), not totals.
+export function dimensionScores(snap, benchmarks = DEFAULT_BENCHMARKS, { uncapCounts = false } = {}) {
   const s = signals(snap);
   const per1k = s.users > 0 ? 1000 / s.users : 0;
+  const count = uncapCounts ? (x => Math.max(0, x)) : cap100;
   return {
-    subscription: cap100(s.sub        / benchmarks.subCount   * 100),
-    newsletter:   cap100(s.newsletter / benchmarks.newsCount  * 100),
-    loyal:        cap100(s.loyalUsers / benchmarks.loyalCount * 100),
+    subscription: count(s.sub        / benchmarks.subCount   * 100),
+    newsletter:   count(s.newsletter / benchmarks.newsCount  * 100),
+    loyal:        count(s.loyalUsers / benchmarks.loyalCount * 100),
     inmarket:     cap100((s.users > 0 ? s.inmarketUsers / s.users : 0) / benchmarks.inmarketShare * 100),
     engagement:   cap100(s.engagement / benchmarks.engSeconds * 100),
     ad:           cap100((s.ad * per1k) / benchmarks.adRpm * 100),
@@ -149,10 +156,17 @@ export function valueToScore(snap, p) {
   return Math.round(compositeScore(dimensionScores(snap, p.benchmarks), p) * confidence(snap, p.confK));
 }
 
+// Open-ended lifetime score — see shapeForLifetime() below. Same model and
+// weights as valueToScore, but the count dimensions are uncapped.
+export function lifetimeValueToScore(snap, p) {
+  return Math.round(compositeScore(dimensionScores(snap, p.benchmarks, { uncapCounts: true }), p) * confidence(snap, p.confK));
+}
+
 // Full breakdown for the detail panel — reconciles exactly with the table score.
-export function getValueBreakdown(snap, settings) {
+// Pass { lifetime: true } for the open-ended lifetime version.
+export function getValueBreakdown(snap, settings, { lifetime = false } = {}) {
   const p = getScoreParams(settings);
-  const d = dimensionScores(snap, p.benchmarks);
+  const d = dimensionScores(snap, p.benchmarks, { uncapCounts: lifetime });
   const conf = confidence(snap, p.confK);
   const composite = compositeScore(d, p);
   return {
@@ -164,31 +178,45 @@ export function getValueBreakdown(snap, settings) {
   };
 }
 
-// "Lifetime Content Value" — same model, but Subscribe Clicks and Newsletter
-// are fed their combined historical-backfill + rolling totals instead of
-// just the trailing ~30 days, so an older article's full track record counts
-// instead of only what it's done recently. This is the ONLY thing that
-// differs: Users/Loyal/In-Market/Engagement/Ad-Revenue have no historical
-// per-day archive at the article level, so GA4 only ever gives us a rolling
-// 30-day snapshot for those regardless — there's no "lifetime" version of
-// them to compute.
+// "Lifetime Content Value" — the same model fed an article's WHOLE life
+// instead of the trailing ~30 days, and with no 0-100 ceiling on the count
+// dimensions (see lifetimeValueToScore) so it works as a running total:
+// Subscribe Clicks and Newsletter use their combined historical + live totals,
+// and Users/Loyal/In-Market/Engagement/Ad-Revenue come from `lifetime`
+// (lifetime_metrics, fed by syncGA4Lifetime — GA4 asked for the whole date
+// range at once, so users are distinct readers over the article's life). The
+// counts only move up; engagement and in-market share are rates and can move
+// either way.
 //
-// Deliberately a SEPARATE score from true_value/dimensionScores() above,
-// not a replacement — true_value stays rolling-only and keeps feeding every
-// grouped view (Sections, Writers, User Needs, Publications, Overview,
-// Insights, AI Vulnerability), which the VP of Audience Development wants
-// to keep reflecting current performance. This lifetime version is only for
-// judging individual articles (the Content tab and article detail panel),
-// where "how has this piece actually resonated with readers" is the point —
-// see server/routes/content.js.
+// Deliberately a SEPARATE score from true_value/dimensionScores() above, not a
+// replacement — true_value stays rolling-only and keeps feeding the grouped
+// rollups (Sections, Writers, User Needs, Overview, Insights, AI
+// Vulnerability), which the VP of Audience Development wants to keep
+// reflecting current performance. Lifetime is for judging individual articles
+// and magazine issues (Content tab, article detail, Publications) — see
+// server/routes/content.js and routes/analytics.js's /by-issue.
 //
 // `totals` is { subscribeClicksTotal, newsletterSignupsTotal } — the same
 // historical+live merge already computed for display everywhere else in the
 // app (search this codebase for the "non-overlap merge" pattern).
-export function shapeForLifetime(snap, totals) {
-  return {
+// `lifetime` is a lifetime_metrics row, or null/undefined for an article it
+// hasn't reached yet — that article falls back to its rolling numbers, so it
+// still gets a score until the next sync fills it in.
+export function shapeForLifetime(snap, totals, lifetime = null) {
+  const shaped = {
     ...snap,
     ga4_subscribe_clicks:  totals.subscribeClicksTotal  ?? snap.ga4_subscribe_clicks,
     mf_newsletter_signups: totals.newsletterSignupsTotal ?? snap.mf_newsletter_signups,
+  };
+  if (!lifetime) return shaped;
+  return {
+    ...shaped,
+    ga4_users:               lifetime.users,
+    ga4_pageviews:           lifetime.pageviews,
+    ga4_sessions:            lifetime.sessions,
+    ga4_loyal_users:         lifetime.loyal_users,
+    ga4_inmarket_pageviews:  lifetime.inmarket_users, // DFW users — field name predates that clarification
+    ga4_avg_engagement_time: lifetime.avg_engagement_time,
+    ga4_ad_revenue:          lifetime.ad_revenue,
   };
 }

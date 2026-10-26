@@ -16,4 +16,4 @@ Find endpoints and their query params from the code instead of a list that goes 
 - `grep -n "router.get" server/routes/*.js` for routes (mounted under `/api/analytics`, `/api/content`, `/api/insights`, `/api/goals`; see `server/index.js`)
 - read the handler for the query params it accepts (period/date range, filters, sort)
 
-Report conventions: scores are 0-100 Content Value (`true_value` is rolling ~30 days, `lifetime_value` is per-article only); every GA4 metric is a trailing-30-day figure per snapshot. Say which period/filters a number came from, and pull the data before summarizing rather than answering from memory.
+Report conventions: `true_value` is the 0-100 rolling-~30-day Content Value; `lifetime_value` is an OPEN-ENDED running total (no 100 ceiling) over the article's whole life since 2025-06-30, summed per magazine issue on Publications; the per-snapshot GA4 metrics are trailing-30-day figures, except the lifetime_metrics table / Publications columns, which are lifetime. Say which period/filters a number came from, and pull the data before summarizing rather than answering from memory.

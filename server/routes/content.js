@@ -366,12 +366,17 @@ router.get('/:id', (req, res) => {
       (COALESCE(h.hist_newsletter_signups, 0) + COALESCE(a.mf_newsletter_signups, 0)) AS newsletter_signups_total,
       (COALESCE(hs.hist_subscribe_clicks, 0) + COALESCE(a.ga4_subscribe_clicks, 0)) AS subscribe_clicks_total,
       vm.minutes_total AS video_minutes_total, vm.minutes_30d AS video_minutes_30d,
-      (vm.minutes_30d / NULLIF(a.ga4_pageviews, 0)) AS video_min_per_pageview
+      (vm.minutes_30d / NULLIF(a.ga4_pageviews, 0)) AS video_min_per_pageview,
+      lm.users AS lifetime_users, lm.pageviews AS lifetime_pageviews, lm.sessions AS lifetime_sessions,
+      lm.loyal_users AS lifetime_loyal_users, lm.inmarket_users AS lifetime_inmarket_users,
+      lm.avg_engagement_time AS lifetime_avg_engagement_time, lm.ad_revenue AS lifetime_ad_revenue,
+      lm.wp_id AS lifetime_wp_id
     FROM content c
     LEFT JOIN (
       SELECT wp_id, MAX(snapshot_at) as latest FROM analytics_snapshots GROUP BY wp_id
     ) latest_snap ON c.wp_id = latest_snap.wp_id
     LEFT JOIN analytics_snapshots a ON a.wp_id = latest_snap.wp_id AND a.snapshot_at = latest_snap.latest
+    LEFT JOIN lifetime_metrics lm ON lm.wp_id = c.wp_id
     LEFT JOIN (
       SELECT wp_id, SUM(signups) AS hist_newsletter_signups
       FROM newsletter_history_all
@@ -413,17 +418,25 @@ router.get('/:id', (req, res) => {
   const settings = getSettings();
   const breakdown = getValueBreakdown(item, settings);
 
-  // Lifetime breakdown — same model, Subscribe Clicks/Newsletter fed their
-  // full historical+rolling totals instead of rolling-only. See
-  // utils/trueValue.js's shapeForLifetime() for why this differs from
-  // `breakdown` above (which mirrors the rolling true_value every grouped
-  // view — Sections, Writers, etc. — uses).
+  // Lifetime breakdown — the same model over the article's whole life, with
+  // no 100 ceiling on the count dimensions: Subscribe Clicks/Newsletter use
+  // their full historical+rolling totals and Users/Loyal/In-Market/Engagement/
+  // Ad-Revenue come from lifetime_metrics. See utils/trueValue.js's
+  // shapeForLifetime() for why this differs from `breakdown` above (which
+  // mirrors the rolling true_value every grouped view — Sections, Writers,
+  // etc. — uses).
+  const lifetimeMetrics = item.lifetime_wp_id == null ? null : {
+    users: item.lifetime_users, pageviews: item.lifetime_pageviews, sessions: item.lifetime_sessions,
+    loyal_users: item.lifetime_loyal_users, inmarket_users: item.lifetime_inmarket_users,
+    avg_engagement_time: item.lifetime_avg_engagement_time, ad_revenue: item.lifetime_ad_revenue,
+  };
   const lifetimeBreakdown = getValueBreakdown(
     shapeForLifetime(item, {
       subscribeClicksTotal: item.subscribe_clicks_total,
       newsletterSignupsTotal: item.newsletter_signups_total,
-    }),
-    settings
+    }, lifetimeMetrics),
+    settings,
+    { lifetime: true }
   );
 
   const categories = db.prepare(
@@ -446,7 +459,7 @@ router.get('/:id', (req, res) => {
     ORDER BY week_start ASC
   `).all(wpId);
 
-  res.json({ ...item, history, sources, categories, voices, trueValueBreakdown: breakdown, lifetimeValueBreakdown: lifetimeBreakdown, newsletterHistory });
+  res.json({ ...item, history, sources, categories, voices, trueValueBreakdown: breakdown, lifetimeValueBreakdown: lifetimeBreakdown, lifetimeMetrics, newsletterHistory });
 });
 
 // PUT /api/content/:id/publication — manually assign (or clear) which
