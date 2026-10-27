@@ -4,6 +4,7 @@ import { fetchUsersForRange, fetchLoyalUsersForRange, fetchInMarketUsersForRange
 import { computeTrendRisk } from '../utils/gscTrend.js';
 import { pctChange, previousPeriodRange } from '../utils/period.js';
 import { CUSTOM_CHANNELS, customChannelFor } from '../utils/channels.js';
+import { DATA_START } from '../utils/dataStart.js';
 
 const router = Router();
 
@@ -1609,11 +1610,13 @@ router.get('/vulnerability', (req, res) => {
     if (SEARCH_SOURCES.has(row.source)) srcMap[row.wp_id].search_pv += row.pv;
   }
 
-  const where = ['c.user_need IS NOT NULL'];
-  const params = [];
+  // Only content published since the dashboard's start date; a later dateFrom
+  // can narrow this but never reach back past it.
+  const floor = dateFrom && dateFrom > DATA_START ? dateFrom : DATA_START;
+  const where = ['c.user_need IS NOT NULL', 'c.published_at >= ?'];
+  const params = [floor];
   if (section)  { where.push('c.section = ?'); params.push(section); }
   if (userNeed) { where.push('c.user_need = ?'); params.push(userNeed); }
-  if (dateFrom) { where.push('c.published_at >= ?'); params.push(dateFrom); }
   if (dateTo)   { where.push('c.published_at <= ?'); params.push(dateTo + 'T23:59:59'); }
 
   const articles = db.prepare(`
