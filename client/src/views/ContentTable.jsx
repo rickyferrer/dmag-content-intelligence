@@ -84,6 +84,7 @@ export default function ContentTable({ onSelect }) {
     sortBy: 'lifetime_value', order: 'desc', page: 1, limit: 50,
   });
   const [searchInput, setSearchInput] = useState('');
+  const [metricsWindow, setMetricsWindow] = useState(null); // {from,to} when the columns cover the selected range
 
   const filterRef = useRef(filters);
   filterRef.current = filters;
@@ -101,6 +102,7 @@ export default function ContentTable({ onSelect }) {
         if (requestId !== requestIdRef.current) return;
         setRows(res.data);
         setPagination(res.pagination);
+        setMetricsWindow(res.metrics_window || null);
       })
       .catch(console.error)
       .finally(() => {
@@ -370,6 +372,12 @@ export default function ContentTable({ onSelect }) {
         </div>
       )}
 
+      <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+        {metricsWindow
+          ? <>Users, Loyal Users, In-Market %, Sub Clicks, Newsletter and Eng. Time cover <strong style={{ color: 'var(--text-secondary)' }}>{metricsWindow.from}</strong> to <strong style={{ color: 'var(--text-secondary)' }}>{metricsWindow.to}</strong>, matching the date range. Lifetime Value stays whole-life.</>
+          : <>Users, Loyal Users, In-Market % and Eng. Time cover the last 30 days; Sub Clicks and Newsletter follow the date range. Lifetime Value stays whole-life.</>}
+      </div>
+
       {filters.device && (
         <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--text-muted)' }}>
           Users, Loyal Users, In-Market %, Sub Clicks and Eng. Time show {filters.device}-only GA4 figures for the last 30 days
@@ -443,8 +451,8 @@ export default function ContentTable({ onSelect }) {
                   {fmt(row.ga4_loyal_users)}
                 </td>
                 <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {row.ga4_users > 0 && row.ga4_inmarket_pageviews != null
-                    ? Math.min(100, Math.round(row.ga4_inmarket_pageviews / row.ga4_users * 100)) + '%'
+                  {row.ga4_users > 0 && (row.ga4_inmarket_users ?? row.ga4_inmarket_pageviews) != null
+                    ? Math.min(100, Math.round((row.ga4_inmarket_users ?? row.ga4_inmarket_pageviews) / row.ga4_users * 100)) + '%'
                     : '—'}
                 </td>
                 <td style={{ padding: '9px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>

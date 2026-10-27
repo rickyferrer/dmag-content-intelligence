@@ -491,6 +491,12 @@ export const LIFETIME_FLOOR = DATA_START;
 // several pagePath spellings can normalize to one article, so values are
 // accumulated, not assigned.
 export async function syncGA4Lifetime() {
+  return fetchGA4ArticleMetrics(LIFETIME_FLOOR, 'today');
+}
+
+// The same per-article pass over any window — the Content tab's date range
+// runs it for "last 7 days", "this year", etc. (see utils/rangeMetrics.js).
+export async function fetchGA4ArticleMetrics(startDate, endDate) {
   const db = getDb();
   const content = db.prepare("SELECT wp_id, url FROM content WHERE url IS NOT NULL AND url != ''").all();
   const pathMap = new Map();
@@ -508,7 +514,7 @@ export async function syncGA4Lifetime() {
     return pathMap.get(path) || pathMap.get(path + '/');
   };
 
-  const dateRanges = [{ startDate: LIFETIME_FLOOR, endDate: 'today' }];
+  const dateRanges = [{ startDate, endDate }];
   const result = new Map();
   const entry = (wpId) => {
     if (!result.has(wpId)) {

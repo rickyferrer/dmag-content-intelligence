@@ -5,6 +5,7 @@ import { classifyCategoriesSingle } from '../sync/nlp.js';
 import { classifyVoiceSingle, VOICE_TAXONOMY } from '../classify/voice.js';
 import { getValueBreakdown, shapeForLifetime } from '../utils/trueValue.js';
 import { pctChange, previousPeriodRange } from '../utils/period.js';
+import { resolveWindow, getWindowMetrics, applyWindow, dbWindowMetrics, applyDbWindow } from '../utils/rangeMetrics.js';
 
 // The four real publications (see PUB_DISPLAY/PUB_LABELS duplicated the same
 // way across client/src/views/{ContentTable,Publications,PublicationDetail}.jsx)
@@ -84,7 +85,8 @@ function buildContentWhere(query, dateOverride, { includeTrending = false } = {}
 }
 
 // GET /api/content
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
+  try {
   const db = getDb();
   const {
     sortBy = 'lifetime_value', order = 'desc',
@@ -140,7 +142,27 @@ router.get('/', (req, res) => {
   const { where, params } = buildContentWhere(req.query, null, { includeTrending: req.query.includeTrending === '1' });
   const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
-  const rows = db.prepare(`
+  // A date range other than the default trailing 30 days means the metric
+  // columns should cover that range (see utils/rangeMetrics.js). The device
+  // split only exists for the trailing 30 days, so it keeps the snapshot.
+  const win = device ? null : resolveWindow(req.query.dateFrom, req.query.dateTo);
+  // The default trailing-30-day range keeps the stored GA4 snapshot (already
+  // exact), but Sub Clicks / Newsletter in the snapshot are whole-life totals,
+  // so those two still follow the range.
+  const dbOnly = !device && !win && !!req.query.dateFrom;
+  const WINDOW_SORT = {
+    pageviews: r => r.ga4_pageviews,
+    users: r => r.ga4_users,
+    loyal_users: r => r.ga4_loyal_users,
+    inmarket: r => (r.ga4_users > 0 ? r.ga4_inmarket_users / r.ga4_users : -1),
+    engagement: r => r.ga4_avg_engagement_time ?? -1,
+    subscribe_clicks: r => r.subscribe_clicks_total,
+    newsletter: r => r.newsletter_signups_total,
+  };
+  const sortInJs = (!!win && !!WINDOW_SORT[sortBy])
+    || (dbOnly && (sortBy === 'subscribe_clicks' || sortBy === 'newsletter'));
+
+  let rows = db.prepare(`
     SELECT
       c.wp_id, c.slug, c.url, c.title, c.content_type, c.author, c.writer,
       c.published_at, c.section, c.user_need, c.user_need_secondary,
@@ -195,8 +217,43 @@ router.get('/', (req, res) => {
     ${device ? `LEFT JOIN content_device_metrics d ON d.wp_id = c.wp_id AND d.device = '${device}'` : ''}
     ${whereClause}
     ORDER BY ${sortCol} ${sortDir}
-    LIMIT ? OFFSET ?
-  `).all(...params, limitNum, offset);
+    ${sortInJs ? '' : 'LIMIT ? OFFSET ?'}
+  `).all(...params, ...(sortInJs ? [] : [limitNum, offset]));
+
+  if (dbOnly) {
+    const to = req.query.dateTo || new Date().toISOString().slice(0, 10);
+    const dbm = dbWindowMetrics(db, req.query.dateFrom, to);
+    for (const r of rows) applyDbWindow(r, dbm.get(r.wp_id));
+    if (sortInJs) {
+      const key = WINDOW_SORT[sortBy];
+      const dir = sortDir === 'ASC' ? 1 : -1;
+      rows.sort((a, b) => dir * (key(a) - key(b)) || a.wp_id - b.wp_id);
+      rows = rows.slice(offset, offset + limitNum);
+    }
+  }
+
+  if (win) {
+    let windowMetrics = new Map();
+    try {
+      if (!win.empty) windowMetrics = await getWindowMetrics(win.from, win.to);
+    } catch (err) {
+      // GA4 unavailable: fall back to the stored trailing-30-day columns
+      // rather than failing the whole list.
+      console.error('[Server] /api/content window metrics failed:', err.message);
+      win.failed = true;
+    }
+    if (!win.failed) {
+      for (const r of rows) applyWindow(r, windowMetrics.get(r.wp_id));
+      if (sortInJs) {
+        const key = WINDOW_SORT[sortBy];
+        const dir = sortDir === 'ASC' ? 1 : -1;
+        rows.sort((a, b) => dir * (key(a) - key(b)) || a.wp_id - b.wp_id);
+        rows = rows.slice(offset, offset + limitNum);
+      }
+    } else if (sortInJs) {
+      rows = rows.slice(offset, offset + limitNum);
+    }
+  }
 
   const total = db.prepare(`
     SELECT COUNT(*) as count FROM content c ${whereClause}
@@ -205,7 +262,13 @@ router.get('/', (req, res) => {
   res.json({
     data: rows,
     pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
+    metrics_window: win && !win.failed ? { from: win.from, to: win.to } : null,
+    db_window: dbOnly ? { from: req.query.dateFrom, to: req.query.dateTo || null } : null,
   });
+  } catch (err) {
+    console.error('[Server] /api/content error:', err.message);
+    res.status(500).json({ error: 'Failed to load content', message: err.message });
+  }
 });
 
 // GET /api/content/summary
