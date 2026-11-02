@@ -19,6 +19,9 @@
 // line item name; sync/shopify.js's issue parser and shopify_product_map work
 // on that the same as on a real product.
 
+import { DATA_START } from '../utils/dataStart.js';
+import { lookbackStart, parseIssueFromTitle } from './shopify.js';
+
 // RFC 4180 reader: quoted fields may hold commas, "" quotes and newlines
 // (order notes and addresses do).
 export function parseCsv(text) {
@@ -122,4 +125,33 @@ export function saveCsvSales(db, sales) {
     for (const row of sales.values()) insert.run(row);
   })();
   return sales.size;
+}
+
+// The whole import, shared by the Settings upload (routes/analytics.js) and the
+// command-line script. Only days from DATA_START up to (not including) the
+// earliest day the live sync has saved are taken, so nothing is counted twice;
+// with no live data yet, up to the start of the live sync's lookback. Returns a
+// summary with each product's units and the issue it will count toward; writes
+// nothing when `dryRun`.
+export function importShopifyHistory(db, text, { dryRun = false } = {}) {
+  const firstLive = db.prepare("SELECT MIN(date) AS d FROM shopify_sales_daily WHERE product_id NOT LIKE 'csv:%'").get().d;
+  const before = firstLive || lookbackStart();
+  const { sales, orders, skipped } = salesFromCsv(text, { from: DATA_START, before });
+  const overrides = new Map(db.prepare('SELECT product_id, issue FROM shopify_product_map').all().map(r => [r.product_id, r.issue]));
+  const byProduct = new Map();
+  for (const r of sales.values()) byProduct.set(r.product_id, (byProduct.get(r.product_id) || 0) + r.units);
+  const products = [...byProduct].map(([id, units]) => {
+    const title = id.slice(4);
+    const override = overrides.get(id);
+    const issue = override === 'ignore' ? null : (override || parseIssueFromTitle(title));
+    return { title, units, issue };
+  }).sort((a, b) => b.units - a.units);
+  if (!dryRun) {
+    saveCsvSales(db, sales);
+    db.prepare("INSERT INTO sync_state (key, value, updated_at) VALUES ('last_shopify_csv_import', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").run(new Date().toISOString());
+  }
+  return {
+    saved: !dryRun, from: DATA_START, before, liveSyncSeen: !!firstLive,
+    orders, skipped, rows: sales.size, units: products.reduce((n, p) => n + p.units, 0), products,
+  };
 }

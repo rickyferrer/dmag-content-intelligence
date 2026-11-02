@@ -74,6 +74,8 @@ export const api = {
   getSyncStatus: () => apiFetch('/sync/status'),
   triggerSync: (type = 'all') => apiFetch('/sync/trigger', { method: 'POST', body: JSON.stringify({ type }) }),
 
+  importShopifyHistory: (csvText, dryRun) => apiFetch('/analytics/shopify-import' + (dryRun ? '?dryRun=1' : ''), { method: 'POST', headers: { 'Content-Type': 'text/csv' }, body: csvText }),
+
   // Settings
   getSettings: () => apiFetch('/settings'),
   updateSettings: (body) => apiFetch('/settings', { method: 'PUT', body: JSON.stringify(body) }),

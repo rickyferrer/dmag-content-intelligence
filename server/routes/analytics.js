@@ -7,7 +7,9 @@ import { CUSTOM_CHANNELS, customChannelFor } from '../utils/channels.js';
 import { DATA_START } from '../utils/dataStart.js';
 import { resolveWindow, getWindowMetrics } from '../utils/rangeMetrics.js';
 import { getIssueSales, getShopifyProducts, getIssueSalesParams, issueSalesScore } from '../utils/issueSales.js';
+import express from 'express';
 import { requireAdmin } from '../auth.js';
+import { importShopifyHistory } from '../sync/shopifyCsv.js';
 
 const router = Router();
 
@@ -1094,6 +1096,18 @@ router.put('/shopify-products/:id', requireAdmin, (req, res) => {
   }
   db.prepare('INSERT INTO shopify_product_map (product_id, issue) VALUES (?, ?) ON CONFLICT(product_id) DO UPDATE SET issue = excluded.issue').run(req.params.id, issue);
   res.json({ success: true });
+});
+
+// POST /api/analytics/shopify-import[?dryRun=1]   body: the CSV text (admin)
+// Backfills sales from before the live sync's 60-day reach — see
+// sync/shopifyCsv.js. A dry run returns the same summary without saving.
+router.post('/shopify-import', requireAdmin, express.text({ type: '*/*', limit: '10mb' }), (req, res) => {
+  if (typeof req.body !== 'string' || !req.body.trim()) return res.status(400).json({ error: 'Send the CSV text as the request body' });
+  try {
+    res.json(importShopifyHistory(getDb(), req.body, { dryRun: req.query.dryRun === '1' }));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // GET /api/analytics/source-performance

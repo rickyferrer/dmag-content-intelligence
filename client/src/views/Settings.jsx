@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
 import UserManagement from '../components/UserManagement.jsx';
+import ShopifyImport from '../components/ShopifyImport.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 // Mirrors server/utils/trueValue.js's BENCHMARK_META labels/units — kept
@@ -319,6 +320,8 @@ export default function Settings() {
             ))}
           </div>
         )}
+
+        {isAdmin && <ShopifyImport />}
       </div>
 
       {/* Benchmark Recalibration — admin-only */}

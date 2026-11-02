@@ -136,7 +136,8 @@ MARFEEL_PASSWORD=...
 # past 60 days, so the daily sync keeps what it has saved and older history comes
 # from Analytics → Reports → "Net items sold by day" (Jan 1 to today, export CSV;
 # columns Day, Product title, Net items sold — already net of refunds), or an Orders export.
-# Run where the database lives, after the first sync; --dry-run previews:
+# Easiest: Settings → "Import Shopify sales history" (admin) — choose the CSV, review the
+# preview, press Import. Or run where the database lives, after the first sync; --dry-run previews:
 #   node server/scripts/import-shopify-orders-csv.mjs report.csv --dry-run
 # (on Render the variables are already in the environment and there is no .env file,
 # so no --env-file; with a local .env, use node --env-file=.env ...)
