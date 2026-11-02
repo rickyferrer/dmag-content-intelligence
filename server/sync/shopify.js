@@ -50,11 +50,21 @@ const PUBLICATIONS = [
 const TOKEN = `(?:${[...MONTHS, ...SEASONS].join('|')})`;
 const PERIOD = new RegExp(`^${TOKEN}(?:[\\s/&-]+${TOKEN})*$`);
 
+// Annual specials the site files by name, not month — the site's slugs carry
+// the year too ("medical-guide-2025", "dallas-500-2025"), which the by-issue
+// match tolerates (see /by-issue), so the slug here is just the name.
+const SPECIALS = [
+  [/\bmedical guide\b/i, 'd-magazine', 'medical-guide'],
+  [/\bdallas 500\b/i, 'd-ceo', 'dallas-500'],
+];
+
 export function parseIssueFromTitle(title) {
   if (!title) return null;
-  const pub = PUBLICATIONS.find(([, re]) => re.test(title));
   const year = title.match(/\b(20\d{2})\b/);
   if (!year) return null;
+  const special = SPECIALS.find(([re]) => re.test(title));
+  if (special) return `${special[1]}/${year[1]}/${special[2]}`;
+  const pub = PUBLICATIONS.find(([, re]) => re.test(title));
   let period = title.slice(0, year.index);
   if (pub) period = period.replace(pub[1], ' ');
   period = period.toLowerCase().replace(/^[^a-z]+|[^a-z]+$/g, '');
