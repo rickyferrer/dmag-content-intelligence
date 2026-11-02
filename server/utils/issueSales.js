@@ -51,7 +51,7 @@ export function getShopifyProducts(db = getDb()) {
 // Units sold per issue key ("{pub}/{year}/{month}"), or null when the store
 // has never synced — so the UI can tell "no sales" from "not connected".
 export function getIssueSales(db = getDb()) {
-  if (!db.prepare("SELECT 1 FROM sync_state WHERE key = 'last_shopify_sync'").get()) return null;
+  if (!db.prepare("SELECT 1 FROM sync_state WHERE key IN ('last_shopify_sync', 'last_shopify_csv_import')").get()) return null;
   const byIssue = new Map();
   for (const p of getShopifyProducts(db)) {
     if (p.issue) byIssue.set(p.issue, (byIssue.get(p.issue) || 0) + p.units);

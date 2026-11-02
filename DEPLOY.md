@@ -131,6 +131,15 @@ MARFEEL_PASSWORD=...
 # The daily sync saves each completed day on its own from Oct 2, 2026 onward, so
 # an export is only needed to cover days before that (see server/sync/newsletterDaily.js).
 
+# Shopify single-issue sales — custom app on the store with Admin API scopes
+# read_orders and read_products. Without read_all_orders Shopify only returns the
+# past 60 days, so the daily sync keeps what it has saved and older history comes
+# from Orders → Export (all orders since Jan 1, CSV; it needs the Lineitem columns).
+# Run where the database lives, after the first sync; --dry-run previews:
+#   node --env-file=.env server/scripts/import-shopify-orders-csv.mjs orders.csv --dry-run
+SHOPIFY_STORE=your-store.myshopify.com
+SHOPIFY_ADMIN_TOKEN=...
+
 # Anthropic (User Needs classification)
 ANTHROPIC_API_KEY=...
 ```
