@@ -33,6 +33,20 @@ const WEIGHT_META = {
   score_confidence_k:   { label: "Confidence Threshold",   min: 0, max: 1000,step: 25,desc: "Readers needed before an article earns full score. Prevents a 1-signup article from 50 readers beating a 3-signup article from 5,000." },
 };
 
+// One-line outcome for a *_status sync row (their value is JSON: either
+// { error, at } or the sync's result counts), so a failed sync says why
+// instead of only showing when it ran.
+function syncOutcome(key, value) {
+  if (!key.endsWith('_status') || !value) return null;
+  try {
+    const v = JSON.parse(value);
+    if (v.error) return { error: true, text: v.error };
+    const { at, ...counts } = v;
+    const text = Object.entries(counts).map(([k, n]) => `${k} ${n}`).join(' · ');
+    return text ? { error: false, text } : null;
+  } catch { return null; }
+}
+
 export default function Settings() {
   const { isAdmin } = useAuth();
   const [settings, setSettings] = useState({});
@@ -294,8 +308,13 @@ export default function Settings() {
                     </span>
                   )}
                 </span>
-                <span style={{ color: val?.stale ? '#e8a33d' : 'var(--text-muted)', fontSize: 11 }}>
+                <span style={{ color: val?.stale ? '#e8a33d' : 'var(--text-muted)', fontSize: 11, textAlign: 'right' }}>
                   {val?.updated_at ? val.updated_at.slice(0, 19).replace('T', ' ') : '—'}
+                  {syncOutcome(key, val?.value) && (
+                    <div style={{ color: syncOutcome(key, val.value).error ? '#d9534f' : 'var(--text-secondary)', maxWidth: 420 }}>
+                      {syncOutcome(key, val.value).text}
+                    </div>
+                  )}
                 </span>
               </div>
             ))}
