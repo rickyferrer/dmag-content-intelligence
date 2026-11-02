@@ -82,8 +82,8 @@ export default function ShopifyImport() {
             </table>
           </div>
           {saved ? (
-            <div style={{ marginTop: 10, color: 'var(--accent-gold)' }}>
-              Imported {preview.rows} product-day rows from {fileName}. Reload the Publications tab to see them.
+            <div style={{ marginTop: 10, color: 'var(--text-primary)', fontWeight: 600 }}>
+              ✓ Imported {preview.rows} product-day rows from {fileName}. Reload the Publications tab to see them.
             </div>
           ) : (
             <button
