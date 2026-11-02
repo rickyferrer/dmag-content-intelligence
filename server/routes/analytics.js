@@ -5,6 +5,7 @@ import { computeTrendRisk } from '../utils/gscTrend.js';
 import { pctChange, previousPeriodRange } from '../utils/period.js';
 import { CUSTOM_CHANNELS, customChannelFor } from '../utils/channels.js';
 import { DATA_START } from '../utils/dataStart.js';
+import { resolveWindow, getWindowMetrics } from '../utils/rangeMetrics.js';
 
 const router = Router();
 
@@ -199,6 +200,79 @@ function fetchGroupedAggregates(db, groupCol, groupAlias, whereSql, params, asOf
   `).all(...snapshotParams, historyCutoff, historyCutoff, ...params);
 }
 
+// Per-group traffic measured over a date window instead of the stored
+// trailing-30-day snapshot (see utils/rangeMetrics.js). Content Value
+// (true_value) is NOT recomputed — it keeps its rolling-30-day meaning, and
+// only the raw traffic columns below follow the range.
+const WINDOW_METRICS = [
+  'total_users', 'total_loyal_users', 'total_pageviews', 'avg_pageviews',
+  'total_subscribe_clicks', 'total_newsletter_signups', 'avg_engagement_time',
+];
+
+async function windowedGroupTotals(db, groupCol, whereSql, params, win) {
+  const metrics = win.empty ? new Map() : await getWindowMetrics(win.from, win.to);
+  const members = db.prepare(`SELECT ${groupCol} AS g, c.wp_id FROM content c WHERE ${whereSql}`).all(...params);
+  const out = new Map();
+  for (const { g, wp_id } of members) {
+    if (!out.has(g)) out.set(g, { n: 0, users: 0, loyal: 0, pv: 0, sub: 0, news: 0, engSum: 0, engN: 0 });
+    const t = out.get(g);
+    t.n++;
+    const m = metrics.get(wp_id);
+    if (!m) continue;
+    t.users += m.users; t.loyal += m.loyal_users; t.pv += m.pageviews;
+    t.sub += m.subscribe_clicks; t.news += m.newsletter_signups;
+    if (m.users > 0) { t.engSum += m.avg_engagement_time; t.engN++; }
+  }
+  return out;
+}
+
+// Overwrites the traffic fields of grouped rows with the window's totals.
+async function applyWindowToGroups(db, rows, groupCol, groupKey, whereSql, params, win) {
+  const totals = await windowedGroupTotals(db, groupCol, whereSql, params, win);
+  for (const r of rows) {
+    const t = totals.get(r[groupKey]) || { n: 0, users: 0, loyal: 0, pv: 0, sub: 0, news: 0, engSum: 0, engN: 0 };
+    r.total_users = t.users;
+    r.total_loyal_users = t.loyal;
+    r.total_pageviews = t.pv;
+    r.avg_pageviews = t.n ? t.pv / t.n : 0;
+    r.total_subscribe_clicks = t.sub;
+    r.total_newsletter_signups = t.news;
+    r.avg_engagement_time = t.engN ? t.engSum / t.engN : 0;
+  }
+  return rows;
+}
+
+// Applies the range window to `rows` when the range isn't the default
+// trailing 30 days. Returns the window used, or null when the stored snapshot
+// figures stand (default range, or GA4 unavailable).
+async function tryWindow(db, rows, groupCol, groupKey, whereSql, params, dateFrom, dateTo) {
+  const win = resolveWindow(dateFrom, dateTo);
+  if (!win) return null;
+  try {
+    await applyWindowToGroups(db, rows, groupCol, groupKey, whereSql, params, win);
+    return win;
+  } catch (err) {
+    console.error('[Server] windowed group metrics failed, using snapshot:', err.message);
+    return null;
+  }
+}
+
+// Same for the previous period's rows. `ok` is false when the prior window
+// reaches back before DATA_START (the data isn't there to compare against).
+async function tryPrevWindow(db, prevRows, groupCol, groupKey, whereSql, params, prevPeriod, win) {
+  if (!win) return null;
+  const ok = prevPeriod.from >= DATA_START;
+  if (!ok) return { ok };
+  try {
+    const pw = resolveWindow(prevPeriod.from, prevPeriod.to) || { from: prevPeriod.from, to: prevPeriod.to };
+    await applyWindowToGroups(db, prevRows, groupCol, groupKey, whereSql, params, pw);
+    return { ok };
+  } catch (err) {
+    console.error('[Server] windowed prior group metrics failed:', err.message);
+    return { ok: false };
+  }
+}
+
 const COMPARABLE_METRICS = [
   'article_count', 'total_true_value', 'avg_true_value', 'total_users',
   'total_loyal_users', 'total_pageviews', 'total_subscribe_clicks',
@@ -218,15 +292,19 @@ const COMPARABLE_METRICS = [
 // comparing against today's aged-out numbers instead is what produced
 // +1,000% "growth"). Omitted metrics are undefined, which ChangeBadge
 // renders as nothing.
-function attachChanges(rows, groupKey, prevRows) {
+function attachChanges(rows, groupKey, prevRows, { windowed = false, windowOk = false } = {}) {
   const prevMap = Object.fromEntries(prevRows.map(r => [r[groupKey], r]));
   return rows.map(r => {
     const prev = prevMap[r[groupKey]];
     if (!prev) return { ...r, changes: null };
     const changes = { article_count: pctChange(r.article_count, prev.article_count) };
     const covered = prev.article_count > 0 && prev.matched_count / prev.article_count >= 0.5;
-    if (covered) {
-      for (const m of COMPARABLE_METRICS) if (m !== 'article_count') changes[m] = pctChange(r[m], prev[m]);
+    for (const m of COMPARABLE_METRICS) {
+      if (m === 'article_count') continue;
+      // Windowed traffic columns compare against the prior period measured
+      // over the prior window; Content Value still needs a snapshot.
+      const ok = windowed && WINDOW_METRICS.includes(m) ? windowOk : covered;
+      if (ok) changes[m] = pctChange(r[m], prev[m]);
     }
     return { ...r, changes };
   });
@@ -340,7 +418,8 @@ router.get('/summary', async (req, res) => {
 });
 
 // GET /api/analytics/by-need
-router.get('/by-need', (req, res) => {
+router.get('/by-need', async (req, res) => {
+  try {
   const db = getDb();
   const { dateFrom, dateTo, section, type, writer, userNeed } = req.query;
 
@@ -405,12 +484,18 @@ router.get('/by-need', (req, res) => {
     if (!topByNeed[art.user_need]) topByNeed[art.user_need] = art;
   }
 
+  await tryWindow(db, rows, 'c.user_need', 'user_need', dateWhere.join(' AND '), dateParams, dateFrom, dateTo);
+
   const result = rows.map(r => ({
     ...r,
     top_article: topByNeed[r.user_need] || null,
   }));
 
   res.json(result);
+  } catch (err) {
+    console.error('[Server] /api/analytics/by-need error:', err.message);
+    res.status(500).json({ error: 'Failed to load user needs', message: err.message });
+  }
 });
 
 // GET /api/analytics/scatter
@@ -659,7 +744,8 @@ router.get('/overview-trend', async (req, res) => {
 });
 
 // GET /api/analytics/by-section
-router.get('/by-section', (req, res) => {
+router.get('/by-section', async (req, res) => {
+  try {
   const db = getDb();
   const { dateFrom, dateTo, type } = req.query;
 
@@ -671,6 +757,7 @@ router.get('/by-section', (req, res) => {
 
   let rows = fetchGroupedAggregates(db, 'c.section', 'section', where.join(' AND '), params);
   rows.sort((a, b) => (b.total_true_value || 0) - (a.total_true_value || 0));
+  const win = await tryWindow(db, rows, 'c.section', 'section', where.join(' AND '), params, dateFrom, dateTo);
 
   // Previous period — same length window immediately before the current
   // one (e.g. Last 30 Days vs. the 30 days before that), distinct from the
@@ -683,8 +770,9 @@ router.get('/by-section', (req, res) => {
     if (type) { prevWhere.push('c.content_type = ?'); prevParams.push(type); }
     // Read the previous cohort as of the end of its own period — see fetchGroupedAggregates.
     const prevRows = fetchGroupedAggregates(db, 'c.section', 'section', prevWhere.join(' AND '), prevParams, previous_period.to + 'T23:59:59');
-    previous_metrics_available = metricsComparable(prevRows);
-    rows = attachChanges(rows, 'section', prevRows);
+    const prevWin = await tryPrevWindow(db, prevRows, 'c.section', 'section', prevWhere.join(' AND '), prevParams, previous_period, win);
+    previous_metrics_available = prevWin ? prevWin.ok || metricsComparable(prevRows) : metricsComparable(prevRows);
+    rows = attachChanges(rows, 'section', prevRows, { windowed: !!prevWin, windowOk: !!prevWin?.ok });
   } else {
     rows = rows.map(r => ({ ...r, changes: null }));
   }
@@ -740,7 +828,12 @@ router.get('/by-section', (req, res) => {
     })),
     previous_period,
     previous_metrics_available,
+    metrics_window: win ? { from: win.from, to: win.to } : null,
   });
+  } catch (err) {
+    console.error('[Server] /api/analytics/by-section error:', err.message);
+    res.status(500).json({ error: 'Failed to load sections', message: err.message });
+  }
 });
 
 // GET /api/analytics/by-writer — top 10 writers by total Content Value.
@@ -748,7 +841,8 @@ router.get('/by-section', (req, res) => {
 // backfill-writers.mjs), so a joint byline groups as its own bucket rather
 // than splitting credit between individual names — same simplification the
 // Content tab's writer filter already makes, kept consistent here.
-router.get('/by-writer', (req, res) => {
+router.get('/by-writer', async (req, res) => {
+  try {
   const db = getDb();
   const { dateFrom, dateTo, type } = req.query;
 
@@ -761,6 +855,7 @@ router.get('/by-writer', (req, res) => {
   let rows = fetchGroupedAggregates(db, 'c.writer', 'writer', where.join(' AND '), params);
   rows.sort((a, b) => (b.total_true_value || 0) - (a.total_true_value || 0));
   rows = rows.slice(0, 10);
+  const win = await tryWindow(db, rows, 'c.writer', 'writer', where.join(' AND '), params, dateFrom, dateTo);
 
   // Previous period — same length window immediately before the current
   // one. Computed only for the 10 writers actually shown, after the
@@ -773,8 +868,9 @@ router.get('/by-writer', (req, res) => {
     if (type) { prevWhere.push('c.content_type = ?'); prevParams.push(type); }
     // Read the previous cohort as of the end of its own period — see fetchGroupedAggregates.
     const prevRows = fetchGroupedAggregates(db, 'c.writer', 'writer', prevWhere.join(' AND '), prevParams, previous_period.to + 'T23:59:59');
-    previous_metrics_available = metricsComparable(prevRows);
-    rows = attachChanges(rows, 'writer', prevRows);
+    const prevWin = await tryPrevWindow(db, prevRows, 'c.writer', 'writer', prevWhere.join(' AND '), prevParams, previous_period, win);
+    previous_metrics_available = prevWin ? prevWin.ok || metricsComparable(prevRows) : metricsComparable(prevRows);
+    rows = attachChanges(rows, 'writer', prevRows, { windowed: !!prevWin, windowOk: !!prevWin?.ok });
   } else {
     rows = rows.map(r => ({ ...r, changes: null }));
   }
@@ -803,7 +899,12 @@ router.get('/by-writer', (req, res) => {
     })),
     previous_period,
     previous_metrics_available,
+    metrics_window: win ? { from: win.from, to: win.to } : null,
   });
+  } catch (err) {
+    console.error('[Server] /api/analytics/by-writer error:', err.message);
+    res.status(500).json({ error: 'Failed to load writers', message: err.message });
+  }
 });
 
 // GET /api/analytics/by-issue

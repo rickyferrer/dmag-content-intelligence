@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
+import RangeNote from '../components/RangeNote.jsx';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 import { ChangeBadge } from '../components/KPICard.jsx';
 import { useComparisons } from '../context/ComparisonContext.jsx';
@@ -108,13 +109,15 @@ export default function Writers({ onSelect }) {
         )}
       </div>
 
+      <RangeNote preset={filters.preset} from={filters.from} to={filters.to} />
+
       {showComparisons && previousPeriod && (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -12 }}>
           <span style={{ color: '#4caf86', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>+/-%</span> badges below compare
           to the previous period: <strong style={{ color: 'var(--text-secondary)' }}>{previousPeriod.from}</strong> to{' '}
           <strong style={{ color: 'var(--text-secondary)' }}>{previousPeriod.to}</strong>
           {previousMetricsAvailable === false && (
-            <> — only article counts are compared: metrics are rolling 30-day figures, and snapshots from that far back aren't kept, so there's nothing valid to compare them against.</>
+            <> — only article counts are compared: metrics are rolling 30-day figures, and snapshots from that far back aren't kept (or the range starts before Jan 1, 2026), so there's nothing valid to compare them against.</>
           )}
         </div>
       )}

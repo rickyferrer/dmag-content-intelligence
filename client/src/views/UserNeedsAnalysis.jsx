@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
 import { NEED_META, NeedInfoIcon } from '../components/NeedBadge.jsx';
 import { readableInk } from '../constants/palette.js';
+import RangeNote from '../components/RangeNote.jsx';
 import DatePresets, { resolveDates, DEFAULT_PRESET } from '../components/DatePresets.jsx';
 import Spinner from '../components/Spinner.jsx';
 
@@ -67,6 +68,8 @@ export default function UserNeedsAnalysis() {
           }}
         />
       </div>
+
+      <RangeNote preset={filters.preset} from={filters.from} to={filters.to} />
 
       {/* Gap analysis */}
       {gaps.length > 0 && (
