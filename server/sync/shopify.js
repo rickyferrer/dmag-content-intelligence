@@ -25,8 +25,13 @@ export function lookbackStart(today = new Date().toISOString().slice(0, 10)) {
   return back > DATA_START ? back : DATA_START;
 }
 
+// Pasted env values often carry stray spaces, quotes or a https:// prefix.
+const clean = (v) => (v || '').trim().replace(/^["']|["']$/g, '');
+const shopDomain = () => clean(process.env.SHOPIFY_STORE).replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+const adminToken = () => clean(process.env.SHOPIFY_ADMIN_TOKEN);
+
 export function shopifyConfigured() {
-  return !!(process.env.SHOPIFY_STORE && process.env.SHOPIFY_ADMIN_TOKEN);
+  return !!(shopDomain() && adminToken());
 }
 
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
@@ -73,11 +78,11 @@ export function parseIssueFromTitle(title) {
 }
 
 async function shopifyQuery(query, variables) {
-  const url = `https://${process.env.SHOPIFY_STORE}/admin/api/${API_VERSION}/graphql.json`;
+  const url = `https://${shopDomain()}/admin/api/${API_VERSION}/graphql.json`;
   for (let attempt = 0; attempt < 4; attempt++) {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': process.env.SHOPIFY_ADMIN_TOKEN },
+      headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': adminToken() },
       body: JSON.stringify({ query, variables }),
     });
     if (res.status === 429) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
