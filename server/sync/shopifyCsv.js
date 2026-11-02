@@ -1,8 +1,14 @@
-// Reads Shopify's Orders export CSV (Orders → Export) into the same per-product
-// per-day units that sync/shopify.js saves from the API, for the history the
-// API can't reach (it only returns 60 days without read_all_orders).
+// Reads a Shopify CSV into the same per-product per-day units that
+// sync/shopify.js saves from the API, for the history the API can't reach (it
+// only returns 60 days without read_all_orders). Two formats, detected from the
+// header:
 //
-// The export has one row per line item. Order-level columns (Created at,
+//   - Analytics report "Net items sold by day" (columns Day, Product title,
+//     Net items sold) — preferred: already net of refunds (a refund shows as a
+//     negative on the day it happens), already one row per product per day.
+//   - Orders export (Orders → Export), described below.
+//
+// The orders export has one row per line item. Order-level columns (Created at,
 // Financial Status, Cancelled at, …) are filled on an order's FIRST row only;
 // the rest of its rows carry just Name + Lineitem fields, so those are carried
 // forward from the first row. Columns are read by name. Orders that were
@@ -41,13 +47,37 @@ export function parseCsv(text) {
 const REQUIRED = ['Name', 'Created at', 'Lineitem quantity', 'Lineitem name'];
 
 // → { sales: Map<`${product_id}|${date}`, {product_id, product_title, date, units, revenue}>, orders, skipped }
-export function salesFromOrdersCsv(text, { from = '0000-00-00', before = '9999-99-99' } = {}) {
+// `orders` is the number of orders (orders export only; null for the report).
+export function salesFromCsv(text, opts = {}) {
   const rows = parseCsv(text.replace(/^﻿/, ''));
   if (rows.length === 0) throw new Error('Empty CSV');
   const header = rows[0].map(h => h.trim());
   const col = Object.fromEntries(header.map((h, i) => [h, i]));
+  if ('Product title' in col && 'Net items sold' in col && 'Day' in col) return salesFromProductReport(rows, col, opts);
+  return salesFromOrdersRows(rows, col, opts);
+}
+
+function salesFromProductReport(rows, col, { from = '0000-00-00', before = '9999-99-99' }) {
+  const sales = new Map();
+  let skipped = 0;
+  for (const r of rows.slice(1)) {
+    const title = (r[col['Product title']] ?? '').trim();
+    const date = (r[col['Day']] ?? '').trim().slice(0, 10);
+    const units = parseInt(r[col['Net items sold']], 10);
+    if (!title || !units) continue; // the report has blank-title zero rows
+    if (date < from || date >= before) { skipped++; continue; }
+    const id = `csv:${title}`;
+    const key = `${id}|${date}`;
+    const row = sales.get(key) || { product_id: id, product_title: title, date, units: 0, revenue: 0 };
+    row.units += units;
+    sales.set(key, row);
+  }
+  return { sales, orders: null, skipped };
+}
+
+function salesFromOrdersRows(rows, col, { from = '0000-00-00', before = '9999-99-99' }) {
   const missing = REQUIRED.filter(h => !(h in col));
-  if (missing.length) throw new Error(`Not a Shopify orders export — missing column(s): ${missing.join(', ')}`);
+  if (missing.length) throw new Error(`Not a recognised Shopify export — expected the "Net items sold by day" report (Day, Product title, Net items sold) or an orders export (missing: ${missing.join(', ')})`);
   const get = (r, h) => (h in col ? (r[col[h]] ?? '').trim() : '');
 
   const sales = new Map();

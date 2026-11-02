@@ -30,26 +30,36 @@ export function shopifyConfigured() {
 }
 
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const SEASONS = ['spring', 'summer', 'fall', 'winter'];
 
-// Product title → "{pub}/{year}/{month}" (the same shape as /by-issue's key and
+// Product title → "{pub}/{year}/{period}" (the same shape as /by-issue's key and
 // content.publication_override), or null when it doesn't look like a single
-// issue. A single issue is a title naming a month and a year; subscriptions,
-// gift cards and merchandise don't have one. No publication named means the
-// flagship, D Magazine. Anything this gets wrong can be fixed per product with
-// PUT /api/analytics/shopify-products/:id (stored in shopify_product_map).
+// issue. The period is the issue's slug on the site: a month ("october"), two
+// ("june-july"), or a season ("fall", "fall-winter"), as in
+// /publications/d-home/2026/fall/. A single issue is a title naming a
+// publication's period and a year; subscriptions, memberships and one-off
+// specials ("Dallas 500") don't fit and stay unmapped. Anything this gets wrong
+// can be fixed per product with PUT /api/analytics/shopify-products/:id
+// (stored in shopify_product_map).
 const PUBLICATIONS = [
   ['d-ceo', /\bd\s*ceo\b/i],
   ['d-home', /\bd\s*home\b/i],
   ['d-weddings', /\bd\s*weddings?\b/i],
   ['d-magazine', /\bd\s*magazine\b/i],
 ];
+const TOKEN = `(?:${[...MONTHS, ...SEASONS].join('|')})`;
+const PERIOD = new RegExp(`^${TOKEN}(?:[\\s/&-]+${TOKEN})*$`);
 
 export function parseIssueFromTitle(title) {
   if (!title) return null;
-  const m = title.toLowerCase().match(new RegExp(`\\b(${MONTHS.join('|')})\\b[^0-9]{0,12}(20\\d{2})\\b`));
-  if (!m) return null;
-  const pub = PUBLICATIONS.find(([, re]) => re.test(title))?.[0] || 'd-magazine';
-  return `${pub}/${m[2]}/${m[1]}`;
+  const pub = PUBLICATIONS.find(([, re]) => re.test(title));
+  const year = title.match(/\b(20\d{2})\b/);
+  if (!year) return null;
+  let period = title.slice(0, year.index);
+  if (pub) period = period.replace(pub[1], ' ');
+  period = period.toLowerCase().replace(/^[^a-z]+|[^a-z]+$/g, '');
+  if (!PERIOD.test(period)) return null;
+  return `${pub ? pub[0] : 'd-magazine'}/${year[1]}/${period.split(/[^a-z]+/).join('-')}`;
 }
 
 async function shopifyQuery(query, variables) {

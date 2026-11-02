@@ -1024,8 +1024,29 @@ router.get('/by-issue', (req, res) => {
   const issueSales = getIssueSales(db);
   const salesParams = getIssueSalesParams(getSettings());
 
+  // Match sales to an issue by its URL slug. Some issues carry a decorated slug
+  // ("september-2025", "july-issue") while the product title just says
+  // "September 2025", so after exact matches the rest try the slug without that
+  // decoration. Each sales key is used once, so "september" and "september-2025"
+  // can't both claim the same units.
+  const salesUnits = new Map();
+  if (issueSales) {
+    const claimed = new Set();
+    const rows = Object.entries(issueMap).map(([key, i]) => ({ ...i, key }));
+    const keyOf = (i, slug) => `${i.publication}/${i.year}/${slug}`;
+    for (const i of rows) {
+      const k = keyOf(i, i.month.toLowerCase());
+      if (issueSales.has(k)) { claimed.add(k); salesUnits.set(i.key, issueSales.get(k)); }
+    }
+    for (const i of rows) {
+      if (salesUnits.has(i.key)) continue;
+      const k = keyOf(i, i.month.toLowerCase().replace(/-(?:\d{4}|issue)$/, ''));
+      if (issueSales.has(k) && !claimed.has(k)) { claimed.add(k); salesUnits.set(i.key, issueSales.get(k)); }
+    }
+  }
+
   const result = Object.values(issueMap).map(({ _eng_sum, _eng_count, ...issue }) => {
-    const units = issueSales ? (issueSales.get(`${issue.publication}/${issue.year}/${issue.month.toLowerCase()}`) || 0) : null;
+    const units = issueSales ? Math.max(0, salesUnits.get(`${issue.publication}|${issue.year}|${issue.month}`) || 0) : null;
     const salesScore = units == null ? null : issueSalesScore(units, salesParams);
     return {
     ...issue,
@@ -1067,10 +1088,9 @@ router.put('/shopify-products/:id', requireAdmin, (req, res) => {
     db.prepare('DELETE FROM shopify_product_map WHERE product_id = ?').run(req.params.id);
     return res.json({ success: true });
   }
-  const m = typeof issue === 'string' && issue.match(/^([a-z-]+)\/(\d{4})\/([a-z]+)$/);
-  const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
-  if (issue !== 'ignore' && !(m && SALES_PUBS.includes(m[1]) && months.includes(m[3]))) {
-    return res.status(400).json({ error: 'issue must be "ignore" or "{publication}/{year}/{month}", e.g. d-magazine/2026/june' });
+  const m = typeof issue === 'string' && issue.match(/^([a-z-]+)\/(\d{4})\/([a-z0-9-]+)$/);
+  if (issue !== 'ignore' && !(m && SALES_PUBS.includes(m[1]))) {
+    return res.status(400).json({ error: 'issue must be "ignore" or "{publication}/{year}/{issue slug}", e.g. d-home/2026/fall (the slug is the issue\'s URL segment)' });
   }
   db.prepare('INSERT INTO shopify_product_map (product_id, issue) VALUES (?, ?) ON CONFLICT(product_id) DO UPDATE SET issue = excluded.issue').run(req.params.id, issue);
   res.json({ success: true });
