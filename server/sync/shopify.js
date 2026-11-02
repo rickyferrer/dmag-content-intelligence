@@ -3,19 +3,27 @@
 // routes/analytics.js's /by-issue (see utils/issueSales.js for the scoring).
 //
 // Needs a custom app on the store (Settings → Apps → Develop apps) with the
-// Admin API scopes read_orders and read_products, plus read_all_orders:
-// without that last one Shopify only returns the past 60 days of orders, which
-// would cut off everything since DATA_START. Env: SHOPIFY_STORE (the
+// Admin API scopes read_orders and read_products. Env: SHOPIFY_STORE (the
 // *.myshopify.com domain) and SHOPIFY_ADMIN_TOKEN.
 //
-// Each run re-reads every order since DATA_START and replaces the table in one
-// transaction. A store this size has at most a few thousand orders a year, and
-// replacing (instead of adding) is what makes later refunds, cancellations and
-// edits correct, and heals a run missed to a deploy restart.
+// Without the read_all_orders scope (not available to this store's custom app)
+// Shopify only returns the past 60 days of orders. So each run re-reads the
+// last ~55 days and replaces just those days; everything older is kept as
+// saved by earlier runs. Re-reading (not adding) is what makes recent refunds,
+// cancellations and edits correct and heals a missed run. History from before
+// the first run isn't in here and has to be backfilled separately.
 import { DATA_START } from '../utils/dataStart.js';
 
 const API_VERSION = '2025-07';
 const PAGE_SIZE = 100;
+const LOOKBACK_DAYS = 55; // inside Shopify's 60-day limit, with slack
+const DAY_MS = 86400000;
+
+// First day a sync re-reads (and replaces): LOOKBACK_DAYS back, but never before DATA_START.
+export function lookbackStart(today = new Date().toISOString().slice(0, 10)) {
+  const back = new Date(Date.parse(today) - LOOKBACK_DAYS * DAY_MS).toISOString().slice(0, 10);
+  return back > DATA_START ? back : DATA_START;
+}
 
 export function shopifyConfigured() {
   return !!(process.env.SHOPIFY_STORE && process.env.SHOPIFY_ADMIN_TOKEN);
@@ -88,7 +96,7 @@ const ORDERS_QUERY = `
 // currentQuantity is the quantity after refunds and edits, so a fully refunded
 // line counts 0. Cancelled and test orders are skipped. Revenue is the line's
 // discounted total, and isn't net of refunds (units are what the score uses).
-export async function fetchShopifySales(sinceDate = DATA_START) {
+export async function fetchShopifySales(sinceDate = lookbackStart()) {
   const sales = new Map();
   let after = null;
   for (;;) {
@@ -111,21 +119,23 @@ export async function fetchShopifySales(sinceDate = DATA_START) {
   return sales;
 }
 
-export function saveShopifySales(db, sales) {
+// Replaces the days from `since` on and leaves earlier days alone.
+export function saveShopifySales(db, sales, since = lookbackStart()) {
   const insert = db.prepare(`
     INSERT INTO shopify_sales_daily (product_id, date, product_title, units, revenue)
     VALUES (@product_id, @date, @product_title, @units, @revenue)
   `);
   db.transaction(() => {
-    db.prepare('DELETE FROM shopify_sales_daily').run();
+    db.prepare('DELETE FROM shopify_sales_daily WHERE date >= ?').run(since);
     for (const row of sales.values()) insert.run(row);
   })();
   return sales.size;
 }
 
 export async function syncShopifySales(db) {
-  const sales = await fetchShopifySales();
-  const rows = saveShopifySales(db, sales);
+  const since = lookbackStart();
+  const sales = await fetchShopifySales(since);
+  const rows = saveShopifySales(db, sales, since);
   const units = [...sales.values()].reduce((n, r) => n + r.units, 0);
-  return { rows, units, products: new Set([...sales.values()].map(r => r.product_id)).size };
+  return { since, rows, units, products: new Set([...sales.values()].map(r => r.product_id)).size };
 }
