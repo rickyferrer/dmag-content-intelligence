@@ -303,7 +303,7 @@ export default function Settings() {
 
         {isAdmin && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {['all', 'content', 'analytics', 'classify'].map(type => (
+            {['all', 'content', 'analytics', 'shopify', 'classify'].map(type => (
               <button
                 key={type}
                 onClick={() => handleTriggerSync(type)}
