@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getSyncStatus, runContentSync, runStreamSync, runCompetitorSync, runAnalyticsSync, runClassification, runCategoryClassification, runVoiceClassification } from '../sync/scheduler.js';
+import { getSyncStatus, runContentSync, runStreamSync, runShopifySync, runCompetitorSync, runAnalyticsSync, runClassification, runCategoryClassification, runVoiceClassification } from '../sync/scheduler.js';
 import { logAudit } from '../db.js';
 import { requireAdmin } from '../auth.js';
 
@@ -29,6 +29,9 @@ router.post('/trigger', requireAdmin, async (req, res) => {
     }
     if (type === 'stream' || type === 'all') {
       await runStreamSync().catch(err => console.error('[Sync API] Cloudflare Stream sync error:', err.message));
+    }
+    if (type === 'shopify' || type === 'all') {
+      await runShopifySync().catch(err => console.error('[Sync API] Shopify sync error:', err.message));
     }
     if (type === 'analytics' || type === 'all') {
       await runAnalyticsSync().catch(err => console.error('[Sync API] Analytics sync error:', err.message));

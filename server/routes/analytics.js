@@ -1,11 +1,13 @@
 import { Router } from 'express';
-import { getDb } from '../db.js';
+import { getDb, getSettings } from '../db.js';
 import { fetchUsersForRange, fetchLoyalUsersForRange, fetchInMarketUsersForRange, fetchWeeklyUsers } from '../sync/ga4.js';
 import { computeTrendRisk } from '../utils/gscTrend.js';
 import { pctChange, previousPeriodRange } from '../utils/period.js';
 import { CUSTOM_CHANNELS, customChannelFor } from '../utils/channels.js';
 import { DATA_START } from '../utils/dataStart.js';
 import { resolveWindow, getWindowMetrics } from '../utils/rangeMetrics.js';
+import { getIssueSales, getShopifyProducts, getIssueSalesParams, issueSalesScore } from '../utils/issueSales.js';
+import { requireAdmin } from '../auth.js';
 
 const router = Router();
 
@@ -1016,14 +1018,28 @@ router.get('/by-issue', (req, res) => {
     }
   }
 
-  const result = Object.values(issueMap).map(({ _eng_sum, _eng_count, ...issue }) => ({
+  // Single-issue sales (Shopify, since DATA_START) are an issue-level score
+  // dimension — see utils/issueSales.js. null when the store isn't connected,
+  // so the columns show "—" instead of a misleading 0.
+  const issueSales = getIssueSales(db);
+  const salesParams = getIssueSalesParams(getSettings());
+
+  const result = Object.values(issueMap).map(({ _eng_sum, _eng_count, ...issue }) => {
+    const units = issueSales ? (issueSales.get(`${issue.publication}/${issue.year}/${issue.month.toLowerCase()}`) || 0) : null;
+    const salesScore = units == null ? null : issueSalesScore(units, salesParams);
+    return {
     ...issue,
+    single_issue_sales: units,
+    sales_score: salesScore,
+    // Articles' Lifetime Value total plus the sales points (weight% of the sales score).
+    total_issue_score: issue.total_lifetime_value + (salesScore == null ? 0 : salesScore * salesParams.weight / 100),
     // Fall back to the top article's image when the issue's own landing
     // page has no featured image set.
     cover_image_url: issue.cover_image_url || issue.top_article?.cover_image_url || null,
     avg_engagement_time: _eng_count > 0 ? _eng_sum / _eng_count : 0,
     avg_lifetime_value: issue.article_count > 0 ? issue.total_lifetime_value / issue.article_count : 0,
-  }));
+    };
+  });
 
   result.sort((a, b) => {
     if (b.year !== a.year) return Number(b.year) - Number(a.year);
@@ -1031,6 +1047,33 @@ router.get('/by-issue', (req, res) => {
   });
 
   res.json(result);
+});
+
+// GET /api/analytics/shopify-products
+// Every product with Shopify sales since DATA_START and the issue it counts
+// toward (auto = parsed from the title, manual = shopify_product_map,
+// unmapped = not recognised as a single issue, so it adds to no issue's score).
+router.get('/shopify-products', (req, res) => {
+  res.json(getShopifyProducts(getDb()));
+});
+
+// PUT /api/analytics/shopify-products/:id  { issue: "d-magazine/2026/june" | "ignore" | null }
+// Fixes a product the title parser misread; null clears the override.
+const SALES_PUBS = ['d-magazine', 'd-home', 'd-ceo', 'd-weddings'];
+router.put('/shopify-products/:id', requireAdmin, (req, res) => {
+  const db = getDb();
+  const { issue } = req.body || {};
+  if (issue == null) {
+    db.prepare('DELETE FROM shopify_product_map WHERE product_id = ?').run(req.params.id);
+    return res.json({ success: true });
+  }
+  const m = typeof issue === 'string' && issue.match(/^([a-z-]+)\/(\d{4})\/([a-z]+)$/);
+  const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  if (issue !== 'ignore' && !(m && SALES_PUBS.includes(m[1]) && months.includes(m[3]))) {
+    return res.status(400).json({ error: 'issue must be "ignore" or "{publication}/{year}/{month}", e.g. d-magazine/2026/june' });
+  }
+  db.prepare('INSERT INTO shopify_product_map (product_id, issue) VALUES (?, ?) ON CONFLICT(product_id) DO UPDATE SET issue = excluded.issue').run(req.params.id, issue);
+  res.json({ success: true });
 });
 
 // GET /api/analytics/source-performance

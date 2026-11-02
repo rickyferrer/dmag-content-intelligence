@@ -467,6 +467,24 @@ function initSchema() {
   // `issue` filter, routes/analytics.js's /by-issue and Vulnerability's
   // extractPublication). Set via PUT /api/content/:id/publication.
   try { db.exec('ALTER TABLE content ADD COLUMN publication_override TEXT'); } catch {}
+  // Single-issue sales from Shopify (see sync/shopify.js): units per product
+  // per day, replaced wholesale on every sync. shopify_product_map is the
+  // manual override for which issue a product counts toward — "{pub}/{year}/
+  // {month}", or 'ignore' — for titles the parser in sync/shopify.js misreads.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS shopify_sales_daily (
+      product_id    TEXT NOT NULL,
+      date          TEXT NOT NULL,
+      product_title TEXT,
+      units         INTEGER DEFAULT 0,
+      revenue       REAL DEFAULT 0,
+      PRIMARY KEY (product_id, date)
+    );
+    CREATE TABLE IF NOT EXISTS shopify_product_map (
+      product_id TEXT PRIMARY KEY,
+      issue      TEXT NOT NULL
+    );
+  `);
   // Per-user ownership (individual logins). No FK: users live in the separate
   // auth.db (see authDb.js). NULL = created before logins existed; bootstrapAdmin()
   // hands those to the first admin.

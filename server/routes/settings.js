@@ -3,6 +3,7 @@ import { getSettings, updateSettings, getDb, logAudit, getAuditLog } from '../db
 import { scoreContent, pruneSnapshots, SNAPSHOT_RETENTION_DAYS, runBenchmarkCheckIfDue } from '../sync/scheduler.js';
 import { requireAdmin } from '../auth.js';
 import { BENCHMARK_META } from '../utils/trueValue.js';
+import { ISSUE_SALES_SETTING_KEYS } from '../utils/issueSales.js';
 
 const router = Router();
 
@@ -29,6 +30,7 @@ router.put('/', (req, res) => {
     'score_w_engagement',
     'score_w_ad_revenue',
     'score_confidence_k',
+    ...ISSUE_SALES_SETTING_KEYS,
     ...Object.values(BENCHMARK_META).map(m => m.settingKey),
   ];
 

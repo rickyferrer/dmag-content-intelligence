@@ -12,6 +12,7 @@ import { classifyCategoriesUnclassified } from './nlp.js';
 import { getDb, setSyncState, getSettings } from '../db.js';
 import { getScoreParams, valueToScore, shapeForLifetime } from '../utils/trueValue.js';
 import { runBenchmarkCheck } from '../utils/benchmarkCheck.js';
+import { shopifyConfigured, syncShopifySales } from './shopify.js';
 import { syncGA4Sources, syncGA4DailyTotals, syncGA4ByDevice, syncGA4Lifetime } from './ga4.js';
 import { saveLifetimeMetrics } from './lifetimeMetrics.js';
 import { recordNewsletterYesterday } from './newsletterDaily.js';
@@ -131,6 +132,24 @@ export async function runStreamSync() {
   } catch (err) {
     console.error('[Scheduler] Cloudflare Stream sync error:', err.message);
     setSyncState('last_cloudflare_sync_status', JSON.stringify({ error: err.message, at: new Date().toISOString() }));
+  }
+}
+
+// Single-issue sales from Shopify. Skipped quietly when the store isn't
+// configured, so it never fails the daily run.
+export async function runShopifySync() {
+  if (!shopifyConfigured()) {
+    console.log('[Scheduler] Shopify not configured (SHOPIFY_STORE / SHOPIFY_ADMIN_TOKEN) — skipping');
+    return;
+  }
+  try {
+    const result = await syncShopifySales(getDb());
+    setSyncState('last_shopify_sync', new Date().toISOString());
+    setSyncState('last_shopify_sync_status', JSON.stringify({ ...result, at: new Date().toISOString() }));
+    console.log(`[Scheduler] Shopify: ${result.units} units across ${result.products} products`);
+  } catch (err) {
+    console.error('[Scheduler] Shopify sync error:', err.message);
+    setSyncState('last_shopify_sync_status', JSON.stringify({ error: err.message, at: new Date().toISOString() }));
   }
 }
 
@@ -714,6 +733,7 @@ export function initScheduler() {
     await runContentSync();
     await runStreamSync();
     await runAnalyticsSync();
+    await runShopifySync();
     await runClassification();
     await runCategoryClassification();
     await runVoiceClassification();
