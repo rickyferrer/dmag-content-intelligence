@@ -68,7 +68,6 @@ export default function Login() {
           <label style={lbl}>Password <span style={hint}>(optional, 10+ characters)</span>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" minLength={10} />
           </label>
-          <div style={hint}>Without a password, anyone who knows your email can sign in as you. Add one to keep your goals and Insights history private.</div>
           {error && <div role="alert" style={{ fontSize: 12, color: '#e05c5c' }}>{error}</div>}
           <button type="submit" disabled={busy || !email || !name} style={primaryBtn(busy)}>{busy ? 'Creating…' : 'Create account'}</button>
           <button type="button" onClick={() => switchMode('signin')} style={linkBtn}>Already have an account? Sign in</button>
