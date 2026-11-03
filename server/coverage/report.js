@@ -16,6 +16,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getDb, setSyncState, getSyncState } from '../db.js';
 import { syncCompetitors, competitorHealth } from './competitors.js';
 import { fetchAgenda, mondayConfigured, weekEnd } from './monday.js';
+import { PERSONAS, audienceSection } from './audience.js';
 
 const MODEL = process.env.COVERAGE_MODEL || 'claude-sonnet-5';
 const COMPETITOR_WINDOW_DAYS = 7;
@@ -54,6 +55,8 @@ export function isMonday(dateStr) {
 
 const SYSTEM_PROMPT = `You are an editorial analyst for D Magazine, the Dallas city magazine. Its brands are D Magazine (print + dmagazine.com, including the FrontBurner blog and food coverage), D CEO (business, real estate, healthcare, finance), D Home, and D Weddings. Its beats are Dallas–Fort Worth civic life and politics, restaurants and food, real estate, business, arts/events/things to do, home, and long-form local features.
 
+{{AUDIENCE}}
+
 You will be given:
 - AGENDA: what D plans to publish this week, from the newsroom's Monday.com board. Titles are often terse working slugs ("Oh My Gourd", "Spa Guide"). Status "Published" means it is already live. "PRINT:" items are print-magazine stories being posted online.
 - D_PUBLISHED: what D already published in the last two weeks.
@@ -72,7 +75,8 @@ Find coverage gaps and call submit_coverage_report. Rules:
 5. urgency: high = time-sensitive (this week) and significant; medium = worthwhile but not time-bound; low = nice to have.
 6. suggested_angle: one concrete, specific pitch D could run (not "cover this"). section_hint: where it would live (e.g. FrontBurner, Food & Drink, D CEO – Real Estate, Things to Do).
 7. exclusives: agenda items of kind original_story or event_coverage that NO tracked competitor is covering — where D is alone. One short note each (what makes it distinctive and how to promote it). At most ${MAX_EXCLUSIVES}. The competitor list is limited to the outlets provided, so phrase this as "no tracked outlet covered this", never "no one else covered this".
-8. Treat abbreviations and wording variants as the same thing ("Prop A" = "Proposition A"). Use only IDs that appear in the input. Every gap needs at least one competitor ID in evidence.`;
+8. AUDIENCE LENS. Judge every gap and exclusive by who it serves, using the audience description above (use only what it says; never invent audience statistics). For each gap set personas (the one to three it serves best; "broad" for a general Dallas story that fits none in particular) and audience_fit (one sentence on why this audience would want it, in terms of what they love or are frustrated by). Let the audience shape ranking and urgency: raise a gap that squarely serves a core persona or fits a habit or destination product (a guide, ranking, calendar, newsletter item, explainer, a FrontBurner-style insider take), and lower one with no clear audience fit, one that is mostly national, or advocacy-heavy. Write suggested_angle the way that audience wants it served: Dallas-specific, useful for deciding what to do or why it matters, trusted curation over a rehash. Say when a gap fits a recurring product (SideDish, FrontBurner, D Brief, a guide or ranking). For exclusives, audience_fit says which persona to promote it to and where (newsletter, FrontBurner, social).
+9. Treat abbreviations and wording variants as the same thing ("Prop A" = "Proposition A"). Use only IDs that appear in the input. Every gap needs at least one competitor ID in evidence.`;
 
 const TOOL = {
   name: 'submit_coverage_report',
@@ -107,8 +111,10 @@ const TOOL = {
             urgency: { type: 'string', enum: ['high', 'medium', 'low'] },
             evidence: { type: 'array', items: { type: 'string' }, description: 'C-ids supporting the gap (1-6)' },
             related_ids: { type: 'array', items: { type: 'string' }, description: 'A- or P-ids of adjacent D coverage, if any' },
+            personas: { type: 'array', items: { type: 'string', enum: Object.keys(PERSONAS) }, description: 'The audience personas this gap serves best (1-3)' },
+            audience_fit: { type: 'string', description: 'One sentence: why this audience would want it' },
           },
-          required: ['gap_type', 'topic', 'why_it_matters', 'suggested_angle', 'section_hint', 'urgency', 'evidence', 'related_ids'],
+          required: ['gap_type', 'topic', 'why_it_matters', 'suggested_angle', 'section_hint', 'urgency', 'evidence', 'related_ids', 'personas', 'audience_fit'],
         },
       },
       exclusives: {
@@ -118,8 +124,9 @@ const TOOL = {
           properties: {
             agenda_id: { type: 'string' },
             note: { type: 'string' },
+            audience_fit: { type: 'string', description: 'Which persona to promote it to, and where' },
           },
-          required: ['agenda_id', 'note'],
+          required: ['agenda_id', 'note', 'audience_fit'],
         },
       },
     },
@@ -418,7 +425,7 @@ export async function generateCoverageReport({ weekStart, agendaItems, boardItem
     const response = await getClient().messages.create({
       model: MODEL,
       max_tokens: 9000,
-      system: SYSTEM_PROMPT,
+      system: SYSTEM_PROMPT.replace('{{AUDIENCE}}', audienceSection()),
       tools: [TOOL],
       tool_choice: { type: 'tool', name: TOOL.name },
       messages: [{ role: 'user', content: prompt }],
@@ -479,6 +486,7 @@ export async function generateCoverageReport({ weekStart, agendaItems, boardItem
       gapType: g.gap_type, topic: g.topic, whyItMatters: g.why_it_matters, suggestedAngle: g.suggested_angle,
       sectionHint: g.section_hint, urgency: g.urgency, evidence: evidence(g.evidence),
       related: related(g.related_ids).map(r => ({ ...r, relation: 'adjacent' })),
+      personas: asArray(g.personas).filter(p => p in PERSONAS), audienceFit: g.audience_fit || '',
     }))
     .filter(g => g.evidence.length > 0 && g.topic);
 
@@ -527,10 +535,10 @@ export async function generateCoverageReport({ weekStart, agendaItems, boardItem
     .slice(0, MAX_GAPS);
 
   const exclusives = out.exclusives
-    .map(x => ({ agenda: agendaByRef.get(norm(x?.agenda_id)), note: x?.note }))
+    .map(x => ({ agenda: agendaByRef.get(norm(x?.agenda_id)), note: x?.note, audienceFit: x?.audience_fit || '' }))
     .filter(x => x.agenda)
     .slice(0, MAX_EXCLUSIVES)
-    .map(x => ({ title: x.agenda.title, date: x.agenda.date, pub: x.agenda.pub, status: x.agenda.status, url: x.agenda.url, note: x.note }));
+    .map(x => ({ title: x.agenda.title, date: x.agenda.date, pub: x.agenda.pub, status: x.agenda.status, url: x.agenda.url, note: x.note, audienceFit: x.audienceFit }));
 
   const report = {
     weekStart, weekEnd: end,

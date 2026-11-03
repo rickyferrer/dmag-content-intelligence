@@ -76,6 +76,11 @@ function Stat({ label, value }) {
   );
 }
 
+const PERSONA_LABEL = {
+  civic_champion: 'Civic Champion', food_explorer: 'Food Explorer', cultural_insider: 'Cultural Insider',
+  business_professional: 'Business Professional', broad: 'Broad Dallas',
+};
+
 function GapCard({ gap }) {
   const u = URGENCY[gap.urgency] || URGENCY.low;
   return (
@@ -90,6 +95,12 @@ function GapCard({ gap }) {
       <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: 12 }}>
         <span style={{ color: 'var(--accent-gold)', fontWeight: 500 }}>Angle: </span>{gap.suggestedAngle}
       </div>
+      {gap.audienceFit && (
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 12 }}>
+          {(gap.personas || []).map(p => <Pill key={p} color="var(--text-secondary)" bg="var(--bg-elevated)">{PERSONA_LABEL[p] || p}</Pill>)}{' '}
+          {gap.audienceFit}
+        </div>
+      )}
 
       {gap.related.length > 0 && (
         <div style={{ marginBottom: 12 }}>
@@ -333,7 +344,10 @@ export default function CoverageGaps() {
                         {x.url ? <a href={x.url} target="_blank" rel="noopener noreferrer" style={linkStyle}>{x.title}</a> : x.title}
                         <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{fmtDay(x.date)}{x.pub ? ` · ${x.pub}` : ''}</div>
                       </td>
-                      <td style={{ ...td, borderTop: i === 0 ? 'none' : td.borderTop }}>{x.note}</td>
+                      <td style={{ ...td, borderTop: i === 0 ? 'none' : td.borderTop }}>
+                        {x.note}
+                        {x.audienceFit && <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>Audience: {x.audienceFit}</div>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

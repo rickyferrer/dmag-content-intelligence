@@ -2,9 +2,25 @@ import { Router } from 'express';
 import { getDb, logAudit } from '../db.js';
 import { requireAdmin } from '../auth.js';
 import { mondayConfigured, BOARD_ID } from '../coverage/monday.js';
+import { getAudienceContext, saveAudienceContext, AUDIENCE_MAX_CHARS } from '../coverage/audience.js';
 import { runCoverageReport, getRunStatus, isRunning, currentWeekStart, isMonday } from '../coverage/report.js';
 
 const router = Router();
+
+// GET/PUT /api/coverage/audience — the audience description the report uses
+// (internal strategy text, so admin-only; see coverage/audience.js).
+router.get('/audience', requireAdmin, (req, res) => {
+  res.json({ text: getAudienceContext(), maxChars: AUDIENCE_MAX_CHARS });
+});
+
+router.put('/audience', requireAdmin, (req, res) => {
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : null;
+  if (text === null) return res.status(400).json({ error: 'text is required' });
+  if (text.length > AUDIENCE_MAX_CHARS) return res.status(400).json({ error: `Too long (max ${AUDIENCE_MAX_CHARS} characters)` });
+  saveAudienceContext(text);
+  logAudit(req.auth?.user || 'unknown', 'update_audience_context', { chars: text.length });
+  res.json({ text, maxChars: AUDIENCE_MAX_CHARS });
+});
 
 // GET /api/coverage?week=YYYY-MM-DD
 // The stored report for that week (default: this week's, else the most recent

@@ -68,6 +68,8 @@ export const api = {
 
   // Coverage gaps (competitor comparison against the Monday.com agenda)
   getCoverage: (week) => apiFetch('/coverage' + (week ? `?week=${week}` : '')),
+  getAudienceContext: () => apiFetch('/coverage/audience'),
+  saveAudienceContext: (text) => apiFetch('/coverage/audience', { method: 'PUT', body: JSON.stringify({ text }) }),
   runCoverage: (weekStart) => apiFetch('/coverage/run', { method: 'POST', body: JSON.stringify({ weekStart }) }),
 
   // Sync

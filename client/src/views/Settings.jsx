@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api/index.js';
 import UserManagement from '../components/UserManagement.jsx';
 import ShopifyImport from '../components/ShopifyImport.jsx';
+import AudienceContext from '../components/AudienceContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 // Mirrors server/utils/trueValue.js's BENCHMARK_META labels/units — kept
@@ -341,6 +342,7 @@ export default function Settings() {
         )}
 
         {isAdmin && <ShopifyImport />}
+        {isAdmin && <AudienceContext />}
       </div>
 
       {/* Benchmark Recalibration — admin-only */}
