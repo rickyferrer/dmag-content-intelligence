@@ -85,7 +85,6 @@ export default function Publications({ onSelect }) {
     { key: 'date',                    label: 'Issue' },
     { key: 'publication',             label: 'Publication' },
     { key: 'article_count',           label: 'Articles' },
-    { key: 'total_lifetime_value',    label: 'Lifetime Value' },
     { key: 'avg_lifetime_value',      label: 'Avg Lifetime Value' },
     { key: 'single_issue_sales',      label: 'Single Issue Sales' },
     { key: 'total_issue_score',       label: 'Issue Score' },
@@ -135,7 +134,7 @@ export default function Publications({ onSelect }) {
         </span>
         <span
           style={{ fontSize: 12, color: 'var(--text-muted)', cursor: 'help' }}
-          title="An issue's shelf life is months, so every figure here covers each article's whole life, not a 30-day window: Lifetime Value is the sum of the articles' lifetime scores (each 0-100, so an issue's total can pass 100), and Users, Loyal and Pageviews are distinct readers and views since Jan 1, 2026 (or since publication, if later). Single Issue Sales are Shopify units sold since Jan 1, 2026, and Issue Score is Lifetime Value plus the points those sales earn."
+          title="An issue's shelf life is months, so every figure here covers each article's whole life, not a 30-day window: Issue Score is the sum of the articles' lifetime scores (each 0-100, so an issue's total can pass 100) plus the points single-issue sales earn, and Users, Loyal and Pageviews are distinct readers and views since Jan 1, 2026 (or since publication, if later). Single Issue Sales are Shopify units sold since Jan 1, 2026."
         >
           · Lifetime totals
         </span>
@@ -194,10 +193,6 @@ export default function Publications({ onSelect }) {
                     <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
                       {row.article_count}
                     </td>
-                    {/* Lifetime Value */}
-                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)', textAlign: 'right', fontWeight: 600 }}>
-                      {row.total_lifetime_value != null ? Math.round(row.total_lifetime_value) : '—'}
-                    </td>
                     {/* Avg Lifetime Value */}
                     <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right' }}>
                       {row.avg_lifetime_value != null ? row.avg_lifetime_value.toFixed(1) : '—'}
@@ -254,7 +249,7 @@ export default function Publications({ onSelect }) {
               })}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={15} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={14} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
                     No publication issues found
                   </td>
                 </tr>
