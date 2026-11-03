@@ -2,9 +2,13 @@
 // product per day, saved to shopify_sales_daily and rolled up per issue by
 // routes/analytics.js's /by-issue (see utils/issueSales.js for the scoring).
 //
-// Needs a custom app on the store (Settings → Apps → Develop apps) with the
-// Admin API scopes read_orders and read_products. Env: SHOPIFY_STORE (the
-// *.myshopify.com domain) and SHOPIFY_ADMIN_TOKEN.
+// Needs an app installed on the store with the Admin API scopes read_orders and
+// read_products. Env: SHOPIFY_STORE (the *.myshopify.com domain), plus either
+//   - SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET, for an app made in the Shopify
+//     Dev Dashboard: it has no permanent token, so each run trades these for a
+//     short-lived (about 24h) access token, or
+//   - SHOPIFY_ADMIN_TOKEN, the permanent Admin API token (shpat_…) of a custom
+//     app made in the store's admin (Settings → Apps → Develop apps).
 //
 // Without the read_all_orders scope (not available to this store's custom app)
 // Shopify only returns the past 60 days of orders. So each run re-reads the
@@ -28,10 +32,30 @@ export function lookbackStart(today = new Date().toISOString().slice(0, 10)) {
 // Pasted env values often carry stray spaces, quotes or a https:// prefix.
 const clean = (v) => (v || '').trim().replace(/^["']|["']$/g, '');
 const shopDomain = () => clean(process.env.SHOPIFY_STORE).replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-const adminToken = () => clean(process.env.SHOPIFY_ADMIN_TOKEN);
+const staticToken = () => clean(process.env.SHOPIFY_ADMIN_TOKEN);
+const clientId = () => clean(process.env.SHOPIFY_CLIENT_ID);
+const clientSecret = () => clean(process.env.SHOPIFY_CLIENT_SECRET);
 
 export function shopifyConfigured() {
-  return !!(shopDomain() && adminToken());
+  return !!(shopDomain() && (staticToken() || (clientId() && clientSecret())));
+}
+
+// Dev Dashboard apps: client-credentials grant. The token is cached until a
+// minute before it expires; `force` drops it (after a 401).
+let cached = null;
+async function adminToken(force = false) {
+  if (!(clientId() && clientSecret())) return staticToken();
+  if (!force && cached && cached.expires > Date.now() + 60000) return cached.token;
+  const res = await fetch(`https://${shopDomain()}/admin/oauth/access_token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ client_id: clientId(), client_secret: clientSecret(), grant_type: 'client_credentials' }),
+  });
+  if (!res.ok) throw new Error(`Shopify token request HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const body = await res.json();
+  if (!body.access_token) throw new Error('Shopify token request returned no access_token');
+  cached = { token: body.access_token, expires: Date.now() + (body.expires_in || 3600) * 1000 };
+  return cached.token;
 }
 
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
@@ -79,12 +103,14 @@ export function parseIssueFromTitle(title) {
 
 async function shopifyQuery(query, variables) {
   const url = `https://${shopDomain()}/admin/api/${API_VERSION}/graphql.json`;
+  let refreshed = false;
   for (let attempt = 0; attempt < 4; attempt++) {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': adminToken() },
+      headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': await adminToken() },
       body: JSON.stringify({ query, variables }),
     });
+    if (res.status === 401 && !refreshed && clientId()) { refreshed = true; await adminToken(true); continue; }
     if (res.status === 429) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
     if (!res.ok) throw new Error(`Shopify HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const body = await res.json();
