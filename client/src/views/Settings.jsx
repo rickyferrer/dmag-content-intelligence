@@ -38,6 +38,7 @@ const WEIGHT_META = {
 // { error, at } or the sync's result counts), so a failed sync says why
 // instead of only showing when it ran.
 function syncOutcome(key, value) {
+  if (key.endsWith('_error') && value) return { error: true, text: value }; // e.g. last_gsc_sync_error
   if (!key.endsWith('_status') || !value) return null;
   try {
     const v = JSON.parse(value);
