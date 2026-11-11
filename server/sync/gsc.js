@@ -28,6 +28,40 @@ function fmtDate(d) {
   return d.toISOString().slice(0, 10);
 }
 
+// A 25,000-row page can take Google well over 30s, so each attempt gets two
+// minutes, and a timeout, network error, 429 or 5xx is retried (a 4xx like a
+// 403 for missing access is not — it won't get better).
+const REQUEST_TIMEOUT_MS = 120000;
+const ATTEMPTS = 3;
+async function postWithRetry(url, token, body) {
+  let lastError;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        signal: controller.signal,
+        body,
+      });
+      if (res.ok) return res;
+      const text = await res.text();
+      lastError = new Error(`GSC query failed: ${res.status} — ${text.slice(0, 300)}`);
+      if (res.status !== 429 && res.status < 500) throw lastError; // access/config problem: don't retry
+    } catch (err) {
+      if (err === lastError) throw err;
+      const cause = err.cause ? ` (cause: ${err.cause?.code || err.cause?.message || err.cause})` : '';
+      const what = err.name === 'AbortError' ? `timed out after ${REQUEST_TIMEOUT_MS / 1000}s` : err.message;
+      lastError = new Error(`GSC fetch failed: ${what}${cause}`);
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (attempt < ATTEMPTS) await new Promise(r => setTimeout(r, 5000 * attempt));
+  }
+  throw lastError;
+}
+
 // Fetch rows from Search Console for the given dimension combination,
 // paginated. Shared by the per-query sync (dimensions: page, query) and the
 // per-day trend sync (dimensions: page, date) — same API, same auth, same
@@ -42,38 +76,14 @@ async function fetchSearchAnalytics(token, dimensions) {
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const url = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(SITE_URL)}/searchAnalytics/query`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-
-    let res;
-    try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          startDate: fmtDate(startDate),
-          endDate: fmtDate(endDate),
-          dimensions,
-          rowLimit: ROW_LIMIT,
-          startRow,
-        }),
-      });
-    } catch (err) {
-      const cause = err.cause ? ` (cause: ${err.cause?.code || err.cause?.message || err.cause})` : '';
-      throw new Error(`GSC fetch failed: ${err.message}${cause}`);
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`GSC query failed: ${res.status} — ${text.slice(0, 300)}`);
-    }
-
+    const body = JSON.stringify({
+      startDate: fmtDate(startDate),
+      endDate: fmtDate(endDate),
+      dimensions,
+      rowLimit: ROW_LIMIT,
+      startRow,
+    });
+    const res = await postWithRetry(url, token, body);
     const data = await res.json();
     const batch = data.rows || [];
     rows.push(...batch);
