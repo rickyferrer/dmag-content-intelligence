@@ -43,8 +43,14 @@ function syncOutcome(key, value) {
   try {
     const v = JSON.parse(value);
     if (v.error) return { error: true, text: v.error };
-    const { at, ...counts } = v;
-    const text = Object.entries(counts).map(([k, n]) => `${k} ${n}`).join(' · ');
+    const { at, sources, ...counts } = v;
+    const parts = Object.entries(counts).map(([k, n]) => `${k} ${n}`);
+    if (Array.isArray(sources)) { // competitor sync: one result per outlet
+      const bad = sources.filter(s => !s.ok);
+      parts.push(`${sources.length} sources`);
+      if (bad.length) return { error: true, text: [...parts, `failing: ${bad.map(s => `${s.name} (${s.error})`).join(', ')}`].join(' · ') };
+    }
+    const text = parts.join(' · ');
     return text ? { error: false, text } : null;
   } catch { return null; }
 }
