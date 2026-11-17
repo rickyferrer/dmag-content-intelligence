@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { editorialBrief, EDITORIAL_BRIEF_TOOL } from '../utils/editorialBrief.js';
 import Anthropic from '@anthropic-ai/sdk';
 import Database from 'better-sqlite3';
 import path from 'path';
@@ -45,7 +46,9 @@ function runQuery(sql) {
   return { row_count: rows.length, returned: capped.length, data: json };
 }
 
-const SCHEMA_PROMPT = `You are an analyst answering questions about D Magazine's Content Intelligence dashboard, backed by a SQLite database. Use the query_database tool to fetch real data before answering — never guess numbers.
+const SCHEMA_PROMPT = `For editorial performance briefs or top stories in a publication-date window, call editorial_brief first. Explicitly distinguish article publication-date filters from rolling approximately 30-day analytics snapshots. Quote the report's snapshot freshness, and do not present modeled Content Value or notional ad revenue as real sold revenue. Show source article titles and URLs. For historical traffic during a precise date range, use range-aware dashboard metrics instead of treating snapshots as period traffic. Label strategic suggestions as interpretations, not causal facts. For editorial_brief results, show each ranked story's EXACT numeric metric (never group '3–4' clicks); use rolling_content_value as the only Content Value score in this brief (never substitute lifetime_content_value), and distinguish a missing metric (null) from measured zero. State clearly in the answer opening that date filters are article publication dates and performance values are latest ~30-day snapshots, with the latest snapshot date. Do not infer a loyal fanbase, conversion causality, or long-tail evergreen performance from a single snapshot. The article URL should accompany each ranking.
+
+You are an analyst answering questions about D Magazine's Content Intelligence dashboard, backed by a SQLite database. Use the query_database tool to fetch real data before answering — never guess numbers.
 
 ## Schema
 
@@ -189,7 +192,7 @@ router.post('/ask', async (req, res) => {
         model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         system: SCHEMA_PROMPT,
-        tools: [QUERY_TOOL],
+        tools: [EDITORIAL_BRIEF_TOOL, QUERY_TOOL],
         messages,
       });
 
@@ -201,9 +204,17 @@ router.post('/ask', async (req, res) => {
           if (block.type !== 'tool_use') continue;
           let resultContent;
           try {
-            const result = runQuery(block.input.sql);
-            queriesRun.push(block.input.sql);
-            resultContent = JSON.stringify(result);
+            if (block.name === 'editorial_brief') {
+              const result = editorialBrief(getReadonlyDb(), block.input);
+              queriesRun.push('[editorial_brief] ' + JSON.stringify(result.filters));
+              resultContent = JSON.stringify(result);
+            } else if (block.name === 'query_database') {
+              const result = runQuery(block.input.sql);
+              queriesRun.push(block.input.sql);
+              resultContent = JSON.stringify(result);
+            } else {
+              throw new Error('Unknown tool');
+            }
           } catch (err) {
             resultContent = JSON.stringify({ error: err.message });
           }
