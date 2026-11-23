@@ -160,6 +160,32 @@ function initSchema() {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_gsc_daily_wp_date ON gsc_page_daily(wp_id, date);
 
+    -- Microsoft Clarity reader-behavior snapshots (sync/clarity.js). Clarity's
+    -- export API only looks back 1-3 days and allows ~10 calls a day, so there
+    -- is no backfill: each daily sync stores the trailing 24 hours under the
+    -- sync date, and this table is the only history. The frustration columns
+    -- are COUNTS OF SESSIONS that hit the signal (rage click, dead click, ...)
+    -- so days can be summed and divided by sessions for a true range rate.
+    -- scroll_depth / active_time / total_time are per-session averages.
+    CREATE TABLE IF NOT EXISTS clarity_page_daily (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      wp_id            INTEGER,
+      date             TEXT,
+      sessions         INTEGER DEFAULT 0,
+      users            INTEGER DEFAULT 0,
+      scroll_depth     REAL    DEFAULT 0,
+      active_time      REAL    DEFAULT 0,
+      total_time       REAL    DEFAULT 0,
+      dead_click       INTEGER DEFAULT 0,
+      rage_click       INTEGER DEFAULT 0,
+      quickback        INTEGER DEFAULT 0,
+      excessive_scroll INTEGER DEFAULT 0,
+      script_error     INTEGER DEFAULT 0,
+      FOREIGN KEY (wp_id) REFERENCES content(wp_id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_clarity_daily_wp_date ON clarity_page_daily(wp_id, date);
+    CREATE INDEX IF NOT EXISTS idx_clarity_daily_date ON clarity_page_daily(date);
+
     -- One-time import of historical per-article newsletter signups from a
     -- Marfeel CSV export (server/scripts/import-historical-newsletter-signups.mjs).
     -- The live Marfeel API has no date-range/lookback capability at all (see

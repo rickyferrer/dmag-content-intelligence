@@ -18,6 +18,7 @@ import { saveLifetimeMetrics } from './lifetimeMetrics.js';
 import { recordNewsletterYesterday } from './newsletterDaily.js';
 import { captureSubscribeClicks } from './subscribeClicksDaily.js';
 import { syncGSC, syncGSCTrend } from './gsc.js';
+import { clarityConfigured, syncClarity } from './clarity.js';
 
 let syncRunning = false;
 let analyticsRunning = false;
@@ -150,6 +151,28 @@ export async function runShopifySync() {
   } catch (err) {
     console.error('[Scheduler] Shopify sync error:', err.message);
     setSyncState('last_shopify_sync_status', JSON.stringify({ error: err.message, at: new Date().toISOString() }));
+  }
+}
+
+// Microsoft Clarity reader behavior (scroll depth, rage/dead clicks, ...). Skipped
+// quietly without a token. `force` bypasses the "ran in the last 6h" guard for a
+// manual trigger; the per-day call budget in sync/clarity.js still applies.
+export async function runClaritySync({ force = false } = {}) {
+  if (!clarityConfigured()) {
+    console.log('[Scheduler] Clarity not configured (CLARITY_API_TOKEN) — skipping');
+    return;
+  }
+  try {
+    const result = await syncClarity({ force });
+    if (result.skipped) {
+      console.log(`[Scheduler] Clarity skipped: ${result.skipped}`);
+      return;
+    }
+    setSyncState('last_clarity_sync_status', JSON.stringify({ ...result, at: new Date().toISOString() }));
+    console.log(`[Scheduler] Clarity: ${result.articles} articles from ${result.urls} URLs`);
+  } catch (err) {
+    console.error('[Scheduler] Clarity sync error:', err.message);
+    setSyncState('last_clarity_sync_status', JSON.stringify({ error: err.message, at: new Date().toISOString() }));
   }
 }
 
@@ -733,6 +756,7 @@ export function initScheduler() {
     await runContentSync();
     await runStreamSync();
     await runAnalyticsSync();
+    await runClaritySync();
     await runShopifySync();
     await runClassification();
     await runCategoryClassification();

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getSyncStatus, runContentSync, runStreamSync, runShopifySync, runCompetitorSync, runAnalyticsSync, runClassification, runCategoryClassification, runVoiceClassification } from '../sync/scheduler.js';
+import { getSyncStatus, runContentSync, runStreamSync, runShopifySync, runClaritySync, runCompetitorSync, runAnalyticsSync, runClassification, runCategoryClassification, runVoiceClassification } from '../sync/scheduler.js';
 import { logAudit } from '../db.js';
 import { requireAdmin } from '../auth.js';
 
@@ -32,6 +32,11 @@ router.post('/trigger', requireAdmin, async (req, res) => {
     }
     if (type === 'shopify' || type === 'all') {
       await runShopifySync().catch(err => console.error('[Sync API] Shopify sync error:', err.message));
+    }
+    // 'clarity' forces a run (bypasses the 6h guard); 'all' respects it, so a
+    // manual "sync everything" doesn't spend one of Clarity's ~10 daily calls.
+    if (type === 'clarity' || type === 'all') {
+      await runClaritySync({ force: type === 'clarity' }).catch(err => console.error('[Sync API] Clarity sync error:', err.message));
     }
     if (type === 'analytics' || type === 'all') {
       await runAnalyticsSync().catch(err => console.error('[Sync API] Analytics sync error:', err.message));

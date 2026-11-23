@@ -359,6 +359,31 @@ export default function ContentDetail({ wpId, onClose }) {
             </div>
           </div>
 
+          {/* Reader behavior — Microsoft Clarity (sampled; builds up from the day the sync was turned on) */}
+          {item.clarity && (() => {
+            const c = item.clarity;
+            const pct = (r, digits = 1) => (r * 100).toFixed(digits) + '%';
+            const since = new Date(c.since + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            return (
+              <div>
+                <h3 style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Reader Behavior (Clarity)</h3>
+                <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '4px 0' }}>
+                  <StatRow label="Sessions Sampled" value={fmt(c.sessions)} title="Clarity sessions recorded for this page. Clarity samples, so treat rates as a flag for review, not an exact count." />
+                  <StatRow label="Scroll Depth" value={c.scroll_depth ? c.scroll_depth.toFixed(0) + '%' : '—'} title="Average depth readers scrolled, per Clarity" />
+                  <StatRow label="Active Time" value={c.active_time ? Math.round(c.active_time) + 's' : '—'} title="Average time actively reading (scrolling/clicking), per session" />
+                  <StatRow label="Rage Clicks" value={pct(c.rage_click_rate)} accent={c.rage_click_rate >= 0.02} title="Sessions with rapid repeated clicks in one spot — usually something that looks clickable but isn't, or a broken element" />
+                  <StatRow label="Dead Clicks" value={pct(c.dead_click_rate)} accent={c.dead_click_rate >= 0.05} title="Sessions where a click produced no response" />
+                  <StatRow label="Quick-backs" value={pct(c.quickback_rate)} title="Sessions where the reader landed, then went straight back" />
+                  <StatRow label="Excessive Scroll" value={pct(c.excessive_scroll_rate)} title="Sessions that scrolled far more than the page needs — often hunting for something" />
+                  <StatRow label="Script Errors" value={pct(c.script_error_rate)} accent={c.script_error_rate >= 0.05} title="Sessions where a JavaScript error fired on this page" />
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
+                  {c.days_with_data} day{c.days_with_data === 1 ? '' : 's'} of data since {since}. Clarity has no history, so this builds from the day syncing started.
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Traffic Sources */}
           {item.sources?.length > 0 && (
             <div>

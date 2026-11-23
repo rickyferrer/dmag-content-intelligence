@@ -3,6 +3,7 @@ import { getDb, getSettings } from '../db.js';
 import { classifySingle } from '../classify/userNeeds.js';
 import { classifyCategoriesSingle } from '../sync/nlp.js';
 import { classifyVoiceSingle, VOICE_TAXONOMY } from '../classify/voice.js';
+import { getClarityForArticle } from '../sync/clarity.js';
 import { getValueBreakdown, shapeForLifetime } from '../utils/trueValue.js';
 import { pctChange, previousPeriodRange } from '../utils/period.js';
 import { resolveWindow, getWindowMetrics, applyWindow, dbWindowMetrics, applyDbWindow } from '../utils/rangeMetrics.js';
@@ -478,6 +479,8 @@ router.get('/:id', (req, res) => {
     ORDER BY pageviews DESC
   `).all(wpId, wpId);
 
+  const clarity = getClarityForArticle(wpId, 30);
+
   const settings = getSettings();
   const breakdown = getValueBreakdown(item, settings);
 
@@ -521,7 +524,7 @@ router.get('/:id', (req, res) => {
     ORDER BY week_start ASC
   `).all(wpId);
 
-  res.json({ ...item, history, sources, categories, voices, trueValueBreakdown: breakdown, lifetimeValueBreakdown: lifetimeBreakdown, lifetimeMetrics, newsletterHistory });
+  res.json({ ...item, history, sources, categories, voices, trueValueBreakdown: breakdown, lifetimeValueBreakdown: lifetimeBreakdown, lifetimeMetrics, newsletterHistory, clarity });
 });
 
 // PUT /api/content/:id/publication — manually assign (or clear) which
