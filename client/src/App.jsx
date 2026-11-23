@@ -32,7 +32,6 @@ const NAV = [
   { id: 'needs',          label: 'User Needs' },
   { id: 'vulnerability',  label: 'AI Vulnerability' },
   { id: 'goals',          label: 'Goals' },
-  { id: 'insights',       label: 'Insights' },
   { id: 'coverage',       label: 'Coverage Gaps' },
   { id: 'settings',       label: 'Settings' },
 ];
@@ -218,7 +217,6 @@ function Dashboard() {
         {view === 'needs'          && <UserNeedsAnalysis />}
         {view === 'vulnerability'  && <Vulnerability />}
         {view === 'goals'          && <Goals />}
-        {view === 'insights'       && <Insights />}
         {view === 'coverage'       && <CoverageGaps />}
         {view === 'settings'  && <Settings />}
       </main>
@@ -238,6 +236,9 @@ function Dashboard() {
           onClose={() => setSelectedIssue(null)}
         />
       )}
+
+      {/* Ask — sticky bottom-left button that opens the Insights chat drawer */}
+      <Insights />
 
       {/* Detail panel (writers view) */}
       {view === 'writers' && selectedWriter && (
