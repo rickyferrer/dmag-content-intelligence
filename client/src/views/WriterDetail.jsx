@@ -63,7 +63,7 @@ export default function WriterDetail({ writer, dateFrom, dateTo, onClose }) {
     .sort((a, b) => b.count - a.count);
 
   return (
-    <div style={{
+    <div data-detail-panel style={{
       position: 'fixed', top: 0, right: 0, bottom: 0,
       width: 480, background: 'var(--bg-surface)',
       borderLeft: '1px solid var(--border)',
@@ -71,13 +71,13 @@ export default function WriterDetail({ writer, dateFrom, dateTo, onClose }) {
       display: 'flex', flexDirection: 'column',
     }}>
       {/* Header */}
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'var(--bg-surface)', padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ flex: 1 }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, lineHeight: 1.3, color: 'var(--text-primary)' }}>
             {writer.writer}
           </h2>
         </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 20, lineHeight: 1, padding: 4, cursor: 'pointer' }}>×</button>
+        <button onClick={onClose} aria-label="Close" title="Close" style={{ flexShrink: 0, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-primary)', fontSize: 26, lineHeight: 1, cursor: 'pointer' }}>×</button>
       </div>
 
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 24 }}>

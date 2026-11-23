@@ -76,6 +76,21 @@ function Dashboard() {
     setSelectedId(id);
   };
 
+  // Click anywhere outside an open detail panel to close it. Listens on
+  // mousedown (before the click lands) so clicking another row still works:
+  // it closes this panel, then the row's click opens the new one. Clicks inside
+  // the panel or the Ask drawer/button are ignored.
+  const detailOpen = !!(selectedId || selectedIssue || selectedWriter);
+  useEffect(() => {
+    if (!detailOpen) return undefined;
+    const onMouseDown = (e) => {
+      if (e.target.closest('[data-detail-panel], [role="dialog"], [aria-label="Ask a question about your content"]')) return;
+      setSelectedId(null); setSelectedIssue(null); setSelectedWriter(null);
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [detailOpen]);
+
   // Poll sync status for staleness so a silently-frozen sync (see server/sync/
   // wordpress.js — a mid-run crash can leave last_wp_sync stuck for weeks
   // without ever logging an error) surfaces here instead of going unnoticed.

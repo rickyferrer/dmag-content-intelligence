@@ -119,7 +119,7 @@ export default function ContentDetail({ wpId, onClose }) {
   if (!wpId) return null;
 
   return (
-    <div style={{
+    <div data-detail-panel style={{
       position: 'fixed', top: 0, right: 0, bottom: 0,
       width: 480, background: 'var(--bg-surface)',
       borderLeft: '1px solid var(--border)',
@@ -134,7 +134,7 @@ export default function ContentDetail({ wpId, onClose }) {
       )}
 
       {/* Header */}
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'var(--bg-surface)', padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ flex: 1 }}>
           {loading ? (
             <Spinner block label="Loading…" />
@@ -153,7 +153,7 @@ export default function ContentDetail({ wpId, onClose }) {
             </>
           )}
         </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
+        <button onClick={onClose} aria-label="Close" title="Close" style={{ flexShrink: 0, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-primary)', fontSize: 26, lineHeight: 1, cursor: 'pointer' }}>×</button>
       </div>
 
       {item && (
